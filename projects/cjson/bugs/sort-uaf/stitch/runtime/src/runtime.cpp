@@ -212,6 +212,11 @@ static std::vector<std::pair<const void*, std::pair<std::string, Value>>> g_pend
 static std::vector<std::string> g_tmp_files;
 static uint32_t g_gen_counter = 1;
 static uint64_t g_cmp_seen[1024];  // per-run dedupe of comparison records
+// plan mode (`repro --plan FILE`): concrete values of every call, for the standalone C++ writer
+static FILE* g_plan = nullptr;
+static int g_plan_src_next = 0;      // Src params of the current call, in declaration order
+static bool g_plan_quiet = false;    // decoders / plan emission: do not log Source draws
+static void plan_draw(int src, const char* op, const std::string& val, bool is_bytes);
 
 std::shared_ptr<AttrMap> new_attr_map() { return std::make_shared<AttrMap>(); }
 
@@ -398,6 +403,8 @@ struct Source::Impl {
     const std::vector<std::string>* dict = nullptr;
     bool exhausted = false;
     std::vector<uint32_t>* spans = nullptr;  // (prefix offset, prefix width, content length) per str draw
+    int log_id = -1;  // plan mode: index of the Src parameter this source belongs to
+    int depth = 0;    // nesting of public draw calls (only the outermost one is logged)
 
     uint64_t rnd() { return rng(); }
     double unit() { return (rnd() >> 11) * (1.0 / 9007199254740992.0); }
@@ -507,26 +514,54 @@ struct Source::Impl {
 Source::Source(const uint8_t* b, size_t len, size_t cap) : impl_(new Impl()) {
     impl_->buf.assign(b, b + len);
     impl_->cap = std::max(cap, len);
+    if (g_plan && g_in_exec && !g_plan_quiet && g_cur_node >= 0) impl_->log_id = g_plan_src_next++;
 }
 Source::~Source() { delete impl_; }
 Source::Source(Source&& o) noexcept : impl_(o.impl_) { o.impl_ = nullptr; }
-uint8_t Source::u8() { return (uint8_t)impl_->uint(1); }
-uint16_t Source::u16() { return (uint16_t)impl_->uint(2); }
-uint32_t Source::u32() { return (uint32_t)impl_->uint(4); }
-uint64_t Source::u64() { return impl_->uint(8); }
+
+namespace {
+struct DrawGuard {
+    Source::Impl* i;
+    explicit DrawGuard(Source::Impl* p) : i(p) { i->depth++; }
+    ~DrawGuard() { i->depth--; }
+    bool top() const { return i->log_id >= 0 && i->depth == 1 && g_plan; }
+};
+template <class T>
+std::string num_s(T v) {
+    if constexpr (std::is_floating_point<T>::value) {
+        char b[64];
+        snprintf(b, sizeof b, "%.17g", (double)v);
+        return b;
+    } else return std::to_string(v);
+}
+}  // namespace
+#define STITCH_DRAW(op, expr)                                          \
+    DrawGuard g_(impl_);                                               \
+    auto v_ = (expr);                                                  \
+    if (g_.top()) plan_draw(impl_->log_id, (op).c_str(), num_s(v_), false); \
+    return v_
+
+uint8_t Source::u8() { STITCH_DRAW(std::string("u8()"), (uint8_t)impl_->uint(1)); }
+uint16_t Source::u16() { STITCH_DRAW(std::string("u16()"), (uint16_t)impl_->uint(2)); }
+uint32_t Source::u32() { STITCH_DRAW(std::string("u32()"), (uint32_t)impl_->uint(4)); }
+uint64_t Source::u64() { STITCH_DRAW(std::string("u64()"), impl_->uint(8)); }
 float Source::f32() {
-    uint32_t b = u32();
+    DrawGuard g_(impl_);
+    uint32_t b = (uint32_t)impl_->uint(4);
     float f;
     memcpy(&f, &b, 4);
+    if (g_.top()) plan_draw(impl_->log_id, "f32()", num_s(f), false);
     return f;
 }
 double Source::f64() {
-    uint64_t b = u64();
+    DrawGuard g_(impl_);
+    uint64_t b = impl_->uint(8);
     double f;
     memcpy(&f, &b, 8);
+    if (g_.top()) plan_draw(impl_->log_id, "f64()", num_s(f), false);
     return f;
 }
-int64_t Source::range(int64_t lo, int64_t hi) {
+static int64_t range_impl(Source::Impl* impl_, int64_t lo, int64_t hi) {
     if (hi < lo) std::swap(lo, hi);
     int64_t raw = 0;
     impl_->draw((uint8_t*)&raw, 8, [&](uint8_t* o) {
@@ -540,8 +575,14 @@ int64_t Source::range(int64_t lo, int64_t hi) {
     uint64_t off = (uint64_t)raw - (uint64_t)lo;
     return (int64_t)((uint64_t)lo + (span ? off % span : off));
 }
-size_t Source::choice(size_t n) { return n == 0 ? 0 : (size_t)range(0, (int64_t)n - 1); }
+int64_t Source::range(int64_t lo, int64_t hi) {
+    STITCH_DRAW("range(" + std::to_string(lo) + ", " + std::to_string(hi) + ")", range_impl(impl_, lo, hi));
+}
+size_t Source::choice(size_t n) {
+    STITCH_DRAW("choice(" + std::to_string(n) + ")", (size_t)(n == 0 ? 0 : (size_t)range_impl(impl_, 0, (int64_t)n - 1)));
+}
 bool Source::coin(double p) {
+    DrawGuard g_(impl_);
     uint8_t b = 0;
     double thr = p * 256.0;
     impl_->draw(&b, 1, [&](uint8_t* o) {
@@ -550,27 +591,47 @@ bool Source::coin(double p) {
         if (yes) *o = thr >= 1 ? (uint8_t)(r % (uint64_t)std::min(256.0, thr)) : 0;
         else *o = (uint8_t)std::min(255.0, thr + (double)(r % (uint64_t)std::max(1.0, 256.0 - thr)));
     });
-    return (double)b < thr;
+    bool v = (double)b < thr;
+    if (g_.top()) plan_draw(impl_->log_id, ("coin(" + num_s(p) + ")").c_str(), v ? "true" : "false", false);
+    return v;
 }
 bool Source::more() {
-    if (impl_->exhausted && !impl_->gen) return false;
-    uint8_t b = 0;
-    impl_->draw(&b, 1, [&](uint8_t* o) {
-        double fill = impl_->cap ? (double)impl_->buf.size() / impl_->cap : 1.0;
-        double p = fill > 0.5 ? 0.15 : 0.65;
-        *o = (uint8_t)((impl_->rnd() & 0xfe) | (impl_->unit() < p ? 1 : 0));
-    });
-    return (b & 1) && !impl_->exhausted;
+    DrawGuard g_(impl_);
+    bool v;
+    if (impl_->exhausted && !impl_->gen) v = false;
+    else {
+        uint8_t b = 0;
+        impl_->draw(&b, 1, [&](uint8_t* o) {
+            double fill = impl_->cap ? (double)impl_->buf.size() / impl_->cap : 1.0;
+            double p = fill > 0.5 ? 0.15 : 0.65;
+            *o = (uint8_t)((impl_->rnd() & 0xfe) | (impl_->unit() < p ? 1 : 0));
+        });
+        v = (b & 1) && !impl_->exhausted;
+    }
+    if (g_.top()) plan_draw(impl_->log_id, "more()", v ? "true" : "false", false);
+    return v;
 }
 std::string Source::str(size_t max) {
+    DrawGuard g_(impl_);
     auto v = impl_->blob(max, false);
-    return std::string(v.begin(), v.end());
+    std::string r(v.begin(), v.end());
+    if (g_.top()) plan_draw(impl_->log_id, ("str(" + std::to_string(max) + ")").c_str(), r, true);
+    return r;
 }
-std::vector<uint8_t> Source::bytes(size_t max) { return impl_->blob(max, false); }
+std::vector<uint8_t> Source::bytes(size_t max) {
+    DrawGuard g_(impl_);
+    auto v = impl_->blob(max, false);
+    if (g_.top()) plan_draw(impl_->log_id, ("bytes(" + std::to_string(max) + ")").c_str(), std::string(v.begin(), v.end()), true);
+    return v;
+}
 std::string Source::token() {
+    DrawGuard g_(impl_);
     auto v = impl_->blob(255, true);
-    return std::string(v.begin(), v.end());
+    std::string r(v.begin(), v.end());
+    if (g_.top()) plan_draw(impl_->log_id, "token()", r, true);
+    return r;
 }
+#undef STITCH_DRAW
 size_t Source::position() const { return impl_->pos; }
 size_t Source::remaining() const { return impl_->buf.size() > impl_->pos ? impl_->buf.size() - impl_->pos : 0; }
 bool Source::exhausted() const { return impl_->exhausted; }
@@ -579,6 +640,8 @@ namespace detail {
 std::vector<uint8_t> decode_param(int dt, const uint8_t* buf, size_t len, uint8_t form, size_t max) {
     auto& r = reg();
     if (form == 1 && dt >= 0 && dt < (int)r.datatypes.size() && r.datatypes[dt].decoder) {
+        bool quiet_saved = g_plan_quiet;
+        g_plan_quiet = true;
         Source s(buf, len, std::max(len, max));
         std::vector<uint8_t> out;
         bool saved = g_in_exec;
@@ -588,6 +651,7 @@ std::vector<uint8_t> decode_param(int dt, const uint8_t* buf, size_t len, uint8_
             out.clear();
         }
         g_in_exec = saved;
+        g_plan_quiet = quiet_saved;
         if (out.size() > max) out.resize(max);
         return out;
     }
@@ -764,7 +828,7 @@ struct Reader {
 static bool parse_program(const uint8_t* data, size_t len, std::vector<PNode>& nodes) {
     Reader r{data, len};
     auto magic = r.bytes(4);
-    if (!r.ok || memcmp(magic.data(), "STP2", 4) != 0) return false;
+    if (!r.ok || memcmp(magic.data(), "STCH", 4) != 0) return false;
     uint32_t nn = r.get<uint32_t>();
     if (nn > 100000) return false;
     std::vector<std::string> names;
@@ -889,6 +953,133 @@ static std::string describe_param(const ParamDesc& p, const std::vector<uint8_t>
     return "?";
 }
 
+
+// ------------------------------------------------------------------------------ plan mode
+static std::string hex_of(const uint8_t* d, size_t n) {
+    static const char* H = "0123456789abcdef";
+    std::string o;
+    o.reserve(2 * n);
+    for (size_t i = 0; i < n; i++) {
+        o += H[d[i] >> 4];
+        o += H[d[i] & 15];
+    }
+    return o;
+}
+
+static void plan_line(const std::string& l) {
+    if (!g_plan) return;
+    fputs(l.c_str(), g_plan);
+    fputc('\n', g_plan);
+    fflush(g_plan);
+}
+
+namespace detail {
+static void plan_draw(int src, const char* op, const std::string& val, bool is_bytes) {
+    std::string l = "{\"t\":\"draw\",\"node\":" + std::to_string(g_cur_node) + ",\"src\":" + std::to_string(src) + ",\"op\":";
+    json_str(l, op);
+    if (is_bytes) l += ",\"hex\":\"" + hex_of((const uint8_t*)val.data(), val.size()) + "\"}";
+    else {
+        l += ",\"v\":";
+        json_str(l, val);
+        l += "}";
+    }
+    plan_line(l);
+}
+}  // namespace detail
+
+// Concrete value of one parameter as the endpoint sees it (same decoding as the Num/Range/... types).
+static std::string plan_param(const ParamDesc& p, const std::vector<uint8_t>& raw, uint8_t form) {
+    std::string o = "{\"kind\":\"";
+    o += kind_name(p.kind);
+    o += "\",\"size\":" + std::to_string(p.size);
+    switch (p.kind) {
+        case PKind::Int:
+        case PKind::Range:
+        case PKind::OneOf:
+        case PKind::Flags:
+        case PKind::Bool: {
+            std::string d = describe_param(p, raw, form);  // decoded integer / bool as text
+            o += ",\"signed\":" + std::string(p.is_signed ? "true" : "false") + ",\"v\":";
+            json_str(o, d);
+            if (!p.values.empty()) {
+                o += ",\"values\":[";
+                for (size_t k = 0; k < p.values.size(); k++) o += (k ? ",\"" : "\"") + std::to_string(p.values[k]) + "\"";
+                o += "]";
+            }
+            break;
+        }
+        case PKind::Float: {
+            uint64_t v = 0;
+            memcpy(&v, raw.data(), std::min<size_t>(raw.size(), p.size));
+            char b[64], c[64];
+            if (p.size == 4) {
+                float f;
+                memcpy(&f, &v, 4);
+                snprintf(b, sizeof b, "%a", (double)f);
+                snprintf(c, sizeof c, "%.9g", (double)f);
+            } else {
+                double f;
+                memcpy(&f, &v, 8);
+                snprintf(b, sizeof b, "%a", f);
+                snprintf(c, sizeof c, "%.17g", f);
+            }
+            o += ",\"v\":";
+            json_str(o, b);
+            o += ",\"d\":";
+            json_str(o, c);
+            break;
+        }
+        case PKind::Bytes:
+        case PKind::Str:
+        case PKind::File: {
+            auto val = decode_param(datatype_id(p.datatype), raw.data(), raw.size(), form, p.size);
+            o += ",\"decoded\":" + std::string(form == 1 ? "true" : "false") + ",\"hex\":\"" + hex_of(val.data(), val.size()) + "\"";
+            break;
+        }
+        case PKind::Raw:
+        case PKind::Source: {
+            size_t n = std::min<size_t>(raw.size(), p.size);
+            o += ",\"hex\":\"" + hex_of(raw.data(), n) + "\"";
+            break;
+        }
+    }
+    if (p.datatype) {
+        o += ",\"datatype\":";
+        json_str(o, p.datatype);
+    }
+    return o + "}";
+}
+
+static void plan_call(size_t i, const EndpointInfo& e, const PNode& nd) {
+    std::string l = "{\"t\":\"call\",\"node\":" + std::to_string(i) + ",\"ep\":";
+    json_str(l, e.name);
+    l += ",\"args\":[";
+    size_t oi = 0, pi = 0;
+    bool quiet = g_plan_quiet;
+    g_plan_quiet = true;
+    for (size_t a = 0; a < e.arg_is_obj.size(); a++) {
+        if (a) l += ",";
+        if (e.arg_is_obj[a]) {
+            auto& src = nd.inputs[oi];
+            l += "{\"obj\":[" + std::to_string(src.first) + "," + std::to_string(src.second) + "],\"type\":";
+            json_str(l, reg().types[e.in_types[oi]]->name);
+            l += ",\"take\":" + std::string(e.in_take[oi] ? "true" : "false") + "}";
+            oi++;
+        } else {
+            l += plan_param(e.params[pi], nd.params[pi], nd.forms[pi]);
+            pi++;
+        }
+    }
+    g_plan_quiet = quiet;
+    l += "],\"outs\":[";
+    for (size_t k = 0; k < e.out_types.size(); k++) {
+        if (k) l += ",";
+        json_str(l, reg().types[e.out_types[k]]->name);
+    }
+    l += "]}";
+    plan_line(l);
+}
+
 static void reset_exec_state() {
     for (auto& s : g_pool)
         if (s.storage) reg().types[s.type]->free_storage(s.storage);
@@ -903,7 +1094,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
     // a persistent worker runs many programs: per-run cmplog dedupe must start empty
     if (g_cmplog && g_cmplog->enabled) memset(g_cmp_seen, 0, sizeof g_cmp_seen);
     StitchResults* R = results();
-    R->magic = 0x53545232;
+    R->magic = 0x53544348;  // "STCH"
     R->n_nodes = (uint32_t)nodes.size();
     R->str_used = 0;
     R->crash_pc = 0;
@@ -922,6 +1113,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
         g_cur_node = (int)i;
         if (nd.ep < 0) {
             res.status = STITCH_SKIP_INVALID;
+            plan_line("{\"t\":\"skip\",\"node\":" + std::to_string(i) + ",\"why\":\"unknown endpoint\"}");
             if (trace) fprintf(stderr, "[stitch] #%zu %s: unknown endpoint, skipped\n", i, nd.ep_name.c_str());
             continue;
         }
@@ -929,6 +1121,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
         res.n_out = (uint8_t)e.out_types.size();
         if (nd.inputs.size() != e.in_types.size() || nd.params.size() != e.params.size()) {
             res.status = STITCH_SKIP_INVALID;
+            plan_line("{\"t\":\"skip\",\"node\":" + std::to_string(i) + ",\"why\":\"signature mismatch\"}");
             if (trace) fprintf(stderr, "[stitch] #%zu %s: signature mismatch, skipped\n", i, e.name.c_str());
             continue;
         }
@@ -950,6 +1143,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
         }
         if (missing) {
             res.status = STITCH_SKIP_MISSING;
+            plan_line("{\"t\":\"skip\",\"node\":" + std::to_string(i) + ",\"why\":\"input not available\"}");
             if (trace) fprintf(stderr, "[stitch] #%zu %s: input not available, skipped\n", i, e.name.c_str());
             continue;
         }
@@ -992,6 +1186,10 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
         g_pending.clear();
         size_t tmp_before = g_tmp_files.size();
         const char* bail_reason = nullptr;
+        if (g_plan) {
+            plan_call(i, e, nd);
+            g_plan_src_next = 0;
+        }
         try {
             e.inv(c);
             res.status = STITCH_OK;
@@ -1065,6 +1263,29 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
             res.reason = intern(bail_reason ? bail_reason : "bail");
             res.miss_key = g_last_miss;
         }
+        if (g_plan) {
+            std::string l = "{\"t\":\"done\",\"node\":" + std::to_string(i) + ",\"status\":\"" +
+                            (res.status == STITCH_OK ? "ok" : "bail") + "\"";
+            if (res.status == STITCH_BAIL) {
+                l += ",\"reason\":";
+                json_str(l, bail_reason ? bail_reason : "bail");
+            }
+            l += ",\"outs\":[";
+            bool first = true;
+            for (int k = 0; k < c.n_out; k++)
+                if (res.out_mask & (1u << k)) {
+                    l += (first ? "" : ",") + std::to_string(k);
+                    first = false;
+                }
+            l += "],\"consumed\":[";
+            first = true;
+            for (size_t k = 0; k < in_slot.size(); k++)
+                if (res.consumed & (1u << k)) {
+                    l += (first ? "" : ",") + std::to_string(k);
+                    first = false;
+                }
+            plan_line(l + "]}");
+        }
         if (trace) {
             if (res.status == STITCH_OK) {
                 std::string outs;
@@ -1082,6 +1303,16 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
     R->current = (int32_t)nodes.size();
     g_cur_node = (int)nodes.size();
     // reverse creation order: dependents (values) go before what they depend on (contexts)
+    if (g_plan) {
+        std::string l = "{\"t\":\"drops\",\"objs\":[";
+        bool first = true;
+        for (auto it = g_pool.rbegin(); it != g_pool.rend(); ++it) {
+            if (!it->alive || !it->storage || !rg.types[it->type]->drop) continue;
+            l += std::string(first ? "" : ",") + "[" + std::to_string(it->node) + "," + std::to_string(it->out) + "]";
+            first = false;
+        }
+        plan_line(l + "]}");
+    }
     for (auto it = g_pool.rbegin(); it != g_pool.rend(); ++it) {
         Slot& s = *it;
         if (!s.alive || !s.storage) continue;
@@ -1096,6 +1327,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
     g_in_exec = false;
     g_cur_node = -1;
     R->current = -1;
+    plan_line("{\"t\":\"end\"}");
     return 0;
 }
 
@@ -1132,6 +1364,12 @@ int stitch_exec(const uint8_t* prog, size_t len, uint32_t flags) {
         return -1;
     }
     return run_program(nodes, flags & 1);
+}
+
+void stitch_set_plan(const char* path) {
+    if (g_plan) fclose(g_plan);
+    g_plan = path ? fopen(path, "w") : nullptr;
+    if (path && !g_plan) fprintf(stderr, "[stitch] cannot write %s\n", path);
 }
 
 int stitch_run_file(const char* path, uint32_t flags) {

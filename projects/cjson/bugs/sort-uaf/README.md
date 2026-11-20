@@ -108,34 +108,34 @@ void apply_patches(Borrow<Json> target, Borrow<Json> patches, Bool case_sensitiv
 ## Sanitizer report
 
 ```
-==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x506000004640 at pc 0xaaaaca11f6e4 bp 0xffffeb4f0570 sp 0xffffeb4f0568
+==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x506000004640 at pc 0xaaaab73e023c bp 0xffffdf6b37f0 sp 0xffffdf6b37e8
 WRITE of size 8 at 0x506000004640 thread T0
-    #0 0xaaaaca11f6e0 in suffix_object /src/cJSON.c:1986:16
-    #1 0xaaaaca11f6e0 in add_item_to_array /src/cJSON.c:2037:13
-    #2 0xaaaaca11f6e0 in add_item_to_object /src/cJSON.c:2101:12
-    #3 0xaaaaca11f6e0 in cJSON_AddItemToObject /src/cJSON.c:2106:12
-    #4 0xaaaaca116ae0 in apply_patch /src/cJSON_Utils.c:1015:9
-    #5 0xaaaaca115dec in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
-    #6 0xaaaaca0dabcc in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:43:87
+    #0 0xaaaab73e0238 in suffix_object /src/cJSON.c:1986:16
+    #1 0xaaaab73e0238 in add_item_to_array /src/cJSON.c:2037:13
+    #2 0xaaaab73e0238 in add_item_to_object /src/cJSON.c:2101:12
+    #3 0xaaaab73e0238 in cJSON_AddItemToObject /src/cJSON.c:2106:12
+    #4 0xaaaab73d7638 in apply_patch /src/cJSON_Utils.c:1015:9
+    #5 0xaaaab73d6944 in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
+    #6 0xaaaab738bcf8 in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:43:87
 
 0x506000004640 is located 0 bytes inside of 64-byte region [0x506000004640,0x506000004680)
 freed by thread T0 here:
-    #0 0xaaaaca0372e8 in free (.stitch/build/repro+0xe72e8) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
-    #1 0xaaaaca11aab0 in cJSON_Delete /src/cJSON.c:273:9
-    #2 0xaaaaca11624c in apply_patch /src/cJSON_Utils.c:896:9
-    #3 0xaaaaca115dec in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
-    #4 0xaaaaca0dabcc in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:43:87
+    #0 0xaaaab72e83a8 in free (.stitch/build/repro+0xe83a8) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
+    #1 0xaaaab73db608 in cJSON_Delete /src/cJSON.c:273:9
+    #2 0xaaaab73d6da4 in apply_patch /src/cJSON_Utils.c:896:9
+    #3 0xaaaab73d6944 in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
+    #4 0xaaaab738bcf8 in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:43:87
 
 previously allocated by thread T0 here:
-    #0 0xaaaaca037584 in malloc (.stitch/build/repro+0xe7584) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
-    #1 0xaaaaca127d74 in cJSON_New_Item /src/cJSON.c:243:27
-    #2 0xaaaaca127d74 in parse_object /src/cJSON.c:1688:27
-    #3 0xaaaaca11bf44 in parse_value /src/cJSON.c:1411:16
-    #4 0xaaaaca1282b4 in parse_object /src/cJSON.c:1734:14
-    #5 0xaaaaca11bf44 in parse_value /src/cJSON.c:1411:16
-    #6 0xaaaaca11b334 in cJSON_ParseWithLengthOpts /src/cJSON.c:1167:10
-    #7 0xaaaaca09c2dc in parse_with_length harness/parse/parse.cpp:16:16
-    #8 0xaaaaca09c2dc in void stitch::detail::Endpoint<&parse_with_length(stitch::Bytes<4096ul, JsonText>)>::call<0ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul>) /stitch/runtime/include/stitch.h:779:19
+    #0 0xaaaab72e8644 in malloc (.stitch/build/repro+0xe8644) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
+    #1 0xaaaab73e88cc in cJSON_New_Item /src/cJSON.c:243:27
+    #2 0xaaaab73e88cc in parse_object /src/cJSON.c:1688:27
+    #3 0xaaaab73dca9c in parse_value /src/cJSON.c:1411:16
+    #4 0xaaaab73e8e0c in parse_object /src/cJSON.c:1734:14
+    #5 0xaaaab73dca9c in parse_value /src/cJSON.c:1411:16
+    #6 0xaaaab73dbe8c in cJSON_ParseWithLengthOpts /src/cJSON.c:1167:10
+    #7 0xaaaab734d408 in parse_with_length harness/parse/parse.cpp:16:16
+    #8 0xaaaab734d408 in void stitch::detail::Endpoint<&parse_with_length(stitch::Bytes<4096ul, JsonText>)>::call<0ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul>) /stitch/runtime/include/stitch.h:779:19
 ```
 
 ## Files

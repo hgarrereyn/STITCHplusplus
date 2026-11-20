@@ -59,7 +59,7 @@ impl Input for Program {
 }
 
 impl Program {
-    /// Binary STP2 format shared with the runtime (endpoint names, not indices, so saved
+    /// Binary STCH format shared with the runtime (endpoint names, not indices, so saved
     /// programs survive harness rebuilds).
     pub fn serialize(&self) -> Vec<u8> {
         let m = manifest::get();
@@ -72,7 +72,7 @@ impl Program {
             });
         }
         let mut o = Vec::with_capacity(64 + self.nodes.len() * 32);
-        o.extend_from_slice(b"STP2");
+        o.extend_from_slice(b"STCH");
         o.extend_from_slice(&(names.len() as u32).to_le_bytes());
         for &ep in &names {
             let nm = m.endpoints[ep as usize].name.as_bytes();
@@ -100,7 +100,7 @@ impl Program {
     pub fn deserialize(d: &[u8]) -> Option<Program> {
         let m = manifest::get();
         let mut r = Rd { d, off: 0 };
-        if r.take(4)? != b"STP2" {
+        if r.take(4)? != b"STCH" {
             return None;
         }
         let nn = r.u32()? as usize;

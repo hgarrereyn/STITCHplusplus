@@ -317,38 +317,38 @@ New<Compiled> compile(Borrow<Ctx> c, Str<8192, JsSource> src, Bool module) {
 ## Sanitizer report
 
 ```
-==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x512000003dac at pc 0xaaaab3d1c9a8 bp 0xffffc15a82d0 sp 0xffffc15a82c8
+==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x512000003dac at pc 0xaaaacae3d500 bp 0xffffc6118770 sp 0xffffc6118768
 READ of size 4 at 0x512000003dac thread T0
-    #0 0xaaaab3d1c9a4 in js_parse_for_in_of /src/quickjs.c:27088:21
-    #1 0xaaaab3ce3550 in js_parse_statement_or_decl /src/quickjs.c:27386:21
-    #2 0xaaaab3d1ab08 in js_parse_block /src/quickjs.c:26755:17
-    #3 0xaaaab3ce52b8 in js_parse_statement_or_decl /src/quickjs.c:27640:17
-    #4 0xaaaab3d1ab08 in js_parse_block /src/quickjs.c:26755:17
-    #5 0xaaaab3ce2314 in js_parse_statement_or_decl /src/quickjs.c:27198:13
-    #6 0xaaaab3d1adf0 in js_parse_statement /src/quickjs.c:26745:12
-    #7 0xaaaab3d1cb0c in js_parse_for_in_of /src/quickjs.c:27094:9
-    #8 0xaaaab3ce3550 in js_parse_statement_or_decl /src/quickjs.c:27386:21
-    #9 0xaaaab3cd86e0 in js_parse_source_element /src/quickjs.c:30359:13
-    #10 0xaaaab3ccbf70 in js_parse_program /src/quickjs.c:35331:13
-    #11 0xaaaab3c02410 in __JS_EvalInternal /src/quickjs.c:35500:11
-    #12 0xaaaab3be5ae8 in JS_EvalInternal /src/quickjs.c:35551:12
-    #13 0xaaaab3be5824 in JS_EvalThis2 /src/quickjs.c:35606:11
-    #14 0xaaaab3be5cec in JS_Eval /src/quickjs.c:35620:12
-    #15 0xaaaab3adb8f4 in compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool) harness/eval/eval.cpp:22:17
-    #16 0xaaaab3aea574 in void stitch::detail::Endpoint<&compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #0 0xaaaacae3d4fc in js_parse_for_in_of /src/quickjs.c:27088:21
+    #1 0xaaaacae040a8 in js_parse_statement_or_decl /src/quickjs.c:27386:21
+    #2 0xaaaacae3b660 in js_parse_block /src/quickjs.c:26755:17
+    #3 0xaaaacae05e10 in js_parse_statement_or_decl /src/quickjs.c:27640:17
+    #4 0xaaaacae3b660 in js_parse_block /src/quickjs.c:26755:17
+    #5 0xaaaacae02e6c in js_parse_statement_or_decl /src/quickjs.c:27198:13
+    #6 0xaaaacae3b948 in js_parse_statement /src/quickjs.c:26745:12
+    #7 0xaaaacae3d664 in js_parse_for_in_of /src/quickjs.c:27094:9
+    #8 0xaaaacae040a8 in js_parse_statement_or_decl /src/quickjs.c:27386:21
+    #9 0xaaaacadf9238 in js_parse_source_element /src/quickjs.c:30359:13
+    #10 0xaaaacadecac8 in js_parse_program /src/quickjs.c:35331:13
+    #11 0xaaaacad22f68 in __JS_EvalInternal /src/quickjs.c:35500:11
+    #12 0xaaaacad06640 in JS_EvalInternal /src/quickjs.c:35551:12
+    #13 0xaaaacad0637c in JS_EvalThis2 /src/quickjs.c:35606:11
+    #14 0xaaaacad06844 in JS_Eval /src/quickjs.c:35620:12
+    #15 0xaaaacabeca20 in compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool) harness/eval/eval.cpp:22:17
+    #16 0xaaaacabfb6a0 in void stitch::detail::Endpoint<&compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
 
 0x512000003dac is located 20 bytes before 312-byte region [0x512000003dc0,0x512000003ef8)
 allocated by thread T0 here:
-    #0 0xaaaab3a787f8 in realloc (.stitch/build/repro+0x1187f8) (BuildId: b0c778e0bdaa53c92681883bd4ae9acca89a59c5)
-    #1 0xaaaab3c1386c in js_def_realloc /src/quickjs.c:1972:12
-    #2 0xaaaab3b5e6b8 in js_realloc_rt /src/quickjs.c:1601:11
-    #3 0xaaaab3b5efd4 in js_realloc2 /src/quickjs.c:1683:11
-    #4 0xaaaab3c65e6c in js_realloc_array /src/quickjs.c:1725:17
-    #5 0xaaaab3c65c1c in js_resize_array /src/quickjs.c:1739:16
-    #6 0xaaaab3d16b7c in new_label_fd /src/quickjs.c:22146:9
-    #7 0xaaaab3cf7008 in new_label /src/quickjs.c:22163:13
-    #8 0xaaaab3cf7148 in emit_goto /src/quickjs.c:22196:21
-    #9 0xaaaab3d1b364 in js_parse_for_in_of /src/quickjs.c:26944:18
+    #0 0xaaaacab898b8 in realloc (.stitch/build/repro+0x1198b8) (BuildId: 084cda59a244863b189cf71d79b4118eb630de9b)
+    #1 0xaaaacad343c4 in js_def_realloc /src/quickjs.c:1972:12
+    #2 0xaaaacac7f210 in js_realloc_rt /src/quickjs.c:1601:11
+    #3 0xaaaacac7fb2c in js_realloc2 /src/quickjs.c:1683:11
+    #4 0xaaaacad869c4 in js_realloc_array /src/quickjs.c:1725:17
+    #5 0xaaaacad86774 in js_resize_array /src/quickjs.c:1739:16
+    #6 0xaaaacae376d4 in new_label_fd /src/quickjs.c:22146:9
+    #7 0xaaaacae17b60 in new_label /src/quickjs.c:22163:13
+    #8 0xaaaacae17ca0 in emit_goto /src/quickjs.c:22196:21
+    #9 0xaaaacae3bebc in js_parse_for_in_of /src/quickjs.c:26944:18
 ```
 
 ## Files

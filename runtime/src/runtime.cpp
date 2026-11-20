@@ -828,7 +828,7 @@ struct Reader {
 static bool parse_program(const uint8_t* data, size_t len, std::vector<PNode>& nodes) {
     Reader r{data, len};
     auto magic = r.bytes(4);
-    if (!r.ok || memcmp(magic.data(), "STP2", 4) != 0) return false;
+    if (!r.ok || memcmp(magic.data(), "STCH", 4) != 0) return false;
     uint32_t nn = r.get<uint32_t>();
     if (nn > 100000) return false;
     std::vector<std::string> names;
@@ -1094,7 +1094,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
     // a persistent worker runs many programs: per-run cmplog dedupe must start empty
     if (g_cmplog && g_cmplog->enabled) memset(g_cmp_seen, 0, sizeof g_cmp_seen);
     StitchResults* R = results();
-    R->magic = 0x53545232;
+    R->magic = 0x53544348;  // "STCH"
     R->n_nodes = (uint32_t)nodes.size();
     R->str_used = 0;
     R->crash_pc = 0;

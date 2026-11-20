@@ -80,11 +80,11 @@ New<Val> new_symbol(Borrow<Ctx> c, Str<64, JsKey> desc, Bool global) {
 ## Sanitizer report
 
 ```
-==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff884874b8 bp 0xfffff1a198f0 sp 0xfffff1a198e0 T0)
-    #5 0xaaaad563b05c in JS_NewSymbolFromAtom /src/quickjs.c:3277:5
-    #6 0xaaaad563af68 in JS_NewSymbol /src/quickjs.c:3290:12
-    #7 0xaaaad55e8334 in new_symbol harness/values/values.cpp:31:24
-    #8 0xaaaad55e8334 in void stitch::detail::Endpoint<&new_symbol(stitch::Borrow<Ctx>, stitch::Str<64ul, JsKey>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff970c74b8 bp 0xffffdc6b7a30 sp 0xffffdc6b7a20 T0)
+    #5 0xaaaab4acbbb4 in JS_NewSymbolFromAtom /src/quickjs.c:3277:5
+    #6 0xaaaab4acbac0 in JS_NewSymbol /src/quickjs.c:3290:12
+    #7 0xaaaab4a69460 in new_symbol harness/values/values.cpp:31:24
+    #8 0xaaaab4a69460 in void stitch::detail::Endpoint<&new_symbol(stitch::Borrow<Ctx>, stitch::Str<64ul, JsKey>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
 
 AddressSanitizer can not provide additional info.
 ```

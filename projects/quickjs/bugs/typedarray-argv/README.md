@@ -108,15 +108,15 @@ New<Val> new_typed_array(Borrow<Val> buffer_or_len, Range<0, 12> type) {
 ## Sanitizer report
 
 ```
-==7==ERROR: AddressSanitizer: stack-buffer-overflow on address 0xffffc8dd65d0 at pc 0xaaaae9c87824 bp 0xffffc8dd5f30 sp 0xffffc8dd5f28
-READ of size 16 at 0xffffc8dd65d0 thread T0
-    #0 0xaaaae9c87820 in js_typed_array_constructor /src/quickjs.c:56945:17
-    #1 0xaaaae9c8722c in JS_NewTypedArray /src/quickjs.c:55132:12
-    #2 0xaaaae9b9d564 in new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>) harness/values/values.cpp:45:41
-    #3 0xaaaae9ba9294 in void stitch::detail::Endpoint<&new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>)>::call<0ul, 1ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul>) /stitch/runtime/include/stitch.h:779:19
+==7==ERROR: AddressSanitizer: stack-buffer-overflow on address 0xffffeed8b190 at pc 0xaaaac675837c bp 0xffffeed8aaf0 sp 0xffffeed8aae8
+READ of size 16 at 0xffffeed8b190 thread T0
+    #0 0xaaaac6758378 in js_typed_array_constructor /src/quickjs.c:56945:17
+    #1 0xaaaac6757d84 in JS_NewTypedArray /src/quickjs.c:55132:12
+    #2 0xaaaac665e690 in new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>) harness/values/values.cpp:45:41
+    #3 0xaaaac666a3c0 in void stitch::detail::Endpoint<&new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>)>::call<0ul, 1ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul>) /stitch/runtime/include/stitch.h:779:19
 
-Address 0xffffc8dd65d0 is located in stack of thread T0 at offset 48 in frame
-    #0 0xaaaae9b9d480 in new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>) harness/values/values.cpp:42
+Address 0xffffeed8b190 is located in stack of thread T0 at offset 48 in frame
+    #0 0xaaaac665e5ac in new_typed_array(stitch::Borrow<Val>, stitch::Range<0ll, 12ll>) harness/values/values.cpp:42
 
   This frame has 1 object(s):
     [32, 48) 'argv' (line 43) <== Memory access at offset 48 overflows this variable

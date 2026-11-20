@@ -213,27 +213,27 @@ void replace_item_in_object(Borrow<Json> object, Str<64, JsonKey> fresh, Src<16>
 ## Sanitizer report
 
 ```
-==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000005c10 at pc 0xaaaadbf4ecc8 bp 0xffffd2356f70 sp 0xffffd2356758
+==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000005c10 at pc 0xaaaacba0fd88 bp 0xfffff09c9090 sp 0xfffff09c8878
 READ of size 1 at 0x502000005c10 thread T0
-    #0 0xaaaadbf4ecc4 in strcmp (.stitch/build/repro+0x5ecc4) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
-    #1 0xaaaadc0be998 in get_object_item /src/cJSON.c:1948:83
-    #2 0xaaaadc0c44fc in replace_item_in_object /src/cJSON.c:2432:48
-    #3 0xaaaadc05ffa0 in replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool) harness/tree/object.cpp:32:32
-    #4 0xaaaadc0664e4 in void stitch::detail::Endpoint<&replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul, 3ul, 4ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul, 3ul, 4ul>) /stitch/runtime/include/stitch.h:777:13
+    #0 0xaaaacba0fd84 in strcmp (.stitch/build/repro+0x5fd84) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
+    #1 0xaaaacbb8f4f0 in get_object_item /src/cJSON.c:1948:83
+    #2 0xaaaacbb95054 in replace_item_in_object /src/cJSON.c:2432:48
+    #3 0xaaaacbb210cc in replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool) harness/tree/object.cpp:32:32
+    #4 0xaaaacbb27610 in void stitch::detail::Endpoint<&replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul, 3ul, 4ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul, 3ul, 4ul>) /stitch/runtime/include/stitch.h:777:13
 
 0x502000005c10 is located 0 bytes inside of 1-byte region [0x502000005c10,0x502000005c11)
 freed by thread T0 here:
-    #0 0xaaaadbfd72e8 in free (.stitch/build/repro+0xe72e8) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
-    #1 0xaaaadc0b914c in overwrite_item /src/cJSON_Utils.c:793:9
-    #2 0xaaaadc0b64f8 in apply_patch /src/cJSON_Utils.c:869:13
-    #3 0xaaaadc0b6bf8 in cJSONUtils_ApplyPatchesCaseSensitive /src/cJSON_Utils.c:1085:18
-    #4 0xaaaadc079b10 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:32:18
-    #5 0xaaaadc080e50 in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #0 0xaaaacba983a8 in free (.stitch/build/repro+0xe83a8) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
+    #1 0xaaaacbb89ca4 in overwrite_item /src/cJSON_Utils.c:793:9
+    #2 0xaaaacbb87050 in apply_patch /src/cJSON_Utils.c:869:13
+    #3 0xaaaacbb87750 in cJSONUtils_ApplyPatchesCaseSensitive /src/cJSON_Utils.c:1085:18
+    #4 0xaaaacbb3ac3c in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:32:18
+    #5 0xaaaacbb41f7c in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
 
 previously allocated by thread T0 here:
-    #0 0xaaaadbfbf170 in strdup (.stitch/build/repro+0xcf170) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
-    #1 0xaaaadc05efd4 in add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>) harness/tree/object.cpp:20:15
-    #2 0xaaaadc065b88 in void stitch::detail::Endpoint<&add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:777:13
+    #0 0xaaaacba80230 in strdup (.stitch/build/repro+0xd0230) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
+    #1 0xaaaacbb20100 in add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>) harness/tree/object.cpp:20:15
+    #2 0xaaaacbb26cb4 in void stitch::detail::Endpoint<&add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:777:13
 ```
 
 ## Files

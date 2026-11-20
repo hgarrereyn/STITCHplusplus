@@ -101,10 +101,10 @@ New<Json> generate_patches(Borrow<Json> from, Borrow<Json> to, Bool case_sensiti
 [stitch] CHECK FAILED: generated patches apply (node 2)
 AddressSanitizer:DEADLYSIGNAL
 =================================================================
-==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff8b8c74b8 bp 0xffffdfc863c0 sp 0xffffdfc863b0 T0)
-    #3 0xaaaad69cb528 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:356:5
-    #4 0xaaaad69b9b34 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:33:9
-    #5 0xaaaad69c0e50 in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff91ec74b8 bp 0xffffe4262c80 sp 0xffffe4262c70 T0)
+    #3 0xaaaae5c0c654 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:361:5
+    #4 0xaaaae5bfac60 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) harness/utils/utils.cpp:33:9
+    #5 0xaaaae5c01f7c in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
 
 AddressSanitizer can not provide additional info.
 ```

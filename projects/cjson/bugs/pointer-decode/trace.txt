@@ -1,4 +1,4 @@
-[stitch] running .stitch/campaigns/main/w2/crashes/df53f08c11857c5a.min.stp
+[stitch] running .stitch/tmp/pointer-decode.stp
 [stitch] #0 parse_with_length(buf=Bytes[16,decoded]"{\"@n/\" : null } ")
 [stitch]     -> ok produced o0.0
 [stitch] #1 parse(text=Str[3,decoded]"{} ")
@@ -8,20 +8,20 @@
 [stitch] CHECK FAILED: generated patches apply (node 2)
 AddressSanitizer:DEADLYSIGNAL
 =================================================================
-==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff8b8c74b8 bp 0xffffdfc863c0 sp 0xffffdfc863b0 T0)
-    #0 0xffff8b8c74b8  (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
-    #1 0xffff8b87cb38 in raise (/lib/aarch64-linux-gnu/libc.so.6+0x3cb38) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
-    #2 0xffff8b867dfc in abort (/lib/aarch64-linux-gnu/libc.so.6+0x27dfc) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
-    #3 0xaaaad69cb528 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:356:5
-    #4 0xaaaad69b9b34 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) /project/harness/utils/utils.cpp:33:9
-    #5 0xaaaad69c0e50 in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
-    #6 0xaaaad69d7c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
-    #7 0xaaaad69d4e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
-    #8 0xaaaad69decb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
-    #9 0xaaaad6957218 in main /stitch/runtime/src/main_repro.cpp:22:13
-    #10 0xffff8b8684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
-    #11 0xffff8b868594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
-    #12 0xaaaad687896c in _start (/project/.stitch/build/repro+0x4896c) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff91ec74b8 bp 0xffffe4262c80 sp 0xffffe4262c70 T0)
+    #0 0xffff91ec74b8  (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #1 0xffff91e7cb38 in raise (/lib/aarch64-linux-gnu/libc.so.6+0x3cb38) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #2 0xffff91e67dfc in abort (/lib/aarch64-linux-gnu/libc.so.6+0x27dfc) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #3 0xaaaae5c0c654 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:361:5
+    #4 0xaaaae5bfac60 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) /project/harness/utils/utils.cpp:33:9
+    #5 0xaaaae5c01f7c in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #6 0xaaaae5c23b80 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1194:13
+    #7 0xaaaae5c1c800 in stitch_exec /stitch/runtime/src/runtime.cpp:1366:12
+    #8 0xaaaae5c2d1a4 in stitch_run_file /stitch/runtime/src/runtime.cpp:1386:12
+    #9 0xaaaae5b9833c in main /stitch/runtime/src/main_repro.cpp:23:13
+    #10 0xffff91e684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #11 0xffff91e68594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #12 0xaaaae5ab9a2c in _start (/project/.stitch/build/repro+0x49a2c) (BuildId: 8839ecdfa4c45b438d168573475ec80dd2894592)
 
 AddressSanitizer can not provide additional info.
 SUMMARY: AddressSanitizer: ABRT (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3) 

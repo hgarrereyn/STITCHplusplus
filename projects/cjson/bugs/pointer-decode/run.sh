@@ -4,7 +4,7 @@
 #                                       ./run.sh --standalone  build + run standalone/ (plain C/C++ against the library)
 set -e
 cd "$(dirname "$0")"
-ID=c1
+ID=pointer-deco
 docker buildx build --load -q -f stitch/docker/base.Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
 if [ ! -d source ]; then
   git clone --quiet https://github.com/DaveGamble/cJSON source

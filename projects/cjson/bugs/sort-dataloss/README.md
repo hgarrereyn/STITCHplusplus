@@ -108,9 +108,9 @@ void add_item_to_array(Borrow<Json> array, Borrow<Json> item) {
 [stitch] CHECK FAILED: array grows by one (node 3)
 AddressSanitizer:DEADLYSIGNAL
 =================================================================
-==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffffbbec74b8 bp 0xffffd204cce0 sp 0xffffd204ccd0 T0)
-    #3 0xaaaad96cb528 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:356:5
-    #4 0xaaaad96969bc in add_item_to_array(stitch::Borrow<Json>, stitch::Borrow<Json>) harness/tree/array.cpp:16:5
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff83cc74b8 bp 0xffffcb299540 sp 0xffffcb299530 T0)
+    #3 0xaaaac114c654 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:361:5
+    #4 0xaaaac1117ae8 in add_item_to_array(stitch::Borrow<Json>, stitch::Borrow<Json>) harness/tree/array.cpp:16:5
 
 AddressSanitizer can not provide additional info.
 ```

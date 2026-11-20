@@ -5,7 +5,7 @@
  * the harness through these functions and the shared-memory regions below.
  *
  * Program file format (".stp", little endian):
- *   "STP2" u32 n_names { u16 len, bytes }*        endpoint name table
+ *   "STCH" u32 n_names { u16 len, bytes }*        endpoint name table
  *   u32 n_nodes, per node:
  *     u32 name_index
  *     u8 n_inputs   { u32 src_node, u8 src_output }*
@@ -98,6 +98,8 @@ void stitch_cmplog_reset(void); /* clear comparison records and per-run dedupe *
 
 /* misc */
 int stitch_run_file(const char* path, uint32_t flags); /* load + exec a .stp file */
+/* Plan mode: write every executed call with its concrete arguments as JSON lines (see cli/stitch/standalone.py). */
+void stitch_set_plan(const char* path);
 
 #ifdef __cplusplus
 }

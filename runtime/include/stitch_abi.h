@@ -5,7 +5,7 @@
  * the harness through these functions and the shared-memory regions below.
  *
  * Program file format (".stp", little endian):
- *   "STP2" u32 n_names { u16 len, bytes }*        endpoint name table
+ *   "STCH" u32 n_names { u16 len, bytes }*        endpoint name table
  *   u32 n_nodes, per node:
  *     u32 name_index
  *     u8 n_inputs   { u32 src_node, u8 src_output }*
