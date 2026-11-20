@@ -6,7 +6,10 @@ from pathlib import Path
 
 from . import minitoml
 
-STITCH_HOME = Path(__file__).resolve().parents[2]
+_PKG = Path(__file__).resolve().parent
+# Installed package: runtime, Docker files, engine sources and the skill ship in stitch_fuzz/assets.
+# Source checkout: they live at the repository root.
+STITCH_HOME = _PKG / "assets" if (_PKG / "assets" / "docker").is_dir() else _PKG.parents[1]
 
 DEFAULTS = {
     "project": {"name": None},

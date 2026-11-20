@@ -49,11 +49,32 @@ def _tree_hash(paths):
 
 
 def stitch_hash():
-    return _tree_hash(["docker/base.Dockerfile", "docker/bin", "runtime", "engine/src", "engine/Cargo.toml"])
+    return _tree_hash(["docker/base.Dockerfile", "docker/bin", "runtime", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock"])
 
 
 def toolchain_hash():
     return _tree_hash(["docker/base.Dockerfile", "docker/bin", "runtime"])
+
+
+# Prebuilt images are published per source hash by .github/workflows/release.yml:
+#   <registry>/stitch-base:<stitch_hash()>   <registry>/stitch-toolchain:<toolchain_hash()>
+# STITCH_REGISTRY=none always builds locally.
+DEFAULT_REGISTRY = "ghcr.io/hgarrereyn"
+
+
+def registry():
+    r = os.environ.get("STITCH_REGISTRY", DEFAULT_REGISTRY).strip().rstrip("/")
+    return None if r.lower() in ("", "none", "off") else r
+
+
+def _try_pull(remote: str, local: str, quiet=False) -> bool:
+    """Pull a prebuilt image and tag it locally. False if it is not published (or no network)."""
+    if not quiet:
+        print(f"[stitch] pulling {remote}", flush=True)
+    r = _run(["docker", "pull", "-q", remote], capture_output=True)
+    if r.returncode != 0:
+        return False
+    return _run(["docker", "tag", remote, local], capture_output=True).returncode == 0
 
 
 def build_log(name) -> Path:
@@ -81,10 +102,14 @@ def base_tag(sanitizers=("address",)) -> str:
 
 def ensure_base(sanitizers=("address",), rebuild=False) -> str:
     """Tag of the base image for this checkout (built if missing)."""
-    tag = f"stitch/base:{stitch_hash()}"
+    h = stitch_hash()
+    tag = f"stitch/base:{h}"
+    if not rebuild and not image_exists(tag) and registry():
+        if not _try_pull(f"{registry()}/stitch-base:{h}", tag):
+            print(f"[stitch] no prebuilt base image for this version ({h})", flush=True)
     if rebuild or not image_exists(tag):
         _buildx(["-f", str(STITCH_HOME / "docker/base.Dockerfile"), "--target", "base", "-t", tag, "-t", "stitch/base:latest", str(STITCH_HOME)],
-                build_log("base"), "the STITCH base image (first time takes a few minutes)")
+                build_log("base"), "the STITCH base image locally (once per version, about 10 minutes)")
     san = ",".join(sanitizers) if sanitizers else "none"
     if san == "address":
         return tag
@@ -97,7 +122,10 @@ def ensure_base(sanitizers=("address",), rebuild=False) -> str:
 
 
 def ensure_toolchain() -> str:
-    tag = f"stitch/toolchain:{toolchain_hash()}"
+    h = toolchain_hash()
+    tag = f"stitch/toolchain:{h}"
+    if not image_exists(tag) and registry():
+        _try_pull(f"{registry()}/stitch-toolchain:{h}", tag, quiet=True)
     if not image_exists(tag):
         _buildx(["-f", str(STITCH_HOME / "docker/base.Dockerfile"), "--target", "toolchain", "-t", tag, str(STITCH_HOME)],
                 build_log("toolchain"), "the STITCH toolchain image")

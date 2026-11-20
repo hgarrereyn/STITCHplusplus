@@ -12,7 +12,7 @@
 //   }
 //   STITCH_ENDPOINT(parse);
 //
-// See docs/spec.md for the full reference.
+// Reference: `stitch guide api` (skill/stitch/reference/harness-api.md).
 #pragma once
 
 #include <array>

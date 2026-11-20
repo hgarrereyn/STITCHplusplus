@@ -1,0 +1,30 @@
+# Checks that the package installs and carries the same sources as the checkout (so the prebuilt
+# images it pulls match), and that the CLI starts.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - run: python -m pip install build && python -m build
+      - run: python -m venv /tmp/venv && /tmp/venv/bin/pip install dist/*.whl
+      - name: installed CLI works outside the checkout
+        working-directory: /tmp
+        run: |
+          /tmp/venv/bin/stitch --version
+          /tmp/venv/bin/stitch guide > /dev/null
+          /tmp/venv/bin/stitch guide api > /dev/null
+          /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
+      - name: installed sources hash like the checkout
+        run: |
+          a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.stitch_hash(), docker.toolchain_hash())')
+          b=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.stitch_hash(), docker.toolchain_hash())')
+          echo "installed: $a  checkout: $b"; [ "$a" = "$b" ]

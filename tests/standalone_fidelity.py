@@ -15,9 +15,9 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
-from stitch import reports, standalone  # noqa: E402
-from stitch.cli import build  # noqa: E402
-from stitch.project import Project  # noqa: E402
+from stitch_fuzz import reports, standalone  # noqa: E402
+from stitch_fuzz.cli import build  # noqa: E402
+from stitch_fuzz.project import Project  # noqa: E402
 
 
 def programs(p, n, rng):

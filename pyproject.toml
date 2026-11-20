@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stitch-fuzz"
+version = "0.2.0"
+description = "STITCH: API fuzzing for C/C++ libraries, built for coding agents"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/hgarrereyn/STITCH"
+
+[project.scripts]
+stitch = "stitch_fuzz.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli/stitch_fuzz"]
+
+# Everything the CLI needs to build images and reproducers, inside the package.
+[tool.hatch.build.targets.wheel.force-include]
+"docker/base.Dockerfile" = "stitch_fuzz/assets/docker/base.Dockerfile"
+"docker/bin" = "stitch_fuzz/assets/docker/bin"
+"runtime" = "stitch_fuzz/assets/runtime"
+"engine/src" = "stitch_fuzz/assets/engine/src"
+"engine/Cargo.toml" = "stitch_fuzz/assets/engine/Cargo.toml"
+"engine/Cargo.lock" = "stitch_fuzz/assets/engine/Cargo.lock"
+"engine/rust-toolchain.toml" = "stitch_fuzz/assets/engine/rust-toolchain.toml"
+"skill" = "stitch_fuzz/assets/skill"
+
+[tool.hatch.build.targets.sdist]
+include = ["cli/stitch_fuzz", "docker", "runtime", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock",
+           "engine/rust-toolchain.toml", "skill", "README.md", "pyproject.toml"]

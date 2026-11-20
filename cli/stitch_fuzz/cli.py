@@ -521,9 +521,53 @@ def cmd_shell(a):
     os.execvp("docker", docker.run_args(p, st["image"], tty=True) + (a.cmd or ["bash"]))
 
 
+SKILL = STITCH_HOME / "skill" / "stitch"
+GUIDES = {"": "SKILL.md", "api": "reference/harness-api.md", "reproducers": "reference/reproducers.md"}
+
+
 def cmd_guide(a):
-    f = STITCH_HOME / "docs" / ("spec.md" if a.spec else "agent-guide.md")
-    print(f.read_text())
+    topic = "api" if a.spec else (a.topic or "")
+    if topic not in GUIDES:
+        die(f"unknown topic '{topic}' (one of: {', '.join(t for t in GUIDES if t)})")
+    text = (SKILL / GUIDES[topic]).read_text()
+    if text.startswith("---\n"):  # skill frontmatter
+        text = text.split("\n---\n", 1)[1].lstrip("\n")
+    print(text)
+
+
+def install_skill(dest: Path) -> Path:
+    """Copy the STITCH agent skill to dest/stitch (replacing an older copy)."""
+    target = dest / "stitch"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(SKILL, target)
+    return target
+
+
+def skill_dir(user: bool, path):
+    if path:
+        return Path(path).expanduser().resolve()
+    return (Path.home() if user else Path.cwd()) / ".claude" / "skills"
+
+
+def cmd_skill(a):
+    t = install_skill(skill_dir(a.user, a.dir))
+    out({"ok": True, "skill": str(t)}, f"installed the stitch skill in {t}")
+
+
+def cmd_setup(a):
+    from . import __version__
+    docker.check_docker()
+    if docker._run(["docker", "buildx", "version"], capture_output=True).returncode != 0:
+        die("docker buildx is missing (install the buildx plugin)")
+    if not JSON:
+        print(f"[stitch] stitch-fuzz {__version__}, docker ok")
+    tag = docker.ensure_base(rebuild=a.rebuild)
+    res = {"ok": True, "version": __version__, "base_image": tag}
+    if a.skill or a.skill_dir:
+        res["skill"] = str(install_skill(skill_dir(a.user, a.skill_dir)))
+    out(res, f"ready: base image {tag}" + (f"\nskill installed in {res['skill']}" if "skill" in res else "")
+        + "\nnext: stitch init DIR --git URL --rev REV   (guide: stitch guide)")
 
 
 def cmd_init(a):
@@ -642,12 +686,21 @@ def main(argv=None):
                                  epilog="Start with `stitch guide` (how to write and debug harnesses).")
     ap.add_argument("-C", "--project", default=None, help="project directory (default: search upwards for stitch.toml)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    from . import __version__
+    ap.add_argument("--version", action="version", version=f"stitch-fuzz {__version__}")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("-C", "--project", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable output")
     sp = ap.add_subparsers(dest="cmd", required=True)
     _add = sp.add_parser
     sp.add_parser = lambda *x, **k: _add(*x, parents=[common], **k)
+
+    s = sp.add_parser("setup", help="check Docker and get the base image (run once per version)")
+    s.add_argument("--skill", action="store_true", help="also install the agent skill in ./.claude/skills")
+    s.add_argument("--skill-dir", help="install the agent skill into this skills directory")
+    s.add_argument("--user", action="store_true", help="with --skill: install into ~/.claude/skills")
+    s.add_argument("--rebuild", action="store_true", help="build the base image locally even if one exists")
+    s.set_defaults(fn=cmd_setup)
 
     s = sp.add_parser("init", help="create a new project (stitch.toml, Dockerfile, harness/)")
     s.add_argument("dir", nargs="?", default=".")
@@ -751,9 +804,15 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the agent guide (or --spec for the harness reference)")
-    s.add_argument("--spec", action="store_true")
+    s = sp.add_parser("guide", help="print the guide (topics: api, reproducers)")
+    s.add_argument("topic", nargs="?", help="api: harness API reference; reproducers: stitch write / try")
+    s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)
+
+    s = sp.add_parser("skill", help="install the STITCH agent skill (default: ./.claude/skills/stitch)")
+    s.add_argument("dir", nargs="?", help="skills directory to install into")
+    s.add_argument("--user", action="store_true", help="install into ~/.claude/skills")
+    s.set_defaults(fn=cmd_skill)
 
     a = ap.parse_args(argv)
     JSON = a.json

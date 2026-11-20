@@ -98,7 +98,7 @@ void stitch_cmplog_reset(void); /* clear comparison records and per-run dedupe *
 
 /* misc */
 int stitch_run_file(const char* path, uint32_t flags); /* load + exec a .stp file */
-/* Plan mode: write every executed call with its concrete arguments as JSON lines (see cli/stitch/standalone.py). */
+/* Plan mode: write every executed call with its concrete arguments as JSON lines (see cli/stitch_fuzz/standalone.py). */
 void stitch_set_plan(const char* path);
 
 #ifdef __cplusplus

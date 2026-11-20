@@ -1,4 +1,4 @@
-# STITCH project. Run `stitch guide` for the workflow and `stitch guide --spec` for the API.
+# STITCH project. Guide: `stitch guide`. API reference: `stitch guide api`.
 [project]
 name = "cjson"
 
