@@ -1,4 +1,4 @@
-# STITCH v2 harness reference
+# STITCH harness reference
 
 ## Layout
 

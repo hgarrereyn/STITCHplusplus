@@ -1,7 +1,7 @@
 """`stitch init` scaffolding."""
 from pathlib import Path
 
-TOML = """# STITCH v2 project. Run `stitch guide` for the workflow and `stitch guide --spec` for the API.
+TOML = """# STITCH project. Run `stitch guide` for the workflow and `stitch guide --spec` for the API.
 [project]
 name = "{name}"
 

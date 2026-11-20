@@ -1,4 +1,4 @@
-# STITCH v2: agent guide
+# STITCH: agent guide
 
 STITCH fuzzes a library's API by generating *programs*: sequences of calls to small C++ stubs you write
 (one stub per API scenario). The engine (LibAFL) learns which call sequences and arguments reach new code.
@@ -233,4 +233,4 @@ that prints the same message. Leak detection is off unless the expected crash is
 - `.stitch/build/` - `fuzzer`, `repro`, `manifest.json` (what the engine sees: endpoints, inputs, params)
 - `.stitch/campaigns/<name>/` - `w*/corpus`, `w*/crashes`, `w*/stats.json`, `triage.json`
 - `.stitch/repros/` - reproducers; `.stitch/bisect/` - per-commit builds and results
-- logs of image builds: `~/.cache/stitch2/logs/`
+- logs of image builds: `~/.cache/stitch/logs/`

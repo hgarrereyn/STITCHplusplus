@@ -1,4 +1,4 @@
-// STITCH v2 C++ runtime: registry, program execution, attributes, Source, coverage hooks.
+// STITCH C++ runtime: registry, program execution, attributes, Source, coverage hooks.
 // Compiled WITHOUT SanitizerCoverage (only the harness stubs and the library are instrumented).
 #include <errno.h>
 #include <fcntl.h>

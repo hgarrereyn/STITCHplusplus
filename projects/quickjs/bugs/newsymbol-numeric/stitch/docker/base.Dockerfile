@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# STITCH v2 base image.
+# STITCH base image.
 #   target `toolchain`: clang + sanitizers + STITCH runtime + compiler wrappers (enough to build
 #                       and run reproducers)
 #   target `base`     : toolchain + the LibAFL engine (libstitch_engine.a) for fuzzing

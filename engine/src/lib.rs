@@ -1,4 +1,4 @@
-//! STITCH v2 engine. Linked into the harness binary; `main` calls `stitch_engine_main`.
+//! STITCH engine. Linked into the harness binary; `main` calls `stitch_engine_main`.
 pub mod cmplog;
 pub mod data;
 pub mod ffi;

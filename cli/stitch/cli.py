@@ -1,4 +1,4 @@
-"""stitch: build, fuzz, triage and reproduce STITCH v2 harnesses (everything runs in Docker)."""
+"""stitch: build, fuzz, triage and reproduce STITCH harnesses (everything runs in Docker)."""
 import argparse
 import json
 import os
@@ -133,7 +133,7 @@ def cmd_check(a):
 # campaigns
 # =============================================================================================
 def container_name(p, name):
-    return f"stitch2-{p.name}-{name}"
+    return f"stitch-{p.name}-{name}"
 
 
 def start_campaign(p, name, secs=None, jobs=1, only=None, fresh=False, detach=True, extra=()):

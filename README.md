@@ -1,4 +1,4 @@
-# STITCH v2
+# STITCH
 
 API fuzzing for C/C++ libraries, built for coding agents. You (or an agent) write small typed stubs for
 the library's API; the LibAFL engine composes them into call sequences, learns which ones work, and finds
@@ -84,7 +84,7 @@ git, Python ≥ 3.9.
   the crash (kind + innermost library frame), so an agent can shrink it to plain library calls.
   `tests/standalone_fidelity.py` checks the conversion on random corpus programs: every call must
   have the same outcome as in the fuzzer.
-- **Docker.** `stitch2/base` = clang 18 + sanitizers + runtime + engine. A project's Dockerfile builds the
+- **Docker.** `stitch/base` = clang 18 + sanitizers + runtime + engine. A project's Dockerfile builds the
   library on top with instrumenting `CC`/`CXX`; the source comes in as a named build context (git
   revision exported from a cached mirror, or a local directory). One image per revision, so bisection
   and `--rev` builds reuse Docker's layer cache.

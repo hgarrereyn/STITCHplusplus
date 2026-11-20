@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Launcher: run the STITCH v2 CLI from a checkout without installing it.
+# Launcher: run the STITCH CLI from a checkout without installing it.
 import os
 import sys
 

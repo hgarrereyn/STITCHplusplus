@@ -1,4 +1,4 @@
-// stitch.h - STITCH v2 harness API (C++17).
+// stitch.h - STITCH harness API (C++17).
 //
 // A harness is a set of endpoint functions. The function signature is the spec:
 //

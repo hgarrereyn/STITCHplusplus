@@ -1,9 +1,9 @@
 """Docker images and containers.
 
 Images:
-  stitch2/base:<hash>          toolchain + runtime + engine, built from this checkout
-  stitch2/toolchain:<hash>     toolchain + runtime only (used by reproducers)
-  stitch2-<project>:<srcid>    the project's Dockerfile on top of the base, one per source revision
+  stitch/base:<hash>          toolchain + runtime + engine, built from this checkout
+  stitch/toolchain:<hash>     toolchain + runtime only (used by reproducers)
+  stitch-<project>:<srcid>    the project's Dockerfile on top of the base, one per source revision
 """
 import hashlib
 import json
@@ -57,7 +57,7 @@ def toolchain_hash():
 
 
 def build_log(name) -> Path:
-    d = Path(os.environ.get("STITCH_CACHE", Path.home() / ".cache" / "stitch2")) / "logs"
+    d = Path(os.environ.get("STITCH_CACHE", Path.home() / ".cache" / "stitch")) / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{name}.log"
 
@@ -74,16 +74,16 @@ def _buildx(args, log: Path, what: str, quiet=False):
 
 def base_tag(sanitizers=("address",)) -> str:
     """Tag ensure_base() would return (without building)."""
-    tag = f"stitch2/base:{stitch_hash()}"
+    tag = f"stitch/base:{stitch_hash()}"
     san = ",".join(sanitizers) if sanitizers else "none"
     return tag if san == "address" else f"{tag}-{hashlib.sha1(san.encode()).hexdigest()[:6]}"
 
 
 def ensure_base(sanitizers=("address",), rebuild=False) -> str:
     """Tag of the base image for this checkout (built if missing)."""
-    tag = f"stitch2/base:{stitch_hash()}"
+    tag = f"stitch/base:{stitch_hash()}"
     if rebuild or not image_exists(tag):
-        _buildx(["-f", str(STITCH_HOME / "docker/base.Dockerfile"), "--target", "base", "-t", tag, "-t", "stitch2/base:latest", str(STITCH_HOME)],
+        _buildx(["-f", str(STITCH_HOME / "docker/base.Dockerfile"), "--target", "base", "-t", tag, "-t", "stitch/base:latest", str(STITCH_HOME)],
                 build_log("base"), "the STITCH base image (first time takes a few minutes)")
     san = ",".join(sanitizers) if sanitizers else "none"
     if san == "address":
@@ -97,7 +97,7 @@ def ensure_base(sanitizers=("address",), rebuild=False) -> str:
 
 
 def ensure_toolchain() -> str:
-    tag = f"stitch2/toolchain:{toolchain_hash()}"
+    tag = f"stitch/toolchain:{toolchain_hash()}"
     if not image_exists(tag):
         _buildx(["-f", str(STITCH_HOME / "docker/base.Dockerfile"), "--target", "toolchain", "-t", tag, str(STITCH_HOME)],
                 build_log("toolchain"), "the STITCH toolchain image")
@@ -112,7 +112,7 @@ def ensure_dockerignore(project):
 
 
 def build_project_image(project, base_tag, src_dir: Path, ident: str, no_cache=False, quiet=False) -> str:
-    tag = f"stitch2-{project.name}:{ident}"
+    tag = f"stitch-{project.name}:{ident}"
     ensure_dockerignore(project)
     if not project.dockerfile.exists():
         raise DockerError(f"{project.rel(project.dockerfile)} not found (it describes how to build the library)")

@@ -1,6 +1,6 @@
 """Library source: a git repository at some revision, or a local directory used as-is.
 
-Git sources are mirrored once under ~/.cache/stitch2/git and exported per commit, so building
+Git sources are mirrored once under ~/.cache/stitch/git and exported per commit, so building
 any revision (for bisection) is cheap after the first fetch.
 """
 import hashlib
@@ -10,7 +10,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-CACHE = Path(os.environ.get("STITCH_CACHE", Path.home() / ".cache" / "stitch2"))
+CACHE = Path(os.environ.get("STITCH_CACHE", Path.home() / ".cache" / "stitch"))
 
 
 class SourceError(Exception):
