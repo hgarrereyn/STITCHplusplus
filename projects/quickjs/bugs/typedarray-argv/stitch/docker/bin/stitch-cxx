@@ -1,0 +1,3 @@
+#!/bin/sh
+if [ -n "$STITCH_NO_INSTR" ]; then exec clang++ "$@"; fi
+exec clang++ $(/stitch/bin/stitch-flags) "$@"

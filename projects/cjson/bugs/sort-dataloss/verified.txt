@@ -1,0 +1,2 @@
+verified: same crash
+check failed: array grows by one | in add_item_to_array | add_item_to_array array.cpp:16

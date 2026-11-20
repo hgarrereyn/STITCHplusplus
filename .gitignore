@@ -1,0 +1,8 @@
+# per-project state: images, builds, campaigns, corpora (rebuildable)
+.stitch/
+engine/target/
+__pycache__/
+*.pyc
+.DS_Store
+# recreated from examples/demolib-src.bundle (a git repo with the planted bug history)
+examples/demolib-src/

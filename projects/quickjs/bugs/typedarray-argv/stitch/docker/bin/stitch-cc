@@ -1,0 +1,5 @@
+#!/bin/sh
+# clang with STITCH instrumentation (coverage + cmplog + sanitizers). Set STITCH_NO_INSTR=1 to
+# build helper tools without instrumentation.
+if [ -n "$STITCH_NO_INSTR" ]; then exec clang "$@"; fi
+exec clang $(/stitch/bin/stitch-flags) "$@"

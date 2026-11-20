@@ -1,0 +1,7 @@
+**/target
+projects
+examples
+cli
+docs
+.git
+**/.stitch

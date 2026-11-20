@@ -1,0 +1,87 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/5ea9811160ab20e7.min.min.stp
+[stitch] #0 new_runtime(mem_limit=1048576, gc_threshold=1271583, set_gc=true)
+[stitch]     -> ok produced o0.0
+[stitch] #1 new_context_raw(rt=o0.0, which=4)
+[stitch]     -> ok produced o1.0
+[stitch] #2 new_context(rt=o0.0)
+[stitch]     -> ok produced o2.0
+[stitch] #3 eval(c=o2.0, src=Str[319,decoded]"var a, b, c, o = {}, arr = [1, 2, 3], s = 'abc', m = new Map(), f = function(){}, p, t;\nfor (let i = 0; i < 2; i++) { for (let i = 0; i < 41; i++) { for (let i "..., flags=128)
+[stitch]     -> ok produced o3.0
+[stitch] #4 free_value(v=take o3.0)
+[stitch]     -> ok
+[stitch] #5 compile(c=o2.0, src=Str[211,decoded]"var a, b, c, o = {}, arr = [1, 2, 3], s = 'abc', m = new Map(), f = function(){}, p, t;\nfor (const k of Array.of()) { try { for (const k of 0) { var _0 = 0; } }"..., module=true)
+=================================================================
+==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x512000003dac at pc 0xaaaab3d1c9a8 bp 0xffffc15a82d0 sp 0xffffc15a82c8
+READ of size 4 at 0x512000003dac thread T0
+    #0 0xaaaab3d1c9a4 in js_parse_for_in_of /src/quickjs.c:27088:21
+    #1 0xaaaab3ce3550 in js_parse_statement_or_decl /src/quickjs.c:27386:21
+    #2 0xaaaab3d1ab08 in js_parse_block /src/quickjs.c:26755:17
+    #3 0xaaaab3ce52b8 in js_parse_statement_or_decl /src/quickjs.c:27640:17
+    #4 0xaaaab3d1ab08 in js_parse_block /src/quickjs.c:26755:17
+    #5 0xaaaab3ce2314 in js_parse_statement_or_decl /src/quickjs.c:27198:13
+    #6 0xaaaab3d1adf0 in js_parse_statement /src/quickjs.c:26745:12
+    #7 0xaaaab3d1cb0c in js_parse_for_in_of /src/quickjs.c:27094:9
+    #8 0xaaaab3ce3550 in js_parse_statement_or_decl /src/quickjs.c:27386:21
+    #9 0xaaaab3cd86e0 in js_parse_source_element /src/quickjs.c:30359:13
+    #10 0xaaaab3ccbf70 in js_parse_program /src/quickjs.c:35331:13
+    #11 0xaaaab3c02410 in __JS_EvalInternal /src/quickjs.c:35500:11
+    #12 0xaaaab3be5ae8 in JS_EvalInternal /src/quickjs.c:35551:12
+    #13 0xaaaab3be5824 in JS_EvalThis2 /src/quickjs.c:35606:11
+    #14 0xaaaab3be5cec in JS_Eval /src/quickjs.c:35620:12
+    #15 0xaaaab3adb8f4 in compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool) /project/harness/eval/eval.cpp:22:17
+    #16 0xaaaab3aea574 in void stitch::detail::Endpoint<&compile(stitch::Borrow<Ctx>, stitch::Str<8192ul, JsSource>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #17 0xaaaab3b40038 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #18 0xaaaab3b3d224 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #19 0xaaaab3b47084 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #20 0xaaaab3ab8098 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #21 0xffff900284c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #22 0xffff90028594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #23 0xaaaab39d97ec in _start (/project/.stitch/build/repro+0x797ec) (BuildId: b0c778e0bdaa53c92681883bd4ae9acca89a59c5)
+
+0x512000003dac is located 20 bytes before 312-byte region [0x512000003dc0,0x512000003ef8)
+allocated by thread T0 here:
+    #0 0xaaaab3a787f8 in realloc (/project/.stitch/build/repro+0x1187f8) (BuildId: b0c778e0bdaa53c92681883bd4ae9acca89a59c5)
+    #1 0xaaaab3c1386c in js_def_realloc /src/quickjs.c:1972:12
+    #2 0xaaaab3b5e6b8 in js_realloc_rt /src/quickjs.c:1601:11
+    #3 0xaaaab3b5efd4 in js_realloc2 /src/quickjs.c:1683:11
+    #4 0xaaaab3c65e6c in js_realloc_array /src/quickjs.c:1725:17
+    #5 0xaaaab3c65c1c in js_resize_array /src/quickjs.c:1739:16
+    #6 0xaaaab3d16b7c in new_label_fd /src/quickjs.c:22146:9
+    #7 0xaaaab3cf7008 in new_label /src/quickjs.c:22163:13
+    #8 0xaaaab3cf7148 in emit_goto /src/quickjs.c:22196:21
+    #9 0xaaaab3d1b364 in js_parse_for_in_of /src/quickjs.c:26944:18
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /src/quickjs.c:27088:21 in js_parse_for_in_of
+Shadow bytes around the buggy address:
+  0x512000003b00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x512000003b80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fa fa
+  0x512000003c00: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+  0x512000003c80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x512000003d00: 00 00 00 00 00 00 00 00 00 00 00 00 00 fa fa fa
+=>0x512000003d80: fa fa fa fa fa[fa]fa fa 00 00 00 00 00 00 00 00
+  0x512000003e00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x512000003e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 fa
+  0x512000003f00: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+  0x512000003f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x512000004000: 00 00 00 00 00 00 00 00 00 00 00 00 00 07 fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==7==ABORTING
+Aborted

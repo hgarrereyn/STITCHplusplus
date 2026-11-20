@@ -1,0 +1,31 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/0b8410827681f55e.min.stp
+[stitch] #0 new_runtime(mem_limit=13627801, gc_threshold=110, set_gc=false)
+[stitch]     -> ok produced o0.0
+[stitch] #1 new_context(rt=o0.0)
+[stitch]     -> ok produced o1.0
+[stitch] #2 new_symbol(c=o1.0, desc=Str[1,decoded]"0", global=true)
+repro: /src/quickjs.c:3277: JSValue JS_NewSymbolFromAtom(JSContext *, JSAtom, int): Assertion `!__JS_AtomIsTaggedInt(descr)' failed.
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffff884874b8 bp 0xfffff1a198f0 sp 0xfffff1a198e0 T0)
+    #0 0xffff884874b8  (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #1 0xffff8843cb38 in raise (/lib/aarch64-linux-gnu/libc.so.6+0x3cb38) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #2 0xffff88427dfc in abort (/lib/aarch64-linux-gnu/libc.so.6+0x27dfc) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #3 0xffff88435cbc  (/lib/aarch64-linux-gnu/libc.so.6+0x35cbc) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #4 0xffff88435d2c in __assert_fail (/lib/aarch64-linux-gnu/libc.so.6+0x35d2c) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #5 0xaaaad563b05c in JS_NewSymbolFromAtom /src/quickjs.c:3277:5
+    #6 0xaaaad563af68 in JS_NewSymbol /src/quickjs.c:3290:12
+    #7 0xaaaad55e8334 in new_symbol /project/harness/values/values.cpp:31:24
+    #8 0xaaaad55e8334 in void stitch::detail::Endpoint<&new_symbol(stitch::Borrow<Ctx>, stitch::Str<64ul, JsKey>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #9 0xaaaad5600038 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #10 0xaaaad55fd224 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #11 0xaaaad5607084 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #12 0xaaaad5578098 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #13 0xffff884284c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #14 0xffff88428594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #15 0xaaaad54997ec in _start (/project/.stitch/build/repro+0x797ec) (BuildId: b0c778e0bdaa53c92681883bd4ae9acca89a59c5)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ABRT (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3) 
+==7==ABORTING
+Aborted

@@ -1,0 +1,2 @@
+verified: same crash
+stack-buffer-overflow READ | js_typed_array_constructor quickjs.c:56945 | JS_NewTypedArray quickjs.c | new_typed_array values.cpp

@@ -1,0 +1,2 @@
+verified: same crash
+heap-buffer-overflow READ | js_parse_for_in_of quickjs.c:27088 | js_parse_statement_or_decl quickjs.c | js_parse_block quickjs.c

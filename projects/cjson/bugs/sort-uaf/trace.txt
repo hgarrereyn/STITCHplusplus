@@ -1,0 +1,87 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/583f576920cf6989.min.min.stp
+[stitch] #0 parse_with_length(buf=Bytes[3476]"{\"web-app\": {\n  \"servlet\": [  \n    {\n      \"servlet-oame\": \"cofaxCDS\",\n      \"servlet-class\": \"org.cofax.cds.CDSServlet\",\n      \"init-param\": {\n        \"configG"...)
+[stitch]     -> ok produced o0.0
+[stitch] #1 parse(text=Str[3372]"{\"web-app\": {\n  \"servlet\": [  \n    {\n      \"servlet-name\": \"cofaxCDS\",\n      \"servle44444444444444t-class\": \"org.cofax.cds.CDSServlet\",\n      \"init-param\": {\n  "...)
+[stitch]     -> ok produced o1.0
+[stitch] #2 generate_patches(from=o0.0, to=o1.0, case_sensitive=true)
+[stitch]     -> ok produced o2.0
+[stitch] #3 apply_patches(target=o0.0, patches=o2.0, case_sensitive=false)
+=================================================================
+==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x506000004640 at pc 0xaaaaca11f6e4 bp 0xffffeb4f0570 sp 0xffffeb4f0568
+WRITE of size 8 at 0x506000004640 thread T0
+    #0 0xaaaaca11f6e0 in suffix_object /src/cJSON.c:1986:16
+    #1 0xaaaaca11f6e0 in add_item_to_array /src/cJSON.c:2037:13
+    #2 0xaaaaca11f6e0 in add_item_to_object /src/cJSON.c:2101:12
+    #3 0xaaaaca11f6e0 in cJSON_AddItemToObject /src/cJSON.c:2106:12
+    #4 0xaaaaca116ae0 in apply_patch /src/cJSON_Utils.c:1015:9
+    #5 0xaaaaca115dec in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
+    #6 0xaaaaca0dabcc in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) /project/harness/utils/utils.cpp:43:87
+    #7 0xaaaaca0f7c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #8 0xaaaaca0f4e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #9 0xaaaaca0fecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #10 0xaaaaca077218 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #11 0xffff9f0684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #12 0xffff9f068594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #13 0xaaaac9f9896c in _start (/project/.stitch/build/repro+0x4896c) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+
+0x506000004640 is located 0 bytes inside of 64-byte region [0x506000004640,0x506000004680)
+freed by thread T0 here:
+    #0 0xaaaaca0372e8 in free (/project/.stitch/build/repro+0xe72e8) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+    #1 0xaaaaca11aab0 in cJSON_Delete /src/cJSON.c:273:9
+    #2 0xaaaaca11624c in apply_patch /src/cJSON_Utils.c:896:9
+    #3 0xaaaaca115dec in cJSONUtils_ApplyPatches /src/cJSON_Utils.c:1056:18
+    #4 0xaaaaca0dabcc in apply_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) /project/harness/utils/utils.cpp:43:87
+    #5 0xaaaaca0f7c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #6 0xaaaaca0f4e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #7 0xaaaaca0fecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #8 0xaaaaca077218 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #9 0xffff9f0684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+
+previously allocated by thread T0 here:
+    #0 0xaaaaca037584 in malloc (/project/.stitch/build/repro+0xe7584) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+    #1 0xaaaaca127d74 in cJSON_New_Item /src/cJSON.c:243:27
+    #2 0xaaaaca127d74 in parse_object /src/cJSON.c:1688:27
+    #3 0xaaaaca11bf44 in parse_value /src/cJSON.c:1411:16
+    #4 0xaaaaca1282b4 in parse_object /src/cJSON.c:1734:14
+    #5 0xaaaaca11bf44 in parse_value /src/cJSON.c:1411:16
+    #6 0xaaaaca11b334 in cJSON_ParseWithLengthOpts /src/cJSON.c:1167:10
+    #7 0xaaaaca09c2dc in parse_with_length /project/harness/parse/parse.cpp:16:16
+    #8 0xaaaaca09c2dc in void stitch::detail::Endpoint<&parse_with_length(stitch::Bytes<4096ul, JsonText>)>::call<0ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul>) /stitch/runtime/include/stitch.h:779:19
+    #9 0xaaaaca0f7c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #10 0xaaaaca0f4e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #11 0xaaaaca0fecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/cJSON.c:1986:16 in suffix_object
+Shadow bytes around the buggy address:
+  0x506000004380: fa fa fa fa fd fd fd fd fd fd fd fd fa fa fa fa
+  0x506000004400: 00 00 00 00 00 00 00 00 fa fa fa fa 00 00 00 00
+  0x506000004480: 00 00 00 00 fa fa fa fa 00 00 00 00 00 00 00 00
+  0x506000004500: fa fa fa fa 00 00 00 00 00 00 00 00 fa fa fa fa
+  0x506000004580: 00 00 00 00 00 00 00 00 fa fa fa fa 00 00 00 00
+=>0x506000004600: 00 00 00 00 fa fa fa fa[fd]fd fd fd fd fd fd fd
+  0x506000004680: fa fa fa fa fd fd fd fd fd fd fd fd fa fa fa fa
+  0x506000004700: fd fd fd fd fd fd fd fd fa fa fa fa fd fd fd fd
+  0x506000004780: fd fd fd fd fa fa fa fa 00 00 00 00 00 00 00 00
+  0x506000004800: fa fa fa fa 00 00 00 00 00 00 00 00 fa fa fa fa
+  0x506000004880: 00 00 00 00 00 00 00 00 fa fa fa fa 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==7==ABORTING
+Aborted

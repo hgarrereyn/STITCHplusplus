@@ -1,0 +1,7 @@
+{
+ "kind": "stack-buffer-overflow READ",
+ "frame": "js_typed_array_constructor",
+ "signature": "stack-buffer-overflow READ | js_typed_array_constructor quickjs.c:56945 | JS_NewTypedArray quickjs.c | new_typed_array values.cpp",
+ "from": ".stitch/repros/typedarray-argv/crash.stp",
+ "crash_id": "crash"
+}

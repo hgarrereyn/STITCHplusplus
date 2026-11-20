@@ -1,0 +1,20 @@
+# STITCH v2 project. Run `stitch guide` for the workflow and `stitch guide --spec` for the API.
+[project]
+name = "lua"
+
+[source]
+git = "https://github.com/lua/lua"
+rev = "104b0fc7008b1f6b7d818985fbbad05cd37ee654"           # branch, tag or commit; `stitch build --rev X` overrides
+
+[build]
+# How the harness compiles and links against the library *inside the project image*.
+# The library source is at /src (see Dockerfile).
+cflags = ["-I/src"]
+ldflags = ["/src/liblua.a", "-lm", "-ldl"]
+sanitizers = ["address"]   # add "undefined" for UBSan
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1
+exceptions = "finding"  # or "bail": treat uncaught C++ exceptions from the library as bails

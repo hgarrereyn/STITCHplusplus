@@ -1,0 +1,24 @@
+[package]
+name = "stitch_engine"
+version = "0.2.0"
+edition = "2021"
+description = "STITCH v2 fuzzing engine (LibAFL)"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+libafl = { version = "0.16.1", default-features = false, features = ["std", "derive", "fork", "serdeany_autoreg", "rand_trait", "prelude"] }
+libafl_bolts = { version = "0.16.1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+postcard = { version = "1", features = ["alloc"] }
+
+[profile.release]
+panic = "abort"
+debug = 1
+opt-level = 3
+
+[profile.dev]
+panic = "abort"

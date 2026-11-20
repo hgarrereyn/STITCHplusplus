@@ -1,0 +1,97 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/84f9a2b723290bba.min.min.stp
+[stitch] #0 parse_with_length(buf=Bytes[246]"{\n\x09\x09\"Image\": {\n\x09\x09\x09\"Width\":  800,\n\x09\x09\x09\"Height\": 600,\n\x09\x09\x09\"Title\":  \"View from 15th Floor\",\n\x09\x09\x09\"Thumbnail\": {\n\x09\x09\x09\x09\"Url\":    \"http:/*www.example.com/image/481989943\""...)
+[stitch]     -> ok produced o0.0
+[stitch] #1 create_false()
+[stitch]     -> ok produced o1.0
+[stitch] #2 add_item_to_object_cs(object=o0.0, key=Str[0,decoded]"", item=o1.0)
+[stitch]     -> ok
+[stitch] #3 get_pointer(root=o0.0, ptr=Str[0,decoded]"", case_sensitive=true)
+[stitch]     -> ok produced o3.0
+[stitch] #4 get_child_item(it=o3.0, s=Src[2]6d0f)
+[stitch]     -> ok produced o4.0
+[stitch] #5 duplicate_item(it=o4.0, recurse=true)
+[stitch]     -> ok produced o5.0
+[stitch] #6 generate_merge_patch(from=o0.0, to=o5.0, case_sensitive=false)
+[stitch]     -> ok produced o6.0
+[stitch] #7 create_string_reference(s=Str[0,decoded]"")
+[stitch]     -> ok produced o7.0
+[stitch] #8 duplicate_reference(r=o7.0)
+[stitch]     -> ok produced o8.0
+[stitch] #9 generate_patches(from=o5.0, to=o8.0, case_sensitive=true)
+[stitch]     -> ok produced o9.0
+[stitch] #10 replace_item_in_object(object=o0.0, fresh=Str[0,decoded]"", s=Src[1]e0, item=o6.0, case_sensitive=true)
+=================================================================
+==7==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000005c10 at pc 0xaaaadbf4ecc8 bp 0xffffd2356f70 sp 0xffffd2356758
+READ of size 1 at 0x502000005c10 thread T0
+    #0 0xaaaadbf4ecc4 in strcmp (/project/.stitch/build/repro+0x5ecc4) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+    #1 0xaaaadc0be998 in get_object_item /src/cJSON.c:1948:83
+    #2 0xaaaadc0c44fc in replace_item_in_object /src/cJSON.c:2432:48
+    #3 0xaaaadc05ffa0 in replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool) /project/harness/tree/object.cpp:32:32
+    #4 0xaaaadc0664e4 in void stitch::detail::Endpoint<&replace_item_in_object(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Src<16ul>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul, 3ul, 4ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul, 3ul, 4ul>) /stitch/runtime/include/stitch.h:777:13
+    #5 0xaaaadc097c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #6 0xaaaadc094e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #7 0xaaaadc09ecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #8 0xaaaadc017218 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #9 0xffff920684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #10 0xffff92068594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #11 0xaaaadbf3896c in _start (/project/.stitch/build/repro+0x4896c) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+
+0x502000005c10 is located 0 bytes inside of 1-byte region [0x502000005c10,0x502000005c11)
+freed by thread T0 here:
+    #0 0xaaaadbfd72e8 in free (/project/.stitch/build/repro+0xe72e8) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+    #1 0xaaaadc0b914c in overwrite_item /src/cJSON_Utils.c:793:9
+    #2 0xaaaadc0b64f8 in apply_patch /src/cJSON_Utils.c:869:13
+    #3 0xaaaadc0b6bf8 in cJSONUtils_ApplyPatchesCaseSensitive /src/cJSON_Utils.c:1085:18
+    #4 0xaaaadc079b10 in generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool) /project/harness/utils/utils.cpp:32:18
+    #5 0xaaaadc080e50 in void stitch::detail::Endpoint<&generate_patches(stitch::Borrow<Json>, stitch::Borrow<Json>, stitch::Bool)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:779:19
+    #6 0xaaaadc097c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #7 0xaaaadc094e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #8 0xaaaadc09ecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #9 0xaaaadc017218 in main /stitch/runtime/src/main_repro.cpp:22:13
+
+previously allocated by thread T0 here:
+    #0 0xaaaadbfbf170 in strdup (/project/.stitch/build/repro+0xcf170) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+    #1 0xaaaadc05efd4 in add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>) /project/harness/tree/object.cpp:20:15
+    #2 0xaaaadc065b88 in void stitch::detail::Endpoint<&add_item_to_object_cs(stitch::Borrow<Json>, stitch::Str<64ul, JsonKey>, stitch::Borrow<Json>)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:777:13
+    #3 0xaaaadc097c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #4 0xaaaadc094e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #5 0xaaaadc09ecb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #6 0xaaaadc017218 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #7 0xffff920684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #8 0xffff92068594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #9 0xaaaadbf3896c in _start (/project/.stitch/build/repro+0x4896c) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+
+SUMMARY: AddressSanitizer: heap-use-after-free (/project/.stitch/build/repro+0x5ecc4) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a) in strcmp
+Shadow bytes around the buggy address:
+  0x502000005980: fa fa fd fa fa fa 07 fa fa fa 00 03 fa fa 05 fa
+  0x502000005a00: fa fa 00 fa fa fa fd fa fa fa 07 fa fa fa 05 fa
+  0x502000005a80: fa fa 05 fa fa fa fd fa fa fa fd fa fa fa fd fa
+  0x502000005b00: fa fa fd fa fa fa 00 fa fa fa fd fa fa fa fd fd
+  0x502000005b80: fa fa fd fa fa fa fd fa fa fa fd fa fa fa 00 fa
+=>0x502000005c00: fa fa[fd]fa fa fa fd fa fa fa fd fa fa fa fd fd
+  0x502000005c80: fa fa fd fd fa fa 00 00 fa fa fd fa fa fa fd fa
+  0x502000005d00: fa fa fd fa fa fa fd fa fa fa fd fa fa fa 00 00
+  0x502000005d80: fa fa fd fa fa fa fd fa fa fa fd fa fa fa fd fa
+  0x502000005e00: fa fa 00 fa fa fa fd fd fa fa fd fa fa fa fd fa
+  0x502000005e80: fa fa fd fa fa fa 00 fa fa fa fd fa fa fa fd fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==7==ABORTING
+Aborted

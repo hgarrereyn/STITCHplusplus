@@ -1,0 +1,30 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/0e760965120f9205.min.min.stp
+[stitch] #0 create_int_array(data=Bytes[8]"\xa1\xaf\x81\x02\xb4\x91uO")
+[stitch]     -> ok produced o0.0
+[stitch] #1 sort_object(object=o0.0, case_sensitive=true)
+[stitch]     -> ok
+[stitch] #2 detach_item_from_array(array=o0.0, s=Src[0])
+[stitch]     -> ok produced o2.0
+[stitch] #3 add_item_to_array(array=o0.0, item=o2.0)
+
+[stitch] CHECK FAILED: array grows by one (node 3)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==7==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000007 (pc 0xffffbbec74b8 bp 0xffffd204cce0 sp 0xffffd204ccd0 T0)
+    #0 0xffffbbec74b8  (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #1 0xffffbbe7cb38 in raise (/lib/aarch64-linux-gnu/libc.so.6+0x3cb38) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #2 0xffffbbe67dfc in abort (/lib/aarch64-linux-gnu/libc.so.6+0x27dfc) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #3 0xaaaad96cb528 in stitch::check(bool, char const*) /stitch/runtime/src/runtime.cpp:356:5
+    #4 0xaaaad96969bc in add_item_to_array(stitch::Borrow<Json>, stitch::Borrow<Json>) /project/harness/tree/array.cpp:16:5
+    #5 0xaaaad96d7c64 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:996:13
+    #6 0xaaaad96d4e50 in stitch_exec /stitch/runtime/src/runtime.cpp:1134:12
+    #7 0xaaaad96decb0 in stitch_run_file /stitch/runtime/src/runtime.cpp:1148:12
+    #8 0xaaaad9657218 in main /stitch/runtime/src/main_repro.cpp:22:13
+    #9 0xffffbbe684c0  (/lib/aarch64-linux-gnu/libc.so.6+0x284c0) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #10 0xffffbbe68594 in __libc_start_main (/lib/aarch64-linux-gnu/libc.so.6+0x28594) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3)
+    #11 0xaaaad957896c in _start (/project/.stitch/build/repro+0x4896c) (BuildId: af61403dab2371baa9dce935e760a2c27cda663a)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ABRT (/lib/aarch64-linux-gnu/libc.so.6+0x874b8) (BuildId: 345abad84f89835d724f49349b1a6b92c6ad4ba3) 
+==7==ABORTING
+Aborted

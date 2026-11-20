@@ -1,0 +1,2 @@
+verified: same crash
+ABRT | JS_NewSymbolFromAtom quickjs.c:3277 | JS_NewSymbol quickjs.c | new_symbol values.cpp

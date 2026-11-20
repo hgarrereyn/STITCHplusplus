@@ -1,0 +1,7 @@
+{
+ "kind": "heap-use-after-free WRITE",
+ "frame": "suffix_object",
+ "signature": "heap-use-after-free WRITE | suffix_object cJSON.c:1986 | add_item_to_array cJSON.c | add_item_to_object cJSON.c",
+ "from": ".stitch/repros/sort-uaf/crash.stp",
+ "crash_id": "crash"
+}

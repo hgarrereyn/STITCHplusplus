@@ -1,0 +1,2 @@
+verified: same crash
+check failed: generated patches apply | in generate_patches | generate_patches utils.cpp:33 | generate_patches (stub)
