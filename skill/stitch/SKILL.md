@@ -214,6 +214,32 @@ Read the report:
 After each change, run `stitch probe` again and compare. Do not add guards the library does not need:
 each guard hides behavior.
 
+### Coverage
+
+```sh
+stitch cov              # corpus of the latest campaign
+stitch cov main --crashes
+```
+
+```
+library:
+  lines         2942 / 3375     87.2%
+  functions      148 / 151      98.0%
+  branches      1252 / 1514     82.7%
+
+never called: 3 library functions
+  cJSON_Version  src/cJSON.c:125
+  cJSON_InitHooks  src/cJSON.c:210
+  cJSON_IsBool  src/cJSON.c:2989
+```
+
+A never-called function needs a stub, or a stub that reaches it. Open the HTML report to find
+branches the corpus never takes. Output in `.stitch/cov/<campaign>/`: `lcov.info`, `html/index.html`,
+`summary.json` (per file, with uncovered functions), `report.txt`.
+
+The coverage build is separate: clang source-based coverage, no sanitizers. Memory bugs that need
+ASan to crash run to completion there.
+
 ## 6. Triage
 
 ```sh
@@ -283,6 +309,7 @@ Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
 | `stitch probe [STUBS] --secs N` | short run + report (`STUBS`: `'parse,tree/*'`) |
 | `stitch fuzz [--jobs N] [--secs N]` | start a campaign in the background |
 | `stitch status`, `stitch stop` | campaign progress, stop it |
+| `stitch cov [CAMPAIGN\|FILES] [--crashes] [--rev REV]` | line, function and branch coverage of a corpus: lcov + HTML |
 | `stitch crashes` | unique crashes |
 | `stitch exec ID [--trace] [--rev REV]` | run a crash or `.stp` program |
 | `stitch minimize ID` | shrink a crashing program |
@@ -298,5 +325,6 @@ Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
 
 - `.stitch/build/`: `fuzzer`, `repro`, `manifest.json` (the stubs as the fuzzer sees them)
 - `.stitch/campaigns/<name>/`: corpus, crashes, stats, `triage.json`
+- `.stitch/cov/<campaign>/`: `lcov.info`, `html/`, `summary.json`
 - `.stitch/repros/`, `.stitch/standalone/`, `.stitch/bisect/`: reproducers and bisect results
 - Image build logs: `~/.cache/stitch/logs/`

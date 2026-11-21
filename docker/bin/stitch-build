@@ -192,7 +192,8 @@ def main():
         for t in targets:
             main_o = str(objdir / ("_main_fuzzer.cpp.o" if t == "fuzzer" else "_main_repro.cpp.o"))
             engine = [str(STITCH / "lib" / "libstitch_engine.a")] if t == "fuzzer" else []
-            cmd = ["clang++"] + nocov + ["-o", str(out / t), main_o] + harness_objs + ldflags + engine + sys_libs
+            prof = ["-fprofile-instr-generate"] if os.environ.get("STITCH_COVERAGE") else []
+            cmd = ["clang++"] + nocov + prof + ["-o", str(out / t), main_o] + harness_objs + ldflags + engine + sys_libs
             r = sh(cmd)
             if r.returncode != 0:
                 errors.append({"file": f"link {t}", "output": r.stderr[-8000:]})
@@ -202,7 +203,7 @@ def main():
                 result[t] = str(out / t)
         if result["ok"]:
             exe = out / ("fuzzer" if "fuzzer" in targets else "repro")
-            r = sh([str(exe), "manifest"] if exe.name == "fuzzer" else [str(exe), "--manifest"], env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0"})
+            r = sh([str(exe), "manifest"] if exe.name == "fuzzer" else [str(exe), "--manifest"], env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0", "LLVM_PROFILE_FILE": "/dev/null"})
             if r.returncode == 0:
                 (out / "manifest.json").write_text(r.stdout)
                 m = json.loads(r.stdout)

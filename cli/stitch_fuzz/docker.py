@@ -121,6 +121,17 @@ def ensure_base(sanitizers=("address",), rebuild=False) -> str:
     return vtag
 
 
+def ensure_cov_base(rebuild=False) -> str:
+    """Base image whose compiler wrappers build with source-based coverage (for `stitch cov`)."""
+    base = ensure_base(rebuild=rebuild)
+    tag = f"{base}-cov"
+    if rebuild or not image_exists(tag):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "Dockerfile").write_text(f"FROM {base}\nENV STITCH_COVERAGE=1 STITCH_SANITIZERS=none\n")
+            _buildx(["-t", tag, d], build_log("base-cov"), "coverage base image", quiet=True)
+    return tag
+
+
 def ensure_toolchain() -> str:
     h = toolchain_hash()
     tag = f"stitch/toolchain:{h}"
@@ -139,8 +150,8 @@ def ensure_dockerignore(project):
         f.write_text("\n".join(lines + [".stitch"]) + "\n")
 
 
-def build_project_image(project, base_tag, src_dir: Path, ident: str, no_cache=False, quiet=False) -> str:
-    tag = f"stitch-{project.name}:{ident}"
+def build_project_image(project, base_tag, src_dir: Path, ident: str, no_cache=False, quiet=False, variant="") -> str:
+    tag = f"stitch-{project.name}:{ident}" + (f"-{variant}" if variant else "")
     ensure_dockerignore(project)
     if not project.dockerfile.exists():
         raise DockerError(f"{project.rel(project.dockerfile)} not found (it describes how to build the library)")
@@ -151,7 +162,7 @@ def build_project_image(project, base_tag, src_dir: Path, ident: str, no_cache=F
         args += ["--platform", project.cfg["docker"]["platform"]]
     if no_cache:
         args.append("--no-cache")
-    _buildx(args + [str(project.root)], build_log(f"{project.name}-{ident}"), f"project image {tag}", quiet=quiet)
+    _buildx(args + [str(project.root)], build_log(f"{project.name}-{ident}" + (f"-{variant}" if variant else "")), f"project image {tag}", quiet=quiet)
     return tag
 
 

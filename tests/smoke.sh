@@ -34,4 +34,13 @@ set +e; $STITCH -C $P try $P/.stitch/standalone/smoke/nocrash.c >/dev/null; rc=$
 [ $rc = 1 ] || fail "try must reject a program that does not crash (rc=$rc)"
 $STITCH -C $P --json bisect smoke:$C1 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["first_bad_commit"]["subject"] == "allow 16 character keys", d' || fail "bisect off-by-one"
 $STITCH -C $P --json bisect smoke:$C2 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["first_bad_commit"]["subject"] == "debug level hook", d' || fail "bisect magic value"
+$STITCH -C $P --json cov smoke --crashes --no-html | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert d["runs"]["programs"] > 0 and d["runs"]["invalid"] == 0, d["runs"]
+h, f = d["library"]["lines"]
+assert f > 0 and h / f > 0.5, d["library"]
+assert any(x["file"].endswith("msg.c") for x in d["library"]["files"])
+' || fail "cov"
+grep -q "^SF:$(cd $P && pwd)/harness/" $P/.stitch/cov/smoke/lcov.info || fail "cov: lcov paths"
 echo "smoke test passed"

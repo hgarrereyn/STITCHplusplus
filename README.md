@@ -24,6 +24,7 @@ stitch build
 stitch probe --secs 60           # what fails, and why
 stitch fuzz --jobs 4
 stitch status
+stitch cov                       # coverage of the corpus: lcov.info, HTML, never-called functions
 stitch crashes                   # unique crashes: c1, c2, ...
 stitch exec c1 --trace           # the calls, their arguments, the sanitizer report
 stitch repro c1                  # Docker reproducer folder, verified from scratch
@@ -75,6 +76,9 @@ triage. Verified bug reports are in `projects/*/bugs/`.
 - **Docker.** The base image has clang 18, sanitizers, the runtime and the fuzzer. A project's
   Dockerfile builds the library on top. The library source comes in as a build context: a git
   revision or a local directory. One image per revision, so `--rev` and bisection reuse the cache.
+- **Coverage.** `stitch cov` builds a second image with clang source-based coverage and no
+  sanitizers, runs each program in a forked child (a crash or timeout loses only that program), and
+  exports lcov and HTML with `llvm-cov`.
 - **Standalone reproducers.** `stitch write` replays a crash once while recording every call's
   arguments, then writes `main()` with each stub's code pasted in and the arguments filled in.
   `stitch_standalone.h` provides the harness API without the fuzzer. `stitch try` builds an edited

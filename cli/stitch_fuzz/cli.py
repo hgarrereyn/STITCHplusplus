@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -603,6 +604,51 @@ def cmd_bisect(a):
                   "pass --good REV with a buildable older revision")
 
 
+def cov_programs(p, inputs, crashes=False):
+    """Programs for `stitch cov`: campaign names (their corpus) or .stp files / directories."""
+    if not inputs:
+        inputs = [resolve_campaign(p, None)]
+    progs, labels = {}, []
+    for x in inputs:
+        if not os.path.exists(x) and p.campaign_dir(x).is_dir():
+            cdir = p.campaign_dir(x)
+            dirs = [w / "corpus" for w in worker_dirs(cdir)] + ([w / "crashes" for w in worker_dirs(cdir)] if crashes else [])
+            files = [f for d in dirs if d.is_dir() for f in d.glob("*.stp")]
+            labels.append(x)
+        elif os.path.isdir(x):
+            files = list(Path(x).resolve().rglob("*.stp"))
+            labels.append(Path(x).resolve().name)
+        elif os.path.exists(x):
+            files = [Path(x).resolve()]
+            labels.append(Path(x).stem)
+        else:
+            die(f"'{x}' is neither a campaign nor a file or directory")
+        for f in files:
+            if f.name.startswith("."):
+                continue  # LibAFL metadata next to corpus entries
+            progs.setdefault(f.name if f.parent.name in ("corpus", "crashes") else str(f), f)
+    if not progs:
+        die("no programs found" + ("" if crashes else " (the corpus is empty; is the campaign running?)"))
+    return [in_project(p, f) for f in progs.values()], "+".join(dict.fromkeys(labels))
+
+
+def cmd_cov(a):
+    from . import coverage
+    p = find_project(a.project)
+    progs, label = cov_programs(p, a.inputs, crashes=a.crashes)
+    odir = Path(a.output).resolve() if a.output else p.state_dir / "cov" / re.sub(r"[^\w.+@-]", "_", label + (f"@{a.rev}" if a.rev else ""))
+    if p.root not in odir.parents:
+        die("--output must be inside the project")
+    if not JSON:
+        print(f"[stitch] coverage build + {len(progs)} programs ({label})", file=sys.stderr, flush=True)
+    try:
+        s = coverage.run(p, progs, odir, label, rev=a.rev, timeout=a.timeout, jobs=a.jobs or os.cpu_count() or 4,
+                         html=not a.no_html, quiet=JSON)
+    except docker.DockerError as e:
+        die(str(e))
+    out(s, coverage.render(s, limit=a.limit, show_harness=a.harness))
+
+
 def cmd_write(a):
     from . import standalone
     p = find_project(a.project)
@@ -769,6 +815,18 @@ def main(argv=None):
     s.add_argument("-o", "--output")
     s.add_argument("--no-run", action="store_true", help="do not verify the reproducer")
     s.set_defaults(fn=cmd_repro)
+
+    s = sp.add_parser("cov", help="run a corpus on a coverage build; write lcov.info, HTML and a summary")
+    s.add_argument("inputs", nargs="*", help="campaign names (their corpus) or .stp files/directories (default: latest campaign)")
+    s.add_argument("--crashes", action="store_true", help="also run the campaigns' crashing programs")
+    s.add_argument("--rev", help="measure against the library at this revision")
+    s.add_argument("-o", "--output", help="output directory inside the project (default .stitch/cov/<campaign>)")
+    s.add_argument("--timeout", type=int, default=10, help="seconds per program")
+    s.add_argument("--jobs", type=int, help="parallel processes (default: all cores)")
+    s.add_argument("--no-html", action="store_true", help="skip the HTML report")
+    s.add_argument("--harness", action="store_true", help="also show coverage of the harness code")
+    s.add_argument("--limit", type=int, default=20, help="never-called functions to list")
+    s.set_defaults(fn=cmd_cov)
 
     s = sp.add_parser("write", help="turn a crash into a standalone C++ reproducer (harness code pasted in, values filled in)")
     s.add_argument("crash")

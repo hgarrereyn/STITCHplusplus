@@ -143,3 +143,4 @@ A data type's values come from the decoder, `seeds/`, and byte-level mutations o
 `.stp` files store calls by stub name, so corpora survive rebuilds and new stubs.
 `stitch exec FILE --trace` prints a program call by call.
 `.stitch/build/manifest.json` lists the stubs as the fuzzer sees them: inputs, outputs and parameters.
+`stitch cov [FILES]` runs programs on a coverage build and writes `lcov.info` and an HTML report.

@@ -1,5 +1,13 @@
 #!/bin/sh
-# Print the instrumentation flags for the configured sanitizers (STITCH_SANITIZERS, comma list).
+# Print the compiler flags for STITCH builds.
+#   default            sanitizers (STITCH_SANITIZERS, comma list) + fuzzing coverage + cmplog
+#   --no-cov           sanitizers only (the runtime and generated code)
+#   STITCH_COVERAGE=1  source-based coverage for `stitch cov`, no sanitizers; --no-cov prints
+#                      plain debug flags
+if [ -n "$STITCH_COVERAGE" ]; then
+  if [ "$1" = "--no-cov" ]; then echo "-g -O0"; else echo "-g -O0 -fprofile-instr-generate -fcoverage-mapping"; fi
+  exit 0
+fi
 SAN="${STITCH_SANITIZERS:-address}"
 FLAGS="-g -O1 -fno-omit-frame-pointer -gline-tables-only"
 [ -n "$SAN" ] && [ "$SAN" != "none" ] && FLAGS="$FLAGS -fsanitize=$SAN"
