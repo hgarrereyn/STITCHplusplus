@@ -1,0 +1,5 @@
+// rdar://20866942
+func testRefutableLet() {
+  var e : Int?
+  let x? = e
+}

@@ -1,0 +1,7 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/797c425c0574ff54.min.stp
+[stitch] #0 new_obj(kind="object")
+[stitch]     -> ok produced o0.0
+[stitch] #1 set(o=o0.0, path=Str[10,decoded]"toString.a", v=9)
+
+[stitch] EXCEPTION in set: prototype pollution: Object.prototype.toString.a was set
+

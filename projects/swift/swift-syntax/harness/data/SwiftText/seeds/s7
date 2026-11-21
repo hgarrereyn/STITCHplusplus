@@ -1,0 +1,8 @@
+    """###
+  )
+}
+
+func testRawString30() {
+  assertParse(
+    ##"""
+    #"unused literal"#

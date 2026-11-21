@@ -1,0 +1,3 @@
+@_nonSendable
+class NonSendableType {
+}

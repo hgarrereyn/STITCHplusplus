@@ -1,0 +1,16 @@
+// Has a lot of invalid 'appendInterpolation' methods
+public struct BadStringInterpolation: StringInterpolationProtocol {
+  //  {{educational-notes=string-interpolation-conformance}}
+  public init(literalCapacity: Int, interpolationCount: Int) {}
+  public mutating func appendLiteral(_: String) {}
+  public static func appendInterpolation(static: ()) {
+    //  {{educational-notes=string-interpolation-conformance}}
+  }
+  private func appendInterpolation(private: ()) {
+  }
+  func appendInterpolation(default: ()) {
+  }
+  public func appendInterpolation(intResult: ()) -> Int {
+    //  {{educational-notes=string-interpolation-conformance}}
+  }
+}

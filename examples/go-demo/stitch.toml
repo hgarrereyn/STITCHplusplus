@@ -1,0 +1,9 @@
+[project]
+name = "go-demo"
+language = "go"
+
+[source]
+path = "lib"
+
+[go]
+module = "example.com/kvgo"

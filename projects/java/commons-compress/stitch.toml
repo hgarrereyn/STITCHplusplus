@@ -1,0 +1,18 @@
+# STITCH++ project. Guide: `stitch guide`. Java API: `stitch guide java`.
+[project]
+name = "commons-compress"
+language = "java"
+
+[source]
+git = "https://github.com/apache/commons-compress"
+rev = "rel/1.20"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[java]
+classpath = ["/deps/*"]           # the library and its dependencies (jars the Dockerfile puts in /deps)
+include = ["org.apache.commons.compress"]      # packages of the code under test (coverage and comparison tracing)
+sources = ["/src/src/main/java"]  # source roots for coverage reports (default: /src/**/src/main/java)
+
+[fuzz]
+timeout_ms = 5000
+max_nodes = 24
+jobs = 1

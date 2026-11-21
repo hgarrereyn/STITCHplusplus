@@ -1,0 +1,7 @@
+
+        {%- for grouper, list in [{'foo': 1, 'bar': 2},
+                                  {'foo': 2, 'bar': 3},
+                                  {'foo': 1, 'bar': 1},
+                                  {'foo': 3, 'bar': 4}]|groupby('foo') -%}
+            {{ grouper }}{% for x in list %}: {{ x.foo }}, {{ x.bar }}{% endfor %}|
+        {%- endfor %}

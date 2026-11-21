@@ -1,0 +1,16 @@
+# STITCH++ project. Guide: `stitch guide`. Python API: `stitch guide python`.
+[project]
+name = "networkx"
+language = "python"
+
+[source]
+git = "https://github.com/networkx/networkx"
+rev = "networkx-2.8.8"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[python]
+include = ["networkx"]   # import names of the code under test (coverage and comparison tracing)
+
+[fuzz]
+timeout_ms = 3000
+max_nodes = 24
+jobs = 1

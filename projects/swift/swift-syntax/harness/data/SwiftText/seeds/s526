@@ -1,0 +1,11 @@
+@differentiable(wrt: x where T: D)
+func foo<T>(_ x: T) -> T {}
+
+@differentiable(wrt: x where T: Differentiable)
+func foo<T>(_ x: T) -> T {}
+
+@differentiable(wrt: theVariableNamedX where T: Differentiable)
+func foo<T>(_ theVariableNamedX: T) -> T {}
+
+@differentiable(wrt: (x, y))
+func foo<T>(_ x: T) -> T {}

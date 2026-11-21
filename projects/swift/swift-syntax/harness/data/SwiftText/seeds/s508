@@ -1,0 +1,2 @@
+@available(Windows 10, *)
+func windows10() {}

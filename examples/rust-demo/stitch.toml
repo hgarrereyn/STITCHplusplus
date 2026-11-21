@@ -1,0 +1,9 @@
+[project]
+name = "rust-demo"
+language = "rust"
+
+[source]
+path = "lib"
+
+[rust.dependencies]
+kvrs = { path = "/src" }

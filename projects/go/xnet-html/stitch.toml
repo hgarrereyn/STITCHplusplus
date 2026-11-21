@@ -1,0 +1,11 @@
+[project]
+name = "xnet-html"
+language = "go"
+
+[source]
+git = "https://github.com/golang/net"
+rev = "v0.12.0"
+
+[go]
+module = "golang.org/x/net"
+instrument = ["golang.org/x/net/html/..."]

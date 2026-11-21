@@ -5,25 +5,26 @@ build-backend = "hatchling.build"
 [project]
 name = "stitch-fuzz"
 version = "0.2.0"
-description = "STITCH: API fuzzing for C/C++ libraries, built for coding agents"
+description = "STITCH++: API fuzzing for C/C++, Python, JavaScript, Java, Go and Rust libraries, built for coding agents"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/hgarrereyn/STITCH"
+Homepage = "https://github.com/hgarrereyn/STITCHplusplus"
 
 [project.scripts]
 stitch = "stitch_fuzz.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cli/stitch_fuzz"]
+exclude = ["**/node_modules", "**/__pycache__", "**/target"]
 
 # Everything the CLI needs to build images and reproducers, inside the package.
 [tool.hatch.build.targets.wheel.force-include]
-"docker/base.Dockerfile" = "stitch_fuzz/assets/docker/base.Dockerfile"
-"docker/bin" = "stitch_fuzz/assets/docker/bin"
-"runtime" = "stitch_fuzz/assets/runtime"
+"languages" = "stitch_fuzz/assets/languages"
+"engine/Dockerfile" = "stitch_fuzz/assets/engine/Dockerfile"
+"engine/.dockerignore" = "stitch_fuzz/assets/engine/.dockerignore"
 "engine/src" = "stitch_fuzz/assets/engine/src"
 "engine/Cargo.toml" = "stitch_fuzz/assets/engine/Cargo.toml"
 "engine/Cargo.lock" = "stitch_fuzz/assets/engine/Cargo.lock"
@@ -31,5 +32,5 @@ packages = ["cli/stitch_fuzz"]
 "skill" = "stitch_fuzz/assets/skill"
 
 [tool.hatch.build.targets.sdist]
-include = ["cli/stitch_fuzz", "docker", "runtime", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock",
+include = ["cli/stitch_fuzz", "languages", "engine/Dockerfile", "engine/.dockerignore", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock",
            "engine/rust-toolchain.toml", "skill", "README.md", "pyproject.toml"]

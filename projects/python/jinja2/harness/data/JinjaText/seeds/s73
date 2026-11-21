@@ -1,0 +1,19 @@
+# for j in [1, 2]:
+#   set x = 1
+#   for i in [1, 2]:
+#     print x
+#     if i % 2 == 0:
+#       set x = x + 1
+#     endif
+#   endfor
+# endfor
+# if a
+#   print 'A'
+# elif b
+#   print 'B'
+# elif c == d
+#   print 'C'
+# else
+#   print 'D'
+# endif
+    

@@ -134,9 +134,17 @@ impl Health {
             self.execs_with_bail += 1;
         }
         let lim = edges.len().min(self.cum.len());
-        for i in 0..lim {
-            if edges[i] != 0 && self.cum[i] == 0 {
-                self.cum[i] = 1;
+        let mut i = 0;
+        while i < lim {
+            // most of the map is zero: skip 8 bytes at a time
+            if i + 8 <= lim && u64::from_ne_bytes(edges[i..i + 8].try_into().unwrap()) == 0 {
+                i += 8;
+                continue;
+            }
+            let k = i;
+            i += 1;
+            if edges[k] != 0 && self.cum[k] == 0 {
+                self.cum[k] = 1;
                 self.edges_hit += 1;
             }
         }

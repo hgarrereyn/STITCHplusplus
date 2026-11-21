@@ -1,0 +1,7 @@
+// FuncDecl: Choose 3
+// 1,2,3
+func f123<T: Mashable where T: Womparable>(x: T) -> Int { return 2 }
+// 1,2,4
+func f124<T: Mashable where T: Womparable>(x: T) where T: Equatable {}
+// 2,3,4
+func f234<T where T: Womparable>(x: T) -> Int where T: Equatable { return 2 }

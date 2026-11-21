@@ -1,0 +1,2 @@
+// Check that trunc/?ext operations are appropriately available given the
+// abstract range of potential Word sizes.

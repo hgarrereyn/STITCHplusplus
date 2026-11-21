@@ -1,0 +1,19 @@
+# STITCH++ project. Guide: `stitch guide`. Swift API: `stitch guide swift`.
+[project]
+name = "swift-syntax"
+language = "swift"
+
+[source]
+git = "https://github.com/swiftlang/swift-syntax"
+rev = "509.0.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[swift]
+dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness
+build_jobs = 4
+swiftc_flags = ["-no-whole-module-optimization"]   # SwiftSyntax is one huge module: compile it file by file (memory)
+products = ['.product(name: "SwiftSyntax", package: "src")', '.product(name: "SwiftParser", package: "src")', '.product(name: "SwiftOperators", package: "src")', '.product(name: "SwiftBasicFormat", package: "src")', '.product(name: "SwiftParserDiagnostics", package: "src")', '.product(name: "SwiftDiagnostics", package: "src")', '.product(name: "SwiftIDEUtils", package: "src")']             # the library products it imports
+
+[fuzz]
+timeout_ms = 3000
+max_nodes = 24
+jobs = 1

@@ -1,0 +1,5 @@
+// Has only good 'appendInterpolation' methods, but they're in an extension.
+public struct GoodSplitStringInterpolation: StringInterpolationProtocol {
+  public init(literalCapacity: Int, interpolationCount: Int) {}
+  public mutating func appendLiteral(_: String) {}
+}

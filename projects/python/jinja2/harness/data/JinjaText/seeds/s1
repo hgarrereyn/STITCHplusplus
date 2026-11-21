@@ -1,0 +1,15 @@
+
+
+        {% macro test() %}
+            {{ caller() }}
+        {% endmacro %}
+
+        {% for num1 in range(5) %}
+            {% call test() %}
+                {% for num2 in range(10) %}
+                    {{ loop.index }}
+                {% endfor %}
+            {% endcall %}
+        {% endfor %}
+
+        

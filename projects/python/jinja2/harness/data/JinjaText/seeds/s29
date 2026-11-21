@@ -1,0 +1,7 @@
+
+        {%- set item = 42 %}
+        {%- for item in (1, 2, 3, 4) -%}
+            [{{ item }}]
+        {%- endfor %}
+        {{- item -}}
+        

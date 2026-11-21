@@ -1,0 +1,6 @@
+>>>> ORIGINAL
+==== THEIRS
+==== YOURS
+var d : String = "D"
+<<<<
+print(d)

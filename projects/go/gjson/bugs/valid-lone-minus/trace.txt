@@ -1,0 +1,6 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/7f35562a06762775.min.stp
+[stitch] #0 valid(text=Str[17,decoded]"{\"#\":1.5e3,\"*\":-}")
+
+[stitch] CHECK FAILED: Valid() agrees with encoding/json (node 0)
+    #0 0x0 in stitchharness.valid /project/.stitch/build/app/mod/stubs.go:128
+

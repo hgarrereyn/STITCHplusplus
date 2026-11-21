@@ -1,0 +1,2 @@
+// Bool then #unavailable.
+if 1 != 2, #unavailable(iOS 8.0) {}

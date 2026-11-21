@@ -1,0 +1,1 @@
+{{ items|sort(attribute='value.0')|join }}

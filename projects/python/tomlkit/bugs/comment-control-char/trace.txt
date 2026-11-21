@@ -1,0 +1,13 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/9b6a5a9b0c8403a0.min.stp
+[stitch] #0 parse(text=Str[0,decoded]"")
+[stitch]     -> ok produced o0.0
+[stitch] #1 add_table(doc=o0.0, key=Str[0]"", super_table=false)
+[stitch]     -> ok produced o1.0
+[stitch] #2 table_comment(t=o1.0, text=Str[1]"\x14")
+[stitch]     -> ok
+[stitch] #3 roundtrip(doc=o0.0)
+[stitch]     log: printed: '[""] # \x14\n'
+
+[stitch] CHECK FAILED: printed document parses (InvalidControlChar) (node 3)
+    #0 0x0 in roundtrip /project/.stitch/build/app/harness/stubs.py:209
+

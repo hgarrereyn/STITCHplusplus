@@ -1,0 +1,5 @@
+{% for item in seq recursive -%}
+            [{{ loop.previtem.a if loop.previtem is defined else 'x' }}.{{
+            item.a }}.{{ loop.nextitem.a if loop.nextitem is defined else 'x'
+            }}{% if item.b %}<{{ loop(item.b) }}>{% endif %}]
+        {%- endfor %}

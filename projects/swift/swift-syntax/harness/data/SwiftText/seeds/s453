@@ -1,0 +1,2 @@
+@_originallyDefinedIn(module: "foo", OSX 13.13)
+public func foo1() {}

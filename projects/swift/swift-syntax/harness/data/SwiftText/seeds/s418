@@ -1,0 +1,1 @@
+@_Concurrency.MainActor(unsafe) public struct Image : SwiftUI.View {}

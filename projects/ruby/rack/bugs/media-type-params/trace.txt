@@ -1,0 +1,10 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/938468c20911d9d5.stp
+[stitch] #0 request_headers(host=Str[11,decoded]";boundary=\x09", fwd=Str[42,decoded]"\x01\x07\x00\x00\x00\x00\x00=\xef\xbf\xbd\x00\x00\x00\x00\xef\xbf\xbd\x00\x00\x07\x00\x00\x00\x00\x00\x01\x00\x05\x00\xef\xbf\xbd\x00\x00\x00\x00\x00\x00\xef\xbf\xbd", accept=Str[0,decoded]"")
+[stitch]     -> ok
+[stitch] #1 media_type(ct=Str[1,decoded]";")
+
+[stitch] EXCEPTION in media_type: NoMethodError: undefined method 'each_with_object' for nil
+    #0 0x0 in Rack::MediaType.params /src/lib/rack/media_type.rb:29
+    #1 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:110
+    #2 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+

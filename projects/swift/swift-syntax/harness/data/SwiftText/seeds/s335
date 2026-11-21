@@ -1,0 +1,12 @@
+// Perforce-style conflict markers
+
+>>>> ORIGINAL
+var a : String = "A"
+var b : String = "B"
+==== THEIRS
+var a : String = "A"
+var b : String = "b"
+==== YOURS
+var a : String = "a"
+var b : String = "B"
+<<<<

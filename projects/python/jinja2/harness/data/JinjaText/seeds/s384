@@ -1,0 +1,1 @@
+{{ foo|slice(3)|list }}|{{ foo|slice(3, 'X')|list }}

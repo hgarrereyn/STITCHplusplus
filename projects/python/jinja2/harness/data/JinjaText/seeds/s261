@@ -1,0 +1,1 @@
+{{ "Joel is a slug"|truncate(7, true) }}

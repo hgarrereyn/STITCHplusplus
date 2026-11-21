@@ -1,0 +1,8 @@
+<<<<<<< HEAD:conflict_markers.swift
+var a : String = "A"
+var b : String = "b"
+=======
+var a : String = "a"
+var b : String = "B"
+>>>>>>> 18844bc65229786b96b89a9fc7739c0fc897905e:conflict_markers.swift
+print(a + b)

@@ -1,0 +1,2 @@
+@available(swift, message: "missing valid option")
+func swiftMessage() {}

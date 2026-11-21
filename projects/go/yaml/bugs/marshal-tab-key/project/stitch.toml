@@ -1,0 +1,14 @@
+[project]
+name = "go-yaml"
+language = "go"
+
+[source]
+git = "https://github.com/go-yaml/yaml"
+rev = "496545a6307b"
+
+[go]
+module = "gopkg.in/yaml.v3"
+instrument = ["gopkg.in/yaml.v3"]
+
+[fuzz]
+timeout_ms = 2000

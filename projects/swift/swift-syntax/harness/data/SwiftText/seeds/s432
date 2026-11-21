@@ -1,0 +1,2 @@
+@_effects(escaping self.value**.class*.value** => return.value**)
+func foo() {}

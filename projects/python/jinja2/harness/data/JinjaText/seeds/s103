@@ -1,0 +1,7 @@
+bar
+{%- raw -%}
+
+  
+  2 spaces
+ space{%- endraw -%}
+foo

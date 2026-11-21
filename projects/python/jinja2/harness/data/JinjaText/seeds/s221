@@ -1,0 +1,1 @@
+{% set foo | trim %}<em>{{ test }}</em>    {% endset %}foo: {{ foo }}

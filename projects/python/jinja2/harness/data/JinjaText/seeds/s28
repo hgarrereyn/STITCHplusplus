@@ -1,0 +1,11 @@
+
+        {%- macro do_something() -%}
+            [{{ caller() }}]
+        {%- endmacro %}
+
+        {%- for i in [1, 2, 3] %}
+            {%- call do_something() -%}
+                {{ i }}
+            {%- endcall %}
+        {%- endfor -%}
+        

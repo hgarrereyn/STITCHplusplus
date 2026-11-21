@@ -1,4 +1,4 @@
-"""TOML loading: tomllib (3.11+), tomli, or a small fallback parser for the subset STITCH uses."""
+"""TOML loading: tomllib (3.11+), tomli, or a small fallback parser for the subset STITCH++ uses."""
 import re
 
 try:

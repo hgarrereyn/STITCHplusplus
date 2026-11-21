@@ -1,0 +1,15 @@
+[project]
+name = "jsoup"
+language = "java"
+
+[source]
+git = "https://github.com/jhy/jsoup"
+rev = "jsoup-1.15.2"
+
+[java]
+classpath = ["/deps/*"]
+include = ["org.jsoup"]
+sources = ["/src/src/main/java"]
+
+[fuzz]
+timeout_ms = 3000

@@ -1,0 +1,3 @@
+// Parsing function declarations with 'async'
+func asyncGlobal1() async { }
+func asyncGlobal2() async throws { }

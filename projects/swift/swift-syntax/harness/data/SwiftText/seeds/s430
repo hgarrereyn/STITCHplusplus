@@ -1,0 +1,4 @@
+@_dynamicReplacement(for: init(x:))
+init(y: Int) {
+  self.init(x: y + 1)
+}

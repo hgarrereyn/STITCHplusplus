@@ -1,0 +1,2 @@
+verified: same crash
+NoMethodError | REXML::Parsers::XPathParser#FunctionCall xpathparser.rb:616 | REXML::Parsers::XPathParser#PrimaryExpr xpathparser.rb | REXML::Parsers::XPathParser#FilterExpr xpathparser.rb

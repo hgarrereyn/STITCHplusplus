@@ -1,0 +1,2 @@
+@attached(extension, names: named(test))
+macro m()

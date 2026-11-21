@@ -1,0 +1,1 @@
+any(list, "bar" not startsWith "foo")

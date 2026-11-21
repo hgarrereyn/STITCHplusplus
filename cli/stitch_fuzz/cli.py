@@ -1,4 +1,4 @@
-"""stitch: build, fuzz, triage and reproduce STITCH harnesses (everything runs in Docker)."""
+"""stitch: build, fuzz, triage and reproduce STITCH++ harnesses (everything runs in Docker)."""
 import argparse
 import json
 import os
@@ -41,12 +41,12 @@ def build(project, rev=None, image_only=False, harness_only=False, no_cache=Fals
     """Build base + project image + harness. Returns dict(image, ident, commit, result)."""
     docker.check_docker()
     st = project.load_state()
-    base_tag = docker.base_tag(tuple(project.cfg["build"]["sanitizers"] or ()))
+    base_tag = docker.base_tag(project.language, project.sanitizers)
     if (harness_only and st.get("image") and docker.image_exists(st["image"]) and rev is None
             and st.get("base") == base_tag and not rebuild_base):
         image, ident, commit = st["image"], st.get("ident"), st.get("commit")
     else:
-        base = docker.ensure_base(tuple(project.cfg["build"]["sanitizers"] or ()), rebuild=rebuild_base)
+        base = docker.ensure_base(project.language, project.sanitizers, rebuild=rebuild_base)
         src = Source(project)
         ctx, ident, commit = src.materialize(rev)
         image = docker.build_project_image(project, base, ctx, ident, no_cache=no_cache, quiet=quiet)
@@ -82,6 +82,10 @@ def cmd_build(a):
             print(f"image ready: {what}")
         else:
             print(f"ok: {res.get('endpoints')} endpoints, {res.get('objects')} object types, {res.get('datatypes')} datatypes  [{what}]")
+    else:
+        for e in res.get("errors", []):
+            sys.stderr.write(f"--- {e.get('file', 'build')} ---\n{e.get('output', '').rstrip()}\n")
+        sys.stderr.write("build failed\n")
     sys.exit(0 if res.get("ok", True) else 1)
 
 
@@ -155,10 +159,14 @@ def start_campaign(p, name, secs=None, jobs=1, only=None, fresh=False, detach=Tr
     (cdir / "bin").mkdir(parents=True, exist_ok=True)
     for t in ("fuzzer", "repro", "manifest.json"):
         shutil.copy2(p.build_dir / t, cdir / "bin" / t)
+    # interpreted / JVM harnesses: the build snapshot the scripts run from
+    if (p.build_dir / "app").is_dir():
+        shutil.rmtree(cdir / "bin" / "app", ignore_errors=True)
+        shutil.copytree(p.build_dir / "app", cdir / "bin" / "app", symlinks=True)
     fz = p.cfg["fuzz"]
     rel = f".stitch/campaigns/{name}"
     args = ["--data", "harness/data", "--quiet", "--timeout-ms", str(fz["timeout_ms"]), "--max-nodes", str(fz["max_nodes"]),
-            "--persistent", str(fz.get("persistent", 200))]
+            "--persistent", str(p.persistent)]
     if secs:
         args += ["--secs", str(secs)]
     if only:
@@ -172,7 +180,7 @@ def start_campaign(p, name, secs=None, jobs=1, only=None, fresh=False, detach=Tr
     lines += ["wait", ""]
     (cdir / "run.sh").write_text("\n".join(lines))
     meta = {"name": name, "image": info["image"], "commit": info.get("commit"), "ident": info.get("ident"), "jobs": jobs,
-            "secs": secs, "only": only, "started": time.time(), "container": cname}
+            "secs": secs, "only": only, "timeout_ms": fz["timeout_ms"], "started": time.time(), "container": cname}
     (cdir / "campaign.json").write_text(json.dumps(meta, indent=1))
     env = {"STITCH_EXCEPTIONS": fz.get("exceptions", "finding")}
     if detach:
@@ -360,6 +368,15 @@ def cmd_stop(a):
 # =============================================================================================
 # crashes
 # =============================================================================================
+def hang_ms(p, name):
+    """The campaign's per-execution timeout: slower programs are triaged as timeouts."""
+    try:
+        meta = json.loads((p.campaign_dir(name) / "campaign.json").read_text())
+    except (OSError, ValueError, TypeError):
+        meta = {}
+    return int(meta.get("timeout_ms") or p.cfg["fuzz"]["timeout_ms"])
+
+
 def triage(p, name):
     cdir = p.campaign_dir(name)
     meta = json.loads((cdir / "campaign.json").read_text())
@@ -369,7 +386,7 @@ def triage(p, name):
         if not (w / "crashes").exists() or not any((w / "crashes").glob("*.stp")):
             continue
         rel = p.rel(w)
-        r = docker.run(p, image, [f".stitch/campaigns/{name}/bin/fuzzer", "triage", "--crashes", f"{rel}/crashes"], capture=True)
+        r = docker.run(p, image, [f".stitch/campaigns/{name}/bin/fuzzer", "triage", "--crashes", f"{rel}/crashes", "--hang-ms", str(hang_ms(p, name))], capture=True)
         try:
             bs = json.loads(r.stdout)
         except json.JSONDecodeError:
@@ -440,18 +457,28 @@ def in_project(p, f: Path) -> str:
 
 
 def run_repro(p, image, binary_rel, prog_rel, timeout=60):
+    """Run one program with the reproducer binary. Returns (stderr, exit code, timed out). The
+    timeout is enforced inside the container (killing `docker run` would leave it running)."""
+    cmd = (f"s=$(date +%s%N); timeout -s KILL {int(timeout)} {binary_rel} --trace {prog_rel}; rc=$?; "
+           f"echo \"[stitch] elapsed $(( ($(date +%s%N) - s) / 1000000 )) ms\" >&2; exit $rc")
     try:
-        r = docker.run(p, image, ["sh", "-c", f"{binary_rel} --trace {prog_rel}"], capture=True, timeout=timeout)
-        return r.stderr, r.returncode, False
+        r = docker.run(p, image, ["sh", "-c", cmd], capture=True, timeout=timeout + 120)
     except subprocess.TimeoutExpired as e:
+        run_repro.elapsed_ms = None
         return (e.stderr or b"").decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or ""), -1, True
+    m = re.search(r"^\[stitch\] elapsed (\d+) ms\n?", r.stderr or "", re.M)
+    elapsed = int(m.group(1)) if m else None
+    timed_out = r.returncode == 137 and elapsed is not None and elapsed >= timeout * 1000 - 50
+    out = (r.stderr or "")[:m.start()] + (r.stderr or "")[m.end():] if m else r.stderr
+    run_repro.elapsed_ms = elapsed
+    return out, r.returncode, timed_out
 
 
 def build_repro_at(p, rev):
     """Library image at `rev` + a reproducer binary from the current harness. Returns (image, binary_rel)."""
     src = Source(p)
     ctx, ident, commit = src.materialize(rev)
-    base = docker.ensure_base(tuple(p.cfg["build"]["sanitizers"] or ()))
+    base = docker.ensure_base(p.language, p.sanitizers)
     image = docker.build_project_image(p, base, ctx, ident, quiet=True)
     outdir = f".stitch/rev/{ident}"
     r = docker.run(p, image, ["stitch-build", "--json", "--target", "repro", "--out", outdir], capture=True)
@@ -473,15 +500,17 @@ def cmd_exec(a):
             die("harness build failed")
         image, binary = info["image"], ".stitch/build/repro"
     output, code, to = run_repro(p, image, binary, in_project(p, f), timeout=a.timeout)
+    elapsed = getattr(run_repro, "elapsed_ms", None)
     rep = reports.parse_report(output, code, to)
     if JSON:
-        reports.dump({**rep, "output": output[-20000:]})
+        reports.dump({**rep, "elapsed_ms": elapsed, "output": output[-20000:]})
     else:
         lines = output.splitlines()
         if not a.trace:
             lines = [l for l in lines if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
         print("\n".join(lines[-400:]))
-        print(f"\nresult: {'CRASH ' + rep['signature'] if rep['crashed'] else 'no crash'}")
+        took = f" ({elapsed} ms)" if elapsed is not None else ""
+        print(f"\nresult: {'CRASH ' + rep['signature'] if rep['crashed'] else 'no crash'}{took}")
 
 
 def cmd_minimize(a):
@@ -491,7 +520,7 @@ def cmd_minimize(a):
     st = p.load_state()
     binrel = f".stitch/campaigns/{name}/bin/fuzzer" if name else ".stitch/build/fuzzer"
     dst = Path(a.output) if a.output else f.with_name(f.stem + ".min.stp")
-    r = docker.run(p, st["image"], [binrel, "minimize", in_project(p, f), "-o", p.rel(dst.resolve()) if str(dst.resolve()).startswith(str(p.root)) else in_project(p, dst), "--secs", str(a.secs)], capture=True)
+    r = docker.run(p, st["image"], [binrel, "minimize", in_project(p, f), "-o", p.rel(dst.resolve()) if str(dst.resolve()).startswith(str(p.root)) else in_project(p, dst), "--secs", str(a.secs), "--hang-ms", str(hang_ms(p, name))], capture=True)
     try:
         res = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception:
@@ -523,11 +552,17 @@ def cmd_shell(a):
 
 
 SKILL = STITCH_HOME / "skill" / "stitch"
-GUIDES = {"": "SKILL.md", "api": "reference/harness-api.md", "reproducers": "reference/reproducers.md"}
+GUIDES = {"": "SKILL.md", "api": "reference/harness-api.md", "reproducers": "reference/reproducers.md",
+          **{lang: f"reference/{lang}.md" for lang in ("python", "javascript", "java", "go", "rust", "ruby", "swift")}}
 
 
 def cmd_guide(a):
+    from .project import normalize_language
     topic = "api" if a.spec else (a.topic or "")
+    if topic and topic not in GUIDES:
+        topic = normalize_language(topic)   # "js" -> "javascript", "c++" -> "cpp"
+    if topic == "cpp":
+        topic = "api"
     if topic not in GUIDES:
         die(f"unknown topic '{topic}' (one of: {', '.join(t for t in GUIDES if t)})")
     text = (SKILL / GUIDES[topic]).read_text()
@@ -537,7 +572,7 @@ def cmd_guide(a):
 
 
 def install_skill(dest: Path) -> Path:
-    """Copy the STITCH agent skill to dest/stitch (replacing an older copy)."""
+    """Copy the STITCH++ agent skill to dest/stitch (replacing an older copy)."""
     target = dest / "stitch"
     if target.exists():
         shutil.rmtree(target)
@@ -563,8 +598,13 @@ def cmd_setup(a):
         die("docker buildx is missing (install the buildx plugin)")
     if not JSON:
         print(f"[stitch] stitch-fuzz {__version__}, docker ok")
-    tag = docker.ensure_base(rebuild=a.rebuild)
-    res = {"ok": True, "version": __version__, "base_image": tag}
+    from .project import normalize_language
+    langs = [normalize_language(l) for x in (a.lang or ["cpp"]) for l in x.split(",")]
+    if "all" in langs:
+        langs = list(docker.LANGUAGES)
+    images = {lang: docker.ensure_base(lang, rebuild=a.rebuild) for lang in langs}
+    tag = ", ".join(images.values())
+    res = {"ok": True, "version": __version__, "base_image": tag, "images": images}
     if a.skill or a.skill_dir:
         res["skill"] = str(install_skill(skill_dir(a.user, a.skill_dir)))
     out(res, f"ready: base image {tag}" + (f"\nskill installed in {res['skill']}" if "skill" in res else "")
@@ -574,7 +614,7 @@ def cmd_setup(a):
 def cmd_init(a):
     from .templates import init_project
     root = Path(a.dir).resolve()
-    msg = init_project(root, name=a.name, git=a.git, rev=a.rev, path=a.path)
+    msg = init_project(root, name=a.name, git=a.git, rev=a.rev, path=a.path, language=a.lang)
     out({"ok": True, "project": str(root)}, msg)
 
 
@@ -658,12 +698,14 @@ def cmd_write(a):
         reports.dump({k: v for k, v in res.items() if k != "check"} | ({"check": {k: v for k, v in res["check"].items() if k != "output"}} if "check" in res else {}))
         return
     d = Path(res["dir"])
-    print(f"wrote {p.rel(d / 'repro.cpp')} ({res['lines']} lines, {res['calls']} calls"
+    gen = Path(res.get("file") or res["cpp"])
+    mini = gen.with_name("min" + (gen.suffix if p.language != "cpp" else ".cpp"))
+    print(f"wrote {p.rel(gen)} ({res['lines']} lines, {res['calls']} calls"
           + (f", crash in call #{res['crash_node']}" if res["crash_node"] is not None else "") + ")")
     print(f"  expected: {res['expected']['kind'] or 'no crash'}" + (f" in {res['expected']['frame']}" if res['expected']['frame'] else ""))
     if "check" in res:
-        _print_verdict(res["check"], res["expected"], p.rel(d / "repro.cpp"))
-    print(f"next: cp {p.rel(d / 'repro.cpp')} {p.rel(d / 'min.cpp')}, shrink it, and run `stitch try {p.rel(d / 'min.cpp')}` after each edit")
+        _print_verdict(res["check"], res["expected"], p.rel(gen))
+    print(f"next: cp {p.rel(gen)} {p.rel(mini)}, shrink it, and run `stitch try {p.rel(mini)}` after each edit")
 
 
 def _print_verdict(v, expected, name, show=False):
@@ -712,16 +754,18 @@ def cmd_try(a):
         image = build(p, rev=a.rev, image_only=True, quiet=True)["image"]
     else:
         image = build(p, harness_only=True, image_only=True, quiet=True)["image"]
-    t = standalone.try_cpp(p, image, str(rel), timeout=a.timeout, leaks="leak" in expected["kind"])
+    t = standalone.try_file(p, image, str(rel), timeout=a.timeout, leaks="leak" in expected["kind"])
     v = standalone.verdict(expected, t)
-    v["lines"] = standalone.code_lines(f.read_text(errors="replace"))
-    v["uses_shim"] = "stitch_standalone.h" in f.read_text(errors="replace")
+    text = f.read_text(errors="replace")
+    v["lines"] = standalone.code_lines(text)
+    shim = standalone.shim_name(p.language)
+    v["uses_shim"] = shim in text or (shim.endswith(".py") and re.search(r"^\s*(import stitch|from stitch )", text, re.M) is not None)
     if JSON:
         reports.dump({**v, "expected": expected, "output": v["output"][-8000:]})
     else:
         _print_verdict(v, expected, p.rel(f), show=a.show)
         if v["status"] == "same":
-            print(f"  {v['lines']} code lines" + (", still uses stitch_standalone.h" if v["uses_shim"] else ", plain library code"))
+            print(f"  {v['lines']} code lines" + (f", still uses {standalone.shim_name(p.language)}" if v["uses_shim"] else ", plain library code"))
     sys.exit({"same": 0, "compile_error": 2}.get(v["status"], 1))
 
 
@@ -746,6 +790,7 @@ def main(argv=None):
     s.add_argument("--skill-dir", help="install the agent skill into this skills directory")
     s.add_argument("--user", action="store_true", help="with --skill: install into ~/.claude/skills")
     s.add_argument("--rebuild", action="store_true", help="build the base image locally even if one exists")
+    s.add_argument("--lang", action="append", help="language image(s) to get: cpp (default), python, javascript, java, go, rust, ruby, swift, all")
     s.set_defaults(fn=cmd_setup)
 
     s = sp.add_parser("init", help="create a new project (stitch.toml, Dockerfile, harness/)")
@@ -755,6 +800,7 @@ def main(argv=None):
     g.add_argument("--git", help="library git URL")
     g.add_argument("--path", help="local library checkout")
     s.add_argument("--rev", help="default revision (git)")
+    s.add_argument("--lang", default="cpp", help="harness language: cpp (C/C++), python, javascript, java, go, rust, ruby, swift")
     s.set_defaults(fn=cmd_init)
 
     s = sp.add_parser("build", help="build the library image and the harness")
@@ -862,18 +908,25 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the guide (topics: api, reproducers)")
-    s.add_argument("topic", nargs="?", help="api: harness API reference; reproducers: stitch write / try")
+    s = sp.add_parser("guide", help="print the guide (topics: api, reproducers, python, javascript, java, go, rust)")
+    s.add_argument("topic", nargs="?", help="api: C/C++ harness API; reproducers: stitch write / try; a language: its harness API")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)
 
-    s = sp.add_parser("skill", help="install the STITCH agent skill (default: ./.claude/skills/stitch)")
+    s = sp.add_parser("skill", help="install the STITCH++ agent skill (default: ./.claude/skills/stitch)")
     s.add_argument("dir", nargs="?", help="skills directory to install into")
     s.add_argument("--user", action="store_true", help="install into ~/.claude/skills")
     s.set_defaults(fn=cmd_skill)
 
     a = ap.parse_args(argv)
     JSON = a.json
+    if getattr(a, "project", None):
+        # like `git -C`: run as if started there, so relative paths (-o, files) resolve inside it
+        a.project = str(Path(a.project).resolve())
+        try:
+            os.chdir(a.project)
+        except OSError as e:
+            die(f"cannot enter {a.project}: {e}")
     try:
         a.fn(a)
     except (ProjectError, SourceError, docker.DockerError) as e:

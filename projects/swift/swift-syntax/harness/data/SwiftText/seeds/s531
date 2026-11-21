@@ -1,0 +1,7 @@
+@inlinable
+@differentiable(reverse, wrt: self)
+public func differentiableMap<Result: Differentiable>(
+  _ body: @differentiable(reverse) (Element) -> Result
+) -> [Result] {
+  map(body)
+}

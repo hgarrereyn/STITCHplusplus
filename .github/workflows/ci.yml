@@ -25,6 +25,6 @@ jobs:
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
       - name: installed sources hash like the checkout
         run: |
-          a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.stitch_hash(), docker.toolchain_hash())')
-          b=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.stitch_hash(), docker.toolchain_hash())')
+          a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
+          b=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
           echo "installed: $a  checkout: $b"; [ "$a" = "$b" ]

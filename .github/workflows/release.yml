@@ -1,7 +1,10 @@
 # Release: push a tag vX.Y.Z (matching the version in pyproject.toml).
-#  1. builds the STITCH base and toolchain images for amd64 and arm64 and pushes them to
-#     ghcr.io/<owner>/stitch-base:<hash> and stitch-toolchain:<hash>. <hash> is the source hash the
-#     CLI computes, so `stitch setup` pulls exactly the image for its version.
+#  1. builds the images for amd64 and arm64 and pushes them to ghcr.io/<owner>/:
+#       stitch-engine:<engine hash>                 the fuzzer (build outputs only)
+#       stitch-<lang>:<base hash>                   language toolchain + runtime + engine
+#       stitch-<lang>-toolchain:<toolchain hash>    language toolchain + runtime (reproducers)
+#     The hashes are the source hashes the CLI computes, so `stitch setup` pulls exactly the images
+#     for its version.
 #  2. publishes stitch-fuzz to PyPI (trusted publishing: configure this repo + workflow + the
 #     "pypi" environment on pypi.org once).
 name: release
@@ -18,23 +21,11 @@ on:
 permissions:
   contents: read
 
-jobs:
-  hashes:
-    runs-on: ubuntu-24.04
-    outputs:
-      base: ${{ steps.h.outputs.base }}
-      toolchain: ${{ steps.h.outputs.toolchain }}
-      registry: ${{ steps.h.outputs.registry }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: h
-        run: |
-          echo "base=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import docker; print(docker.stitch_hash())')" >> "$GITHUB_OUTPUT"
-          echo "toolchain=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import docker; print(docker.toolchain_hash())')" >> "$GITHUB_OUTPUT"
-          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+env:
+  HASH: PYTHONPATH=cli python3 -c 'import sys; from stitch_fuzz import docker as d; print(getattr(d, sys.argv[1])(*sys.argv[2:]))'
 
-  images:
-    needs: hashes
+jobs:
+  engine:
     strategy:
       matrix:
         include:
@@ -44,10 +35,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      R: ${{ needs.hashes.outputs.registry }}
-      BASE: ${{ needs.hashes.outputs.base }}
-      TOOLCHAIN: ${{ needs.hashes.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -56,27 +43,55 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: base image
+      - name: engine image
         run: |
-          docker buildx build -f docker/base.Dockerfile --target base \
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; E=$(eval "$HASH engine_hash")
+          docker buildx build -f engine/Dockerfile \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
-            -t "$R/stitch-base:$BASE-${{ matrix.arch }}" --push .
-      - name: toolchain image
+            -t "$R/stitch-engine:$E-${{ matrix.arch }}" --push engine
+
+  languages:
+    needs: engine
+    strategy:
+      matrix:
+        lang: [cpp, python, javascript, java, go, rust, ruby, swift]
+        arch: [amd64, arm64]
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: toolchain and base images
         run: |
-          docker buildx build -f docker/base.Dockerfile --target toolchain \
-            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
-            -t "$R/stitch-toolchain:$TOOLCHAIN-${{ matrix.arch }}" --push .
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; L=${{ matrix.lang }}; A=${{ matrix.arch }}
+          E=$(eval "$HASH engine_hash"); T=$(eval "$HASH toolchain_hash $L"); B=$(eval "$HASH base_hash $L")
+          label=org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # the build context as the CLI assembles it (Swift: languages/swift + the C/C++ runtime)
+          C=$(PYTHONPATH=cli STITCH_CACHE=/tmp/stitch-cache python -c "from stitch_fuzz import docker; print(docker.language_context('$L'))")
+          docker buildx build -f $C/Dockerfile --target toolchain --label $label \
+            -t "$R/stitch-$L-toolchain:$T-$A" --push $C
+          docker buildx build -f $C/Dockerfile --target base --label $label \
+            --build-arg "STITCH_ENGINE=$R/stitch-engine:$E-$A" \
+            -t "$R/stitch-$L:$B-$A" --push $C
 
   manifests:
-    needs: [hashes, images]
+    needs: languages
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
       packages: write
-    env:
-      R: ${{ needs.hashes.outputs.registry }}
-      BASE: ${{ needs.hashes.outputs.base }}
-      TOOLCHAIN: ${{ needs.hashes.outputs.toolchain }}
     steps:
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -84,8 +99,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
-          docker buildx imagetools create -t "$R/stitch-base:$BASE" "$R/stitch-base:$BASE-amd64" "$R/stitch-base:$BASE-arm64"
-          docker buildx imagetools create -t "$R/stitch-toolchain:$TOOLCHAIN" "$R/stitch-toolchain:$TOOLCHAIN-amd64" "$R/stitch-toolchain:$TOOLCHAIN-arm64"
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
+          multi() { docker buildx imagetools create -t "$1" "$1-amd64" "$1-arm64"; }
+          multi "$R/stitch-engine:$(eval "$HASH engine_hash")"
+          for L in cpp python javascript java go rust ruby swift; do
+            multi "$R/stitch-$L-toolchain:$(eval "$HASH toolchain_hash $L")"
+            multi "$R/stitch-$L:$(eval "$HASH base_hash $L")"
+          done
 
   pypi:
     needs: manifests

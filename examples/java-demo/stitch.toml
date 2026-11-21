@@ -1,0 +1,10 @@
+[project]
+name = "java-demo"
+language = "java"
+
+[source]
+path = "lib"
+
+[java]
+include = ["demo.kv"]
+sources = ["/src"]

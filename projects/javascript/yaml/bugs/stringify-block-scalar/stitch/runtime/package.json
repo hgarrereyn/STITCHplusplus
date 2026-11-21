@@ -1,0 +1,11 @@
+{
+  "name": "stitch",
+  "version": "0.2.0",
+  "description": "STITCH harness runtime for JavaScript",
+  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "@babel/core": "7.26.0",
+    "c8": "10.1.3"
+  }
+}

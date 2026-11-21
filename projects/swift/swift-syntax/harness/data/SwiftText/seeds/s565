@@ -1,0 +1,2 @@
+Expected \(expectedDiagnostics.count) diagnostics but received \(diags.count):
+\(diags.map(\.debugDescription).joined(separator: "\n"))

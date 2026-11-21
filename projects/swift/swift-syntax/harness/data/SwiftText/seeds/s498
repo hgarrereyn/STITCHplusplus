@@ -1,0 +1,2 @@
+@available(OSX 10.6, *) // no error
+func availableSince10_6() {}

@@ -1,0 +1,1 @@
+{"bar": list, "foo": ok, "foo": f64}?.half

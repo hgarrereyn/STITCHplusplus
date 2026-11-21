@@ -1,0 +1,8 @@
+@inlinable
+@differentiable(reverse, wrt: (self, initialResult))
+public func differentiableReduce<Result: Differentiable>(
+  _ initialResult: Result,
+  _ nextPartialResult: @differentiable(reverse) (Result, Element) -> Result
+) -> Result {
+  reduce(initialResult, nextPartialResult)
+}

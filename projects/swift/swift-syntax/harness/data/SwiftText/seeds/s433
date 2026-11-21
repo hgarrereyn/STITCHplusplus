@@ -1,0 +1,2 @@
+@_effects(notEscaping self.value**)
+func foo() {}

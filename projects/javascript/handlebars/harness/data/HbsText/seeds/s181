@@ -1,0 +1,1 @@
+{{#with context as |me|}}{{#> dude}}{{me.value}}{{/dude}}{{/with}}

@@ -1,0 +1,13 @@
+// FuncDecl: Choose 2
+// 1,2
+func f12<T: Mashable where T: Womparable>(x: T) {}
+// 1,3
+func f13<T: Mashable>(x: T) -> Int { return 2 } // no-warning
+// 1,4
+func f14<T: Mashable>(x: T) where T: Equatable {} // no-warning
+// 2,3
+func f23<T where T: Womparable>(x: T) -> Int { return 2 }
+// 2,4
+func f24<T where T: Womparable>(x: T) where T: Equatable {}
+// 3,4
+func f34<T>(x: T) -> Int where T: Equatable { return 2 } // no-warning

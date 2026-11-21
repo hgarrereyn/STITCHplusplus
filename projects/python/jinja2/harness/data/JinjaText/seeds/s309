@@ -1,0 +1,1 @@
+{{ ("a{0.foo}b{1}"|safe).format({"foo": 42}, "<foo>") }}

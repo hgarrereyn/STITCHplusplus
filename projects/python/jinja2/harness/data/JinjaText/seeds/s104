@@ -1,0 +1,4 @@
+{# foo comment
+and bar comment #}
+{% macro blub() %}foo{% endmacro %}
+{{ blub() }}

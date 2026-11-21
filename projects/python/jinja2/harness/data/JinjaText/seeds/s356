@@ -1,0 +1,1 @@
+{{ data|truncate(15, true, ">>>") }}|{{ data|truncate(15, false, ">>>") }}|{{ smalldata|truncate(15) }}

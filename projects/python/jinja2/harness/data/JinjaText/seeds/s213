@@ -1,0 +1,1 @@
+{% raw %}{{ FOO }} and {% BAR %}{% endraw %}

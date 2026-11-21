@@ -18,13 +18,16 @@ pub struct Report {
     pub signature: String,
     pub signature_fn: String,
     pub summary: String,
+    /// wall time of the run, worker start-up included
+    pub elapsed_ms: u64,
     #[serde(skip)]
     pub output: String,
 }
 
 fn skip_frame(func: &str, loc: &str) -> bool {
     const PFX: &[&str] = &[
-        "__asan", "__interceptor", "___interceptor", "__sanitizer", "__ubsan", "__lsan", "stitch::", "stitch_", "std::",
+        "__rust_try", "std::panicking", "std::panic::", "core::ops::function", "core::panicking", "core::ptr::",
+        "<core::", "<alloc::", "<std::", "alloc::", "__asan", "__interceptor", "___interceptor", "__sanitizer", "__ubsan", "__lsan", "stitch::", "stitch_", "std::",
         "__libc", "abort", "raise", "__pthread", "_start", "main", "libafl", "__cxa", "__gxx", "operator new",
         "operator delete", "pthread_kill", "gsignal", "__GI_", "__assert", "__interceptor_", "malloc", "calloc",
         "realloc", "free", "memcpy", "memmove", "memset", "strlen", "strcpy", "strcmp", "strncmp", "memcmp",
@@ -33,6 +36,10 @@ fn skip_frame(func: &str, loc: &str) -> bool {
         return true;
     }
     loc.contains("/runtime/src/") || loc.contains("libc.so") || loc.contains("compiler-rt") || loc.contains("libstdc++")
+        || loc.contains("/rustc/") || loc.contains("/stitch/rust/")
+        // Swift: the standard library (mangled $sS / $ss), compiler-generated thunks, the Stitch package
+        || loc.contains("<compiler-generated>") || loc.contains("/stitch/swift/") || loc.contains("/stitch/cpp-runtime/")
+        || func.starts_with("$sS") || func.starts_with("$ss") || func.starts_with("$s6Stitch") || func == "worker_main"
 }
 
 fn normalize(msg: &str) -> String {
@@ -53,6 +60,84 @@ fn normalize(msg: &str) -> String {
     o.replace("0xN", "ADDR").chars().take(120).collect()
 }
 
+/// A panic message as a bucket kind (same rule as the Go runtime's shortMsg).
+fn go_short(msg: &str) -> String {
+    let flat = msg.replace('\n', " ");
+    let mut k: String = flat.chars().take(48).collect();
+    if flat.chars().count() > 48 {
+        if let Some(i) = k.rfind(' ').filter(|&i| i > 0) {
+            k.truncate(i);
+        }
+    }
+    normalize(&k.replace(": ", " - ")).trim().trim_end_matches(|c| c == ' ' || c == '-' || c == ':').to_string()
+}
+
+/// A Go panic or fatal error printed by the Go runtime (the worker died): kind and frames.
+fn go_runtime_report(output: &str) -> Option<(String, Vec<String>)> {
+    let lines: Vec<&str> = output.lines().collect();
+    let head = lines.iter().position(|l| l.starts_with("panic: ") || l.starts_with("fatal error: "))?;
+    let l = lines[head];
+    let kind = if let Some(k) = l.strip_prefix("fatal error: ") {
+        k.trim().to_string()
+    } else {
+        let msg = l["panic: ".len()..].trim();
+        match msg.strip_prefix("runtime error: ") {
+            Some(k) => {
+                let k = k.split(|c| c == '[' || c == ':').next().unwrap_or(k).trim();
+                k.strip_prefix("invalid memory address or ").unwrap_or(k).to_string()
+            }
+            None => format!("panic {}", go_short(msg)),
+        }
+    };
+    let mut i = head + 1;
+    while i < lines.len() && !(lines[i].starts_with("goroutine ") && lines[i].contains("[running")) {
+        i += 1;
+    }
+    i += 1;
+    let mut frames = vec![];
+    while i + 1 < lines.len() && !lines[i].trim().is_empty() && frames.len() < 3 {
+        let func = lines[i].trim();
+        let loc = lines[i + 1].trim();
+        i += 2;
+        let name = func.rsplit_once('(').map(|x| x.0).unwrap_or(func);
+        let name = if name.ends_with(')') || name.ends_with('.') { func.split("({").next().unwrap_or(func) } else { name };
+        if name.starts_with("runtime.") || name.starts_with("reflect.") || name.starts_with("stitch.") || name.starts_with("main.")
+            || func.contains("created by")
+        {
+            continue;
+        }
+        let short = name.rsplit('/').next().unwrap_or(name).replace("(*", "").replace(['(', ')'], "").replace("%2e", ".");
+        let path = loc.split_whitespace().next().unwrap_or(loc);
+        let file = path.rsplit('/').next().unwrap_or(path);
+        frames.push(format!("{short} {file}"));
+    }
+    Some((kind, frames))
+}
+
+/// Demangle Swift names ($s...) in "func location" frames with swift-demangle, when it exists.
+fn demangle_swift(frames: &mut [String]) {
+    let names: Vec<String> =
+        frames.iter().filter_map(|f| f.split(' ').next()).filter(|n| n.starts_with("$s")).map(String::from).collect();
+    if names.is_empty() {
+        return;
+    }
+    let Ok(out) = Command::new("swift-demangle").arg("--simplified").arg("--compact").args(&names).output() else { return };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let demangled: Vec<&str> = text.lines().collect();
+    if demangled.len() != names.len() {
+        return;
+    }
+    let map: std::collections::HashMap<&str, &str> = names.iter().map(|s| s.as_str()).zip(demangled).collect();
+    for f in frames.iter_mut() {
+        let (func, rest) = f.split_once(' ').unwrap_or((f.as_str(), ""));
+        if let Some(d) = map.get(func) {
+            // "method(_:_:)" -> the name (the CLI cuts reproducer output the same way)
+            let d = d.split('(').next().unwrap_or(d);
+            *f = format!("{d} {rest}");
+        }
+    }
+}
+
 pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Report {
     let mut kind = String::new();
     let mut summary = String::new();
@@ -61,8 +146,21 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
     let mut node = None;
     let mut in_stack = false;
     let mut stack_done = false;
+    // Swift: "Fatal error: <message>" (fatalError, -Onone checks) or a trap frame named
+    // "Swift runtime failure: <message>" (-O checks): the message is the kind
+    let mut swift_failure: Option<String> = None;
     for line in output.lines() {
         let l = line.trim();
+        if let Some(i) = l.find("Fatal error: ") {
+            swift_failure.get_or_insert_with(|| normalize(&l[i + "Fatal error: ".len()..]));
+        }
+        if let Some(i) = l.find(" in Swift runtime failure: ") {
+            let msg = &l[i + " in Swift runtime failure: ".len()..];
+            let msg = msg.rsplit_once(" <compiler-generated>").map(|x| x.0).unwrap_or(msg);
+            let msg = msg.rsplit_once(" /").map(|x| x.0).unwrap_or(msg);
+            swift_failure.get_or_insert_with(|| normalize(msg));
+            continue;
+        }
         if let Some(rest) = l.strip_prefix("[stitch] #") {
             if let Some((num, after)) = rest.split_once(' ') {
                 if let Ok(n) = num.parse::<usize>() {
@@ -82,6 +180,18 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
         if let Some(rest) = l.strip_prefix("[stitch] UNCAUGHT EXCEPTION in ") {
             kind = format!("uncaught exception: {}", normalize(rest.split_once(": ").map(|x| x.1).unwrap_or(rest)));
             summary = l.to_string();
+            continue;
+        }
+        if let Some(rest) = l.strip_prefix("[stitch] EXCEPTION in ") {
+            // language runtimes: "<stub>: <kind>: <message>", then innermost-first frames
+            let (ep, after) = rest.split_once(": ").unwrap_or((rest, ""));
+            let k = after.split_once(": ").map(|x| x.0).unwrap_or(after);
+            kind = if k.is_empty() { "exception".into() } else { normalize(k) };
+            if endpoint.is_none() {
+                endpoint = Some(ep.to_string());
+            }
+            summary = l.to_string();
+            in_stack = true;
             continue;
         }
         if let Some(i) = l.find("ERROR: AddressSanitizer: ") {
@@ -134,6 +244,11 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
                         continue;
                     }
                     let func = func.strip_prefix("void ").unwrap_or(func);
+                    // Rust legacy mangling: drop the ::h<16 hex> suffix
+                    let func = match func.rfind("::h") {
+                        Some(i) if func.len() - i == 19 && func[i + 3..].chars().all(|c| c.is_ascii_hexdigit()) => &func[..i],
+                        _ => func,
+                    };
                     if !skip_frame(func, loc) && frames.len() < 3 {
                         let file = loc.rsplit('/').next().unwrap_or(loc);
                         let file = file.split(' ').next().unwrap_or(file);
@@ -146,6 +261,18 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
             }
         }
     }
+    if kind.is_empty() && !output.contains("[stitch] EXCEPTION in ") {
+        if let Some((k, f)) = go_runtime_report(output) {
+            kind = k;
+            frames = f;
+        }
+    }
+    if let Some(f) = swift_failure {
+        if kind.is_empty() || kind.starts_with("TRAP") || kind.starts_with("ILL") || kind == "ABRT" {
+            kind = f;
+        }
+    }
+    demangle_swift(&mut frames);
     let crashed = status_crashed || timed_out || !kind.is_empty();
     if timed_out {
         kind = "timeout".into();
@@ -161,17 +288,24 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
         }
     }
     let mut signature = signature_fn.clone();
-    for (i, f) in frames.iter().take(3).enumerate() {
-        let no_col = {
-            let parts: Vec<&str> = f.rsplitn(3, ':').collect();
-            if parts.len() == 3 && parts[0].chars().all(|c| c.is_ascii_digit()) { format!("{}:{}", parts[2], parts[1]) } else { f.clone() }
-        };
-        signature.push_str(" | ");
-        signature.push_str(if i == 0 { &no_col } else { f.split(':').next().unwrap_or(f) });
-        signature_fn.push_str(" | ");
-        signature_fn.push_str(f.split(':').next().unwrap_or(f));
+    // frames are "func location": drop ":col" (first frame) or ":line:col" from the location only,
+    // since function names may contain "::"
+    fn strip_pos(f: &str, keep_line: bool) -> String {
+        let Some((func, loc)) = f.rsplit_once(' ') else { return f.to_string() };
+        let mut parts: Vec<&str> = loc.split(':').collect();
+        let keep = if keep_line { 2 } else { 1 };
+        while parts.len() > keep && parts.last().map(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())).unwrap_or(false) {
+            parts.pop();
+        }
+        format!("{func} {}", parts.join(":"))
     }
-    Report { crashed, kind, endpoint, node, frames, signature, signature_fn, summary, output: output.to_string() }
+    for (i, f) in frames.iter().take(3).enumerate() {
+        signature.push_str(" | ");
+        signature.push_str(&if i == 0 { strip_pos(f, true) } else { strip_pos(f, false) });
+        signature_fn.push_str(" | ");
+        signature_fn.push_str(&strip_pos(f, false));
+    }
+    Report { crashed, kind, endpoint, node, frames, signature, signature_fn, summary, elapsed_ms: 0, output: output.to_string() }
 }
 
 /// Run `self exec --trace FILE` in a subprocess and parse the outcome.
@@ -196,6 +330,7 @@ pub fn run_file(file: &Path, timeout: Duration) -> Report {
                 signature: String::new(),
                 signature_fn: String::new(),
                 summary: String::new(),
+                elapsed_ms: 0,
                 output: String::new(),
             }
         }
@@ -228,7 +363,36 @@ pub fn run_file(file: &Path, timeout: Duration) -> Report {
     if out.len() > 200_000 {
         out.truncate(200_000);
     }
-    parse_report(&out, crashed && !timed_out, timed_out)
+    let mut r = parse_report(&out, crashed && !timed_out, timed_out);
+    r.elapsed_ms = start.elapsed().as_millis() as u64;
+    r
+}
+
+/// Time to start a worker and run a program with no calls (the fastest of three runs).
+pub fn startup_time() -> Duration {
+    let f = std::env::temp_dir().join(format!("stitch-empty-{}.stp", std::process::id()));
+    let _ = std::fs::write(&f, Program::default().serialize());
+    let t = (0..3).map(|_| run_file(&f, Duration::from_secs(30)).elapsed_ms).min().unwrap_or(0);
+    let _ = std::fs::remove_file(&f);
+    Duration::from_millis(t)
+}
+
+/// Run a program; with `hang` (the campaign's per-execution timeout), a program that finishes but
+/// spends longer than `hang` in its calls is run again and stopped at that point, which reports a
+/// timeout in the call that was running. (Saved timeouts would otherwise finish under the long
+/// triage limit and be dropped.)
+pub fn run_file_hang(file: &Path, timeout: Duration, hang: Option<(Duration, Duration)>) -> Report {
+    let r = run_file(file, timeout);
+    let Some((hang, startup)) = hang else { return r };
+    if r.crashed || Duration::from_millis(r.elapsed_ms) <= startup + hang {
+        return r;
+    }
+    let again = run_file(file, startup + hang);
+    if again.crashed {
+        again
+    } else {
+        r
+    }
 }
 
 /// `*.stp` files, ignoring LibAFL's hidden lock files (`.name.stp`).
@@ -252,7 +416,7 @@ pub struct Bucket {
 
 /// Bucket every program in `crash_dir` by signature. Results are cached per file in
 /// `<crash_dir>/../triage-cache.json`.
-pub fn triage_dir(crash_dir: &Path, timeout: Duration) -> Vec<Bucket> {
+pub fn triage_dir(crash_dir: &Path, timeout: Duration, hang: Option<Duration>) -> Vec<Bucket> {
     let cache_path = crash_dir.parent().unwrap_or(crash_dir).join("triage-cache.json");
     let mut cache: BTreeMap<String, serde_json::Value> =
         std::fs::read(&cache_path).ok().and_then(|d| serde_json::from_slice(&d).ok()).unwrap_or_default();
@@ -260,8 +424,9 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration) -> Vec<Bucket> {
     let exe_id = std::env::current_exe()
         .ok()
         .and_then(|p| std::fs::metadata(p).ok())
-        .map(|m| format!("{}-{:?}", m.len(), m.modified().ok()))
+        .map(|m| format!("{}-{:?}-{:?}", m.len(), m.modified().ok(), hang))
         .unwrap_or_default();
+    let mut startup: Option<Duration> = None;
     if cache.get("__binary__").and_then(|v| v.as_str()) != Some(exe_id.as_str()) {
         cache.clear();
         cache.insert("__binary__".into(), serde_json::Value::String(exe_id));
@@ -276,7 +441,8 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration) -> Vec<Bucket> {
         let rep: serde_json::Value = match cache.get(&key) {
             Some(v) => v.clone(),
             None => {
-                let r = run_file(&f, timeout);
+                let h = hang.map(|h| (h, *startup.get_or_insert_with(startup_time)));
+                let r = run_file_hang(&f, timeout, h);
                 let v = serde_json::to_value(&r).unwrap();
                 cache.insert(key.clone(), v.clone());
                 v
@@ -312,8 +478,18 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration) -> Vec<Bucket> {
 }
 
 /// Greedy reduction keeping the same crash signature.
-pub fn minimize(prog: &Program, timeout: Duration, budget: Duration) -> (Program, Report) {
+pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budget: Duration) -> (Program, Report) {
     let tmp = std::env::temp_dir().join(format!("stitch-min-{}.stp", std::process::id()));
+    let _ = std::fs::write(&tmp, prog.serialize());
+    // a slow program (see run_file_hang) is minimized as a timeout at the campaign's limit
+    let mut timeout = timeout;
+    if let Some(h) = hang {
+        let startup = startup_time();
+        let r = run_file_hang(&tmp, timeout, Some((h, startup)));
+        if r.kind == "timeout" && Duration::from_millis(r.elapsed_ms) < timeout {
+            timeout = startup + h;
+        }
+    }
     let test = |p: &Program| -> Report {
         let _ = std::fs::write(&tmp, p.serialize());
         run_file(&tmp, timeout)

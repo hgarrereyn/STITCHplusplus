@@ -1,0 +1,9 @@
+@_dynamicReplacement(for: subscript(_:))
+subscript(x y: Int) -> Int {
+  get {
+    return self[y]
+  }
+  set {
+    self[y] = newValue
+  }
+}

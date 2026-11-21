@@ -1,0 +1,15 @@
+This test suite verifies the correctness of ``StringLiteralExprSyntax/\
+representedLiteralValue.`` It does so by comparing the run-time String
+value of various string literals to the value returned from
+`representedLiteralValue`.
+
+The SwiftSyntax parsed representation `StringLiteralExprSyntax` contains
+the source-accurate representation of the string literal. This
+representation differs from the runtime value:
+
+  - Escaped character sequences (\n, \u{1F600}) are not evaluated.
+  - Some strings are split into segments (i.e. multiline strings).
+
+The idea of `representedLiteralValue` is to create the run-time value of a
+string literal during parse time. Obviously this is only possible for
+static Strings so interpolated strings do not work.

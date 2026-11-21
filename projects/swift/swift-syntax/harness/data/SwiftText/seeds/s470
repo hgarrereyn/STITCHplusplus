@@ -1,0 +1,2 @@
+@_unavailableFromAsync(message= "abc")
+func foo() {}

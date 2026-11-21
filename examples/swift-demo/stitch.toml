@@ -1,0 +1,13 @@
+[project]
+name = "swift-demo"
+language = "swift"
+
+[source]
+path = "lib"
+
+[swift]
+dependencies = ['.package(path: "/src")']
+products = ['.product(name: "KVSwift", package: "src")']
+
+[fuzz]
+timeout_ms = 2000

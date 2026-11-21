@@ -1,0 +1,7 @@
+
+            {{- x }}|{% set z = 99 %}
+            {%- overlay %}
+                {{- y }}|{{ z }}|{% for item in x %}[{{ item }}]{% endfor %}
+            {%- endoverlay %}|
+            {{- x -}}
+        

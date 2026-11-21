@@ -1,16 +1,21 @@
-//! C ABI of the STITCH runtime (see runtime/include/stitch_abi.h).
+//! C ABI of the STITCH++ runtime (see languages/cpp/runtime/include/stitch_abi.h).
 #![allow(dead_code)]
 use std::ffi::{c_char, c_int, CStr};
 
 pub const MAX_NODES: usize = 256;
 pub const STRINGS_SIZE: usize = 65536;
 pub const CMPLOG_RECORDS: usize = 16384;
+pub const EDGES_SIZE: usize = 1 << 21;
 
 pub const ST_NOT_RUN: u8 = 0;
 pub const ST_OK: u8 = 1;
 pub const ST_BAIL: u8 = 2;
 pub const ST_SKIP_MISSING: u8 = 3;
 pub const ST_SKIP_INVALID: u8 = 4;
+
+/// stitch_exec() return value: the runtime caught a bug (panic, failed check) and can keep running.
+/// The fork server counts it as a crash without replacing the worker.
+pub const EXEC_FINDING: c_int = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -70,6 +75,7 @@ extern "C" {
     pub fn stitch_dict_add(dt: c_int, tok: *const u8, len: usize);
     pub fn stitch_decode_spans(dt: c_int, choices: *const u8, n: usize, out: *mut u32, max_spans: usize) -> usize;
     pub fn stitch_run_file(path: *const c_char, flags: u32) -> c_int;
+    pub fn stitch_set_plan(path: *const c_char);
 }
 
 pub fn manifest_json() -> String {

@@ -1,0 +1,2 @@
+verified: same crash
+Can't take a prefix of negative length from a collection | BlockDecryptor.update BlockDecryptor.swift:48 | AES.decrypt AES.swift | Cipher.decrypt Cipher.swift

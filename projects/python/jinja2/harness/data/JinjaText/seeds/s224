@@ -1,0 +1,1 @@
+{% set foobar = 42 %}{% from 'a' import x with context %}{{ x() }}

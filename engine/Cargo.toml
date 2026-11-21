@@ -2,10 +2,10 @@
 name = "stitch_engine"
 version = "0.1.0"
 edition = "2021"
-description = "STITCH fuzzing engine (LibAFL)"
+description = "STITCH++ fuzzing engine (LibAFL)"
 
 [lib]
-crate-type = ["staticlib", "rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 libafl = { version = "0.16.1", default-features = false, features = ["std", "derive", "fork", "serdeany_autoreg", "rand_trait", "prelude"] }

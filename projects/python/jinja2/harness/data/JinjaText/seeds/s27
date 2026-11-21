@@ -1,0 +1,4 @@
+
+        {%- for year, list in articles|groupby('date.year') -%}
+            {{ year }}{% for x in list %}[{{ x.title }}]{% endfor %}|
+        {%- endfor %}

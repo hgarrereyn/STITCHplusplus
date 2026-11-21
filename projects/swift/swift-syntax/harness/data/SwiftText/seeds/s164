@@ -1,0 +1,4 @@
+#if MY_FLAG
+#<#identifier#>
+elif
+#endif

@@ -1,0 +1,6 @@
+/* ignore me.
+   I'm a multiline comment */
+# for item in seq:
+* ${item}          ## this is just extra stuff
+    ## extra stuff i just want to ignore
+# endfor

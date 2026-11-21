@@ -1,0 +1,2 @@
+// Make sure associativity is correct
+let a = [(Int) -> (Int) -> Int]()

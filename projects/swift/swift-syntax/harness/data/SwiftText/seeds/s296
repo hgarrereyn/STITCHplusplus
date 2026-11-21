@@ -1,0 +1,12 @@
+// Has a mixture of good and bad 'appendInterpolation' methods.
+// We don't emit any errors in this case--we assume the others
+// are implementation details or something.
+public struct GoodStringInterpolationWithBadOnesToo: StringInterpolationProtocol {
+  public init(literalCapacity: Int, interpolationCount: Int) {}
+  public mutating func appendLiteral(_: String) {}
+  public func appendInterpolation(noResult: ()) {}
+  public static func appendInterpolation(static: ()) {}
+  private func appendInterpolation(private: ()) {}
+  func appendInterpolation(default: ()) {}
+  public func appendInterpolation(intResult: ()) -> Int {}
+}

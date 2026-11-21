@@ -1,0 +1,6 @@
+@_objcImplementation extension MyClass {
+  func fn() {}
+}
+@_objcImplementation(Category) extension MyClass {
+  func fn2() {}
+}

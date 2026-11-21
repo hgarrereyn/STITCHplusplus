@@ -1,0 +1,4 @@
+@transpose(of: S.instanceMethod, wrt: self)
+static func transposeInstanceMethodWrtSelf(_ other: S, t: S) -> S {
+  other + t
+}

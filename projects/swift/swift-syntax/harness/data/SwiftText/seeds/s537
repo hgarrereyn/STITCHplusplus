@@ -1,0 +1,3 @@
+@objc enum NonIntegerRawType: Float {
+  case Zim = 1.0, Zang = 1.5, Zung = 2.0
+}

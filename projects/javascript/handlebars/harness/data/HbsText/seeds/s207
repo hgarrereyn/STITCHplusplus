@@ -1,0 +1,2 @@
+{{#each data}}Key: {{@key}}
+{{/each}}

@@ -1,0 +1,1 @@
+"text \(array.map({ "\($0)" }).joined(separator: ",")) text"

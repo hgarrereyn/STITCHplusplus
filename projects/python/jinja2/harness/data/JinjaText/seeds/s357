@@ -1,0 +1,1 @@
+{{ foo is eq 12 }}|{{ foo is eq 0 }}|{{ foo is eq (3 * 4) }}|{{ bar is eq "baz" }}|{{ bar is eq "zab" }}|{{ bar is eq ("ba" + "z") }}|{{ bar is eq bar }}|{{ bar is eq foo }}

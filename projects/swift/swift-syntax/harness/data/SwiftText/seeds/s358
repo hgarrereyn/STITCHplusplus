@@ -1,0 +1,2 @@
+// This should be parsed as (x*!*).exclaim()
+LOOK()*!*.exclaim()

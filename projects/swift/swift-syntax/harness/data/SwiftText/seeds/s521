@@ -1,0 +1,2 @@
+@available(swift, unavailable, introduced: 4.2)
+func swiftUnavailableIntroduced() {}

@@ -1,0 +1,1 @@
+{{ "foo tel:+1-514-555-1234 ftp://localhost bar"|urlize(extra_schemes=["tel:", "ftp:"]) }}

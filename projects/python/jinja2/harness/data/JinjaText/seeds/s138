@@ -1,0 +1,4 @@
+{% for item in seq -%}
+            {{ loop.previtem|default('x') }}-{{ item }}-{{
+            loop.nextitem|default('x') }}|
+        {%- endfor %}

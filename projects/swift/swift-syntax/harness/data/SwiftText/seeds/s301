@@ -1,0 +1,7 @@
+// Here is an extra random close-brace!
+}
+//===--- Recovery for braced blocks.
+func braceStmt1() {
+  { braceStmt1(); }
+  a
+}

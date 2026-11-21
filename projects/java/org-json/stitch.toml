@@ -1,0 +1,15 @@
+[project]
+name = "org-json"
+language = "java"
+
+[source]
+git = "https://github.com/stleary/JSON-java"
+rev = "20230227"
+
+[java]
+classpath = ["/deps/*"]
+include = ["org.json"]
+sources = ["/src/src/main/java"]
+
+[fuzz]
+timeout_ms = 3000

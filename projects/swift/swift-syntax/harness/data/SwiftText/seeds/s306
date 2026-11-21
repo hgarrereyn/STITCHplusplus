@@ -1,0 +1,7 @@
+// Intentionally has lower precedence than assignments and ?:
+infix operator %%%% : LowPrecedence
+precedencegroup LowPrecedence {
+  associativity: none
+  lowerThan: AssignmentPrecedence
+}
+func %%%%<T, U>(x: T, y: U) -> Int { return 0 }

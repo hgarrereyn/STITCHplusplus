@@ -1,0 +1,5 @@
+@B<Float>.NonGeneric var test1: Int {
+  1
+  2
+  3
+}

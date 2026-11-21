@@ -1,0 +1,2 @@
+// Placeholders are recognized as identifiers but with error.
+func <#some name#>() {}

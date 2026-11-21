@@ -1,0 +1,10 @@
+// rdar://22240342 - Crash in diagRecursivePropertyAccess
+class r22240342 {
+  lazy var xx: Int = {
+    foo {
+      let issueView = 42
+      issueView.delegate = 12
+    }
+    return 42
+    }()
+}

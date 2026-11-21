@@ -1,0 +1,3 @@
+@_dynamicReplacement(for: dynamically_replaceable() 
+func test_dynamic_replacement_for3() {
+}

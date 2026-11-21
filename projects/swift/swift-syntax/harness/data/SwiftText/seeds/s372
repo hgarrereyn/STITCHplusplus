@@ -1,0 +1,32 @@
+// https://github.com/apple/swift/issues/43334
+// https://github.com/apple/swift/issues/43335
+enum Whichever {
+  case Thing
+  static let title = "title"
+  static let alias: Whichever = .Thing
+}
+func f1(x: String, y: Whichever) {
+  switch x {
+    case Whichever.title: // Ok. Don't emit diagnostics for static member of enum.
+        break
+    case Whichever.buzz:
+        break
+    case Whichever.alias:
+    default:
+      break
+  }
+  switch y {
+    case Whichever.Thing: // Ok.
+        break
+    case Whichever.alias: // Ok. Don't emit diagnostics for static member of enum.
+        break
+    case Whichever.title:
+        break
+  }
+  switch y {
+    case .alias:
+      break
+    default:
+      break
+  }
+}

@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""stitch-swift-run BINARY ARGS...: run with Swift names in stderr demangled.
+
+stderr is forwarded line by line (a reproducer killed by `timeout` keeps what it printed); lines
+with mangled Swift names go through swift-demangle. stdout and the exit code are kept (128 + N
+for a signal).
+"""
+import subprocess
+import sys
+
+p = subprocess.Popen(sys.argv[1:], stderr=subprocess.PIPE)
+for raw in p.stderr:
+    line = raw.decode("utf-8", "replace")
+    if "$s" in line:
+        try:
+            out = subprocess.run(["swift-demangle", "--simplified"], input=line, capture_output=True, text=True, timeout=10).stdout
+            line = out or line
+        except (OSError, subprocess.SubprocessError):
+            pass
+    sys.stderr.write(line)
+    sys.stderr.flush()
+rc = p.wait()
+sys.exit(128 - rc if rc < 0 else rc)

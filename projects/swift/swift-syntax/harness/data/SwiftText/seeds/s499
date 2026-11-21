@@ -1,0 +1,2 @@
+@available(OSX 10e10)
+func test() {}

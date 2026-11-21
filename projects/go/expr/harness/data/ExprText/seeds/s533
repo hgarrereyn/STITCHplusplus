@@ -1,0 +1,1 @@
+string(max(i32, 1, i64))

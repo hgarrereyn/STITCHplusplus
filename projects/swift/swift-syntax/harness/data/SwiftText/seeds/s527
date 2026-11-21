@@ -1,0 +1,5 @@
+@dynamicMemberLookup @available(swift 4.0)
+public class MyClass {
+  let A: Int
+  let B: Double
+}

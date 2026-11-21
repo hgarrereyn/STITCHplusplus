@@ -1,0 +1,20 @@
+# STITCH++ project. Guide: `stitch guide`. API reference: `stitch guide api`.
+[project]
+name = "cjson"
+
+[source]
+git = "https://github.com/DaveGamble/cJSON"
+rev = "c859b25da02955fef659d658b8f324b5cde87be3"           # branch, tag or commit; `stitch build --rev X` overrides
+
+[build]
+# How the harness compiles and links against the library *inside the project image*.
+# The library source is at /src (see Dockerfile).
+cflags = ["-I/src"]
+ldflags = ["/src/build/libcjson_utils.a", "/src/build/libcjson.a", "-lm"]
+sanitizers = ["address"]   # add "undefined" for UBSan
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1
+exceptions = "finding"  # or "bail": treat uncaught C++ exceptions from the library as bails

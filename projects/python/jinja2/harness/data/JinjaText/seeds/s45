@@ -1,0 +1,4 @@
+    <%# regular comment %>
+    <% for item in seq %>
+${item} ## the rest of the stuff
+   <% endfor %>

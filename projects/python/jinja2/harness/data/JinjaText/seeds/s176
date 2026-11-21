@@ -1,0 +1,1 @@
+{% if a %}{% set foo = 1 %}{% endif %}{{ foo }}

@@ -1,0 +1,13 @@
+// Prevent availability and unavailability being present in the same statement.
+if #unavailable(macOS 10.51), #available(macOS 10.52, *) {
+}
+if #available(macOS 10.51, *), #unavailable(macOS 10.52) {
+}
+if #available(macOS 10.51, *), #available(macOS 10.55, *), #unavailable(macOS 10.53) {
+}
+if #unavailable(macOS 10.51), #unavailable(macOS 10.55), #available(macOS 10.53, *) {
+}
+if case 42 = 42, #available(macOS 10.51, *), #unavailable(macOS 10.52) {
+}
+if #available(macOS 10.51, *), case 42 = 42, #unavailable(macOS 10.52) {
+}

@@ -1,0 +1,2 @@
+@available(OSX, introduced: 10.0, deprecated: 10.12) // no error
+func introducedFollowedByDeprecated() {}

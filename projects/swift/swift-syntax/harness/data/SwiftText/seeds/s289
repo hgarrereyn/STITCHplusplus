@@ -1,0 +1,2 @@
+// FuncDecl: Choose 0
+func f1<T>(x: T) {}

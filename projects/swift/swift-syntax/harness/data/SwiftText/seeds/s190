@@ -1,0 +1,4 @@
+#if hasAttribute(foo)
+@foo
+#endif
+struct MyStruct {}

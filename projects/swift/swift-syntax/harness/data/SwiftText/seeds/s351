@@ -1,0 +1,2 @@
+// Test with a non-optional type
+let _: String = genericOptionalTry({ () throws -> Int in return 3 })

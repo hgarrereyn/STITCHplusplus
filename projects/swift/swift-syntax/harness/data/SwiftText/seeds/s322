@@ -1,0 +1,7 @@
+// NominalTypeDecl: Choose 1
+// 1: Inherited constraint
+struct S1<T: Mashable> {} // no-warning
+// 2: Non-trailing where
+struct S2<T where T: Womparable> {}
+// 3: Trailing where
+struct S3<T> where T : Equatable {} // no-warning

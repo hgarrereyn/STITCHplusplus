@@ -1,0 +1,7 @@
+// NominalTypeDecl: Choose 2
+// 1,2
+struct S12<T: Mashable where T: Womparable> {}
+// 1,3
+struct S13<T: Mashable> where T: Equatable {} // no-warning
+// 2,3
+struct S23<T where T: Womparable> where T: Equatable {}

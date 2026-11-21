@@ -1,0 +1,2 @@
+// Cases cannot contain 'var' bindings if there are multiple matching patterns
+// attached to a block. They may however contain other non-binding patterns.

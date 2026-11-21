@@ -1,0 +1,3 @@
+@_dynamicReplacement(for: <#identifier#>)
+func test_dynamic_replacement_for2() {
+}

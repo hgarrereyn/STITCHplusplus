@@ -1,0 +1,4 @@
+    <!-- I'm a comment, I'm not interesting -->
+    <? for item in seq ?>
+        <?= item ?>
+    <? endfor ?>

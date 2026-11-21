@@ -1,0 +1,4 @@
+@available(OSX 13.10, *)
+@_originallyDefinedIn(module: "foo", OSX 13.13)
+@_originallyDefinedIn(module: "foo", iOS 7.0)
+private class ToplevelClass6 {}

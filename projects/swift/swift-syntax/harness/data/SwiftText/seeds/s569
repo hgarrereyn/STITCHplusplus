@@ -1,0 +1,3 @@
+Foo<Bar<
+    V, Baz<Quux>
+>>

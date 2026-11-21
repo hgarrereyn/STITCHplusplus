@@ -1,0 +1,2 @@
+@_specialize(exported: true, availability: SwiftStdlib 5.1, *; where T == Int)
+public func testSemanticsAvailability<T>(_ t: T) {}

@@ -1,0 +1,2 @@
+@available(_iOS9, _macOS10_11, tvOS 11.0, *)
+public func composed() {}

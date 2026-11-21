@@ -1,0 +1,10 @@
+[project]
+name = "url"
+language = "rust"
+
+[source]
+git = "https://github.com/servo/rust-url"
+rev = "v2.2.0"
+
+[rust.dependencies]
+url = { path = "/src/url" }

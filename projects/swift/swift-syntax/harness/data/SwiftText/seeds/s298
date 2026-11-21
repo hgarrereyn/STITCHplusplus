@@ -1,0 +1,9 @@
+// Has only good 'appendInterpolation' methods, and is not public.
+struct GoodNonPublicStringInterpolation: StringInterpolationProtocol {
+  init(literalCapacity: Int, interpolationCount: Int) {}
+  mutating func appendLiteral(_: String) {}
+  func appendInterpolation(noResult: ()) {}
+  public func appendInterpolation(voidResult: ()) -> Void {}
+  @discardableResult
+  func appendInterpolation(discardableResult: ()) -> Int {}
+}

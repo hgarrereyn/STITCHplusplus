@@ -1,0 +1,4 @@
+    {% if True +%}
+a {% if True +%}
+b {% endif +%}
+c {% endif %}

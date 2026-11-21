@@ -1,0 +1,2 @@
+@_silgen_name("testExclusivityBogusPC")
+private static func _testExclusivityBogusPC()

@@ -1,0 +1,4 @@
+@resultBuilder
+struct A<T> {
+  static func buildBlock(_ values: Int...) -> Int { return 0 }
+}

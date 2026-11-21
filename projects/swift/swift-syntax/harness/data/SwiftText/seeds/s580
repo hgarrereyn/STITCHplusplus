@@ -1,0 +1,2 @@
+Received the following diagnostics while parsing \(fileURL)
+\(locationAndDiagnostics.joined(separator: "\n"))

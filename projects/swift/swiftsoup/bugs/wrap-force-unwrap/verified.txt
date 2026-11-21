@@ -1,0 +1,2 @@
+verified: same crash
+Unexpectedly found nil while unwrapping an Optional value | Element.wrap Element.swift | closure #1 in variable initialization expression of wrap stubs.swift | partial apply for closure #1 in endpoint<A, B> 

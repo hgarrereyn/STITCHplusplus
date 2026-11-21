@@ -1,0 +1,1 @@
+{%- if x is defined -%}{{ x }}{%- elif y is defined -%}{{ y|f }}{%- else -%}foo{%- endif -%}

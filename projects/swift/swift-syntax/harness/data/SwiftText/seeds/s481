@@ -1,0 +1,2 @@
+@available(*, unavailable, message: "\("message")")
+func interpolatedMessage() {}

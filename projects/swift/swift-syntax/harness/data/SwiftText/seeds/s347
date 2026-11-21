@@ -1,0 +1,13 @@
+// Simple examples
+struct X1 {
+  var stored: Int
+  subscript(i: Int) -> Int {
+    get {
+      return stored
+    }
+    mutating
+    set {
+      stored = newValue
+    }
+  }
+}

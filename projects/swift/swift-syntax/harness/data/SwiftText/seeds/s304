@@ -1,0 +1,2 @@
+// Identifiers cannot start with combining chars.
+_ = .́duh()

@@ -1,0 +1,4 @@
+
+            {%- set x = 42 %}
+            {%- macro m(a, b=x, x=23) %}{{ a }}|{{ b }}|{{ x }}{% endmacro -%}
+        

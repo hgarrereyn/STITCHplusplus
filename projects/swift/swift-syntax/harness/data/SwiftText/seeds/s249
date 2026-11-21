@@ -1,0 +1,7 @@
+// <rdar://problem/21414023> Assertion failure when compiling function that takes throwing functions and rethrows
+func rethrowsDispatchError(handleError: ((Error) throws -> ()), body: () throws -> ()) rethrows {
+  do {
+    body()
+  } catch {
+  }
+}

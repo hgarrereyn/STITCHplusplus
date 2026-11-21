@@ -1,0 +1,3 @@
+@objc enum Generic<T>: Int32 {
+  case Zim, Zang, Zung
+}

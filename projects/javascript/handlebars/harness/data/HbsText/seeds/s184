@@ -1,0 +1,1 @@
+{{#> dude}}in-block: {{@root/value}}{{/dude}}

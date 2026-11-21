@@ -1,0 +1,2 @@
+verified: same crash
+check failed: Valid() agrees with encoding/json | in valid

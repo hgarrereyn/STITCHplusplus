@@ -1,0 +1,8 @@
+// Intentionally has lower precedence between assignments and ?:
+infix operator %%% : MiddlingPrecedence
+precedencegroup MiddlingPrecedence {
+  associativity: none
+  higherThan: AssignmentPrecedence
+  lowerThan: TernaryPrecedence
+}
+func %%%<T, U>(x: T, y: U) -> Int { return 1 }

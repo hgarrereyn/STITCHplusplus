@@ -1,0 +1,2 @@
+verified: same crash
+Unexpectedly found nil while unwrapping an Optional value | closure #1 in static Dictionary._construct_mapping Constructor.swift:426 | implicit closure #1 in variable initialization expression of static Constructor.defaultMappingMap Constructor.swift | Constructor.any Constructor.swift

@@ -1,0 +1,2 @@
+@available(iOS 6.0, OSX 10.8, *)
+func availableOnMultiplePlatforms() {}

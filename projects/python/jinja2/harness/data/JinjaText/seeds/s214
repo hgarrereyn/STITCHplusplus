@@ -1,0 +1,1 @@
+{% set a = " xxx " %}{% set foo | myfilter(a) | trim | length | string %} {% set b = " yy " %} 42 {{ a }}{{ b }}   {% endset %}{{ foo }}

@@ -1,0 +1,8 @@
+      """##
+  )
+}
+
+func testSkipUnexpectedOpeningParensInStringLiteral() {
+  assertParse(
+    #"""
+    "\(e H()r

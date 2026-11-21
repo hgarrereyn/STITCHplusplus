@@ -1,0 +1,4 @@
+// https://github.com/apple/swift/issues/53293
+class C_53293 {
+  static var _: Int { 0 }
+}

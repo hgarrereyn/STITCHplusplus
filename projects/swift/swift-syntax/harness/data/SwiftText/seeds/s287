@@ -1,0 +1,10 @@
+// Fallthrough can transfer control anywhere within a case and can appear
+// multiple times in the same case.
+switch x {
+case 0:
+  if true { fallthrough }
+  if false { fallthrough }
+  x += 1
+default:
+  x += 1
+}

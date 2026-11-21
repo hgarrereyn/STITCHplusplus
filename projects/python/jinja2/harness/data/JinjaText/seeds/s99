@@ -1,0 +1,7 @@
+Start
+{% for i in ["foo", "bar"] -%}
+{% block body scoped -%}
+{{ loop.index }}) {{ i }}{% if loop.last %} last{% endif -%}
+{%- endblock %}
+{% endfor -%}
+End

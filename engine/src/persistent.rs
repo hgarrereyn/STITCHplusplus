@@ -45,6 +45,7 @@ pub struct PersistentExecutor<OT> {
     cmd_w: i32,
     done_r: i32,
     runs: u32,
+    prof: Option<(std::time::Instant, std::time::Instant, Duration, Duration, u64, u64)>, // start, last print, in child, in spawn, execs, spawns
 }
 
 impl<OT> PersistentExecutor<OT> {
@@ -53,7 +54,11 @@ impl<OT> PersistentExecutor<OT> {
             libc::mmap(std::ptr::null_mut(), PROG_CAP + 8, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_SHARED | libc::MAP_ANONYMOUS, -1, 0)
         };
         assert!(shm != libc::MAP_FAILED, "mmap failed");
-        Self { observers, timeout, max_runs: max_runs.max(1), shm: shm as *mut u8, child: 0, cmd_w: -1, done_r: -1, runs: 0 }
+        let prof = std::env::var_os("STITCH_PROFILE").map(|_| {
+            let n = std::time::Instant::now();
+            (n, n, Duration::ZERO, Duration::ZERO, 0, 0)
+        });
+        Self { observers, timeout, max_runs: max_runs.max(1), shm: shm as *mut u8, child: 0, cmd_w: -1, done_r: -1, runs: 0, prof }
     }
 
     fn spawn(&mut self) -> Result<(), Error> {
@@ -78,7 +83,8 @@ impl<OT> PersistentExecutor<OT> {
                         libc::_exit(0);
                     }
                     let len = (shm as *const u64).read_volatile() as usize;
-                    ffi::stitch_exec(shm.add(8), len.min(PROG_CAP), 0);
+                    let rc = ffi::stitch_exec(shm.add(8), len.min(PROG_CAP), 0);
+                    b[0] = if rc == ffi::EXEC_FINDING { 2 } else { 1 };
                     if libc::write(done[1], b.as_ptr() as *const libc::c_void, 1) != 1 {
                         libc::_exit(0);
                     }
@@ -139,10 +145,13 @@ where
 {
     fn run_target(&mut self, _fuzzer: &mut Z, state: &mut S, _mgr: &mut EM, input: &Program) -> Result<ExitKind, Error> {
         *state.executions_mut() += 1;
-        if self.child == 0 || self.runs >= self.max_runs {
+        let t_spawn = std::time::Instant::now();
+        let spawned = self.child == 0 || self.runs >= self.max_runs;
+        if spawned {
             self.reap(false);
             self.spawn()?;
         }
+        let t0 = std::time::Instant::now();
         self.observers.pre_exec_all(state, input)?;
         let bytes = input.serialize();
         let len = bytes.len().min(PROG_CAP);
@@ -171,7 +180,8 @@ where
                 } else {
                     let mut rb = [0u8; 1];
                     if libc::read(self.done_r, rb.as_mut_ptr() as *mut libc::c_void, 1) == 1 {
-                        ExitKind::Ok
+                        // 2: a finding in a runtime that survives it (the worker stays)
+                        if rb[0] == 2 { ExitKind::Crash } else { ExitKind::Ok }
                     } else {
                         let st = self.reap(false).unwrap_or(0);
                         classify(st)
@@ -179,6 +189,28 @@ where
                 }
             }
         };
+        if let Some(p) = &mut self.prof {
+            p.2 += t0.elapsed();
+            p.4 += 1;
+            if spawned {
+                p.3 += t0 - t_spawn;
+                p.5 += 1;
+            }
+            if p.1.elapsed() >= Duration::from_secs(10) {
+                let tot = p.0.elapsed().as_secs_f64();
+                let line = format!(
+                    "[stitch] profile: {} execs, {:.1} us/exec, child {:.1} us/exec ({:.0}%), {} forks ({:.0}% of the time), engine {:.1} us/exec",
+                    p.4, tot * 1e6 / p.4 as f64, p.2.as_secs_f64() * 1e6 / p.4 as f64, 100.0 * p.2.as_secs_f64() / tot,
+                    p.5, 100.0 * p.3.as_secs_f64() / tot, (tot - p.2.as_secs_f64() - p.3.as_secs_f64()) * 1e6 / p.4 as f64);
+                if let Some(path) = std::env::var_os("STITCH_PROFILE") {
+                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                        use std::io::Write;
+                        let _ = writeln!(f, "{line}");
+                    }
+                }
+                p.1 = std::time::Instant::now();
+            }
+        }
         self.observers.post_exec_all(state, input, &exit)?;
         Ok(exit)
     }

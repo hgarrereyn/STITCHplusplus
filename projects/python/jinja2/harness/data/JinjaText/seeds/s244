@@ -1,0 +1,12 @@
+{%- set i = 42 -%}
+{% for idx in range(2) -%}
+{{ test() }}
+{%- set i = idx -%}
+{% block body scoped %}
+{{ test() }}
+{% set i = 24 -%}
+{{ test() }}
+{% endblock -%}
+{{ test() }}
+{% endfor -%}
+{{ test() }}

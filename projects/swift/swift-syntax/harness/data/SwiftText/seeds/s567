@@ -1,0 +1,2 @@
+Expected \(spec.notes.count) notes but received \(diag.notes.count):
+\(diag.notes.map(\.debugDescription).joined(separator: "\n"))

@@ -1,0 +1,4 @@
+// <rdar://problem/23681566> @objc enums with payloads rejected with no source location info
+@objc enum r23681566 : Int32 {
+  case Foo(progress: Int)
+}

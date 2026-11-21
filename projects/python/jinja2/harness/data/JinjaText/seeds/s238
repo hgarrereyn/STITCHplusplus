@@ -1,0 +1,1 @@
+{% trans foo=42, count=2 %}{{ count }} item{% pluralize count %}{{ count }} items{% endtrans %}

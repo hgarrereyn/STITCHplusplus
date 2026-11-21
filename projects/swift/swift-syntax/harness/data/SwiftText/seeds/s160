@@ -1,0 +1,15 @@
+#file
+#fileID
+(#line)
+#column
+#function
+#dsohandle
+__FILE__
+__LINE__
+__COLUMN__
+__FUNCTION__
+__DSO_HANDLE__
+
+func f() {
+  return #function
+}

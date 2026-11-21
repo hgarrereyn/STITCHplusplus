@@ -1,0 +1,8 @@
+@_specialize(where T: _Trivial(32), T: _Trivial(64), T: _Trivial, T: _RefCountedObject)
+@_specialize(where T: _Trivial, T: _Trivial(64))
+@_specialize(where T: _RefCountedObject, T: _NativeRefCountedObject)
+@_specialize(where Array<T> == Int)
+@_specialize(where T.Element == Int)
+public func funcWithComplexSpecializeRequirements<T: ProtocolWithDep>(t: T) -> Int {
+  return 55555
+}

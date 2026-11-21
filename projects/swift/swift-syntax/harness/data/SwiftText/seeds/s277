@@ -1,0 +1,2 @@
+// Disallow use as an expression.
+if (#available(OSX 10.51, *)) {}

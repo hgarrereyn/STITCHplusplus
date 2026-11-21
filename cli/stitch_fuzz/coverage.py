@@ -1,6 +1,7 @@
 """`stitch cov`: run programs on a coverage build of the library and harness, write lcov + HTML.
 
-The coverage build uses clang source-based coverage (-fprofile-instr-generate -fcoverage-mapping)
+Other languages measure coverage in their reproducer (`repro --each --coverage DIR`, see
+languages/<lang>/); the C/C++ coverage build uses clang source-based coverage (-fprofile-instr-generate -fcoverage-mapping)
 and no sanitizers. It is a separate project image (`stitch-<project>:<ident>-cov`) built from the
 coverage base image, whose compiler wrappers switch flags when STITCH_COVERAGE=1, so project
 Dockerfiles need no changes.
@@ -24,7 +25,7 @@ CHUNK = 200  # programs per repro process
 def build_cov(p, rev=None, quiet=False):
     """Coverage image + reproducer binary. Returns (image, binary_rel, ident, commit)."""
     docker.check_docker()
-    base = docker.ensure_cov_base()
+    base = docker.ensure_cov_base(p.language)
     ctx, ident, commit = Source(p).materialize(rev)
     quiet = quiet or docker.image_exists(f"stitch-{p.name}:{ident}-cov")  # only a cache check
     image = docker.build_project_image(p, base, ctx, ident, quiet=quiet, variant="cov")
@@ -62,6 +63,24 @@ def _script(binary, out_rel, timeout, jobs, html):
     return "\n".join(lines)
 
 
+def _lang_script(binary, out_rel, timeout, html):
+    """Worker-runtime languages: the reproducer measures coverage itself (`--each --coverage DIR`)."""
+    b, o = shlex.quote(binary), shlex.quote("/project/" + out_rel)
+    return "\n".join([
+        "set -e",
+        f"{b} --each --timeout {timeout} --coverage {o} --files-from {o}/programs.txt > {o}/runs.jsonl 2> {o}/runs.log || true",
+        f"test -f {o}/lcov.info || {{ echo 'no coverage data written' >&2; tail -20 {o}/runs.log >&2; exit 3; }}",
+        # relative paths are relative to /project; harness snapshots map back to harness/
+        f"sed -e 's#^SF:\\([^/]\\)#SF:/project/\\1#' -e 's#^SF:/project/.stitch/[^:]*/app/#SF:/project/#' {o}/lcov.info > {o}/lcov.container.info",
+        f"rm -f {o}/lcov.info",
+        "" if html else f"rm -rf {o}/html",
+        f"grep '^SF:' {o}/lcov.container.info | cut -c4- | while read -r f; do "
+        f"case \"$f\" in /project/*) ;; *) mkdir -p {o}/sources\"$(dirname \"$f\")\" && cp \"$f\" {o}/sources\"$f\" || true;; esac; done",
+        f"grep '^FN:' {o}/lcov.container.info | cut -d, -f2- | sort -u > {o}/names.txt || true",
+        f"cp {o}/names.txt {o}/names.demangled.txt",
+    ])
+
+
 def parse_lcov(text):
     """[{path, lines:(found,hit), functions:[(name,line,count)], branches:(found,hit)}]"""
     files, cur = [], None
@@ -71,8 +90,10 @@ def parse_lcov(text):
         elif cur is None:
             continue
         elif line.startswith("FN:"):
-            ln, _, name = line[3:].partition(",")
-            cur["fn"][name] = int(ln)
+            # FN:<line>,<name> or (lcov 2) FN:<start>,<end>,<name>
+            parts = line[3:].split(",", 2)
+            name = parts[2] if len(parts) == 3 and parts[1].isdigit() else line[3:].partition(",")[2]
+            cur["fn"][name] = int(parts[0])
         elif line.startswith("FNDA:"):
             cnt, _, name = line[5:].partition(",")
             cur["fnda"][name] = cur["fnda"].get(name, 0) + int(cnt)
@@ -139,23 +160,37 @@ def rewrite_lcov(p, out: Path, text):
 
 def run(p, programs, out: Path, label, rev=None, timeout=10, jobs=4, html=True, quiet=False):
     """Run `programs` (paths relative to the project root) on the coverage build. Returns the summary."""
-    image, binary, ident, commit = build_cov(p, rev, quiet=quiet)
+    if p.language == "cpp":
+        image, binary, ident, commit = build_cov(p, rev, quiet=quiet)
+    elif rev:
+        from .cli import build_repro_at
+        image, binary, commit = build_repro_at(p, rev)
+    else:
+        from .cli import build
+        info = build(p, harness_only=True, quiet=quiet)
+        if not info["result"].get("ok"):
+            raise docker.DockerError("harness build failed (stitch build)")
+        image, binary, commit = info["image"], ".stitch/build/repro", info.get("commit")
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
     (out / "programs.txt").write_text("\n".join(programs) + "\n")
     out_rel = str(out.relative_to(p.root))
-    r = docker.run(p, image, ["sh", "-c", _script(binary, out_rel, timeout, jobs, html)], capture=True)
+    script = _script(binary, out_rel, timeout, jobs, html) if p.language == "cpp" else _lang_script(binary, out_rel, timeout, html)
+    r = docker.run(p, image, ["sh", "-c", script], capture=True)
     if r.returncode != 0:
         raise docker.DockerError(f"coverage run failed:\n{(r.stderr or '')[-3000:]}")
 
     runs = {"programs": 0, "ok": 0, "crashed": 0, "timeouts": 0, "invalid": 0}
     for line in (out / "runs.jsonl").read_text().splitlines():
         try:
-            for k, v in json.loads(line).items():
-                runs[k] = runs.get(k, 0) + v
+            rec = json.loads(line)
         except json.JSONDecodeError:
-            pass
+            continue
+        if isinstance(rec, dict):  # (other lines are program output that reached the file)
+            for k, v in rec.items():
+                if isinstance(v, int):
+                    runs[k] = runs.get(k, 0) + v
 
     raw = (out / "lcov.container.info").read_text()
     (out / "lcov.info").write_text(rewrite_lcov(p, out, raw))

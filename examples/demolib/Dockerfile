@@ -1,6 +1,6 @@
 # Build environment for the library under test.
-# STITCH passes two things:
-#   STITCH_BASE  the base image: clang + sanitizers + STITCH runtime. CC/CXX are wrappers that
+# STITCH++ passes two things:
+#   STITCH_BASE  the base image: clang + sanitizers + STITCH++ runtime. CC/CXX are wrappers that
 #                add coverage, cmplog and sanitizer instrumentation, so normal builds just work.
 #   source       a build context holding the library source at the requested revision
 #                (or your local checkout). Use it with COPY --from=source.

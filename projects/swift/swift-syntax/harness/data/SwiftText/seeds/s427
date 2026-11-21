@@ -1,0 +1,4 @@
+@_dynamicReplacement(for: dynamic_replaceable_var)
+var r : Int {
+  return 0
+}

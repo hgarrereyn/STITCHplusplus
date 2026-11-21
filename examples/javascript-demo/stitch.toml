@@ -1,0 +1,9 @@
+[project]
+name = "javascript-demo"
+language = "javascript"
+
+[source]
+path = "lib"
+
+[javascript]
+include = ["kvjs"]

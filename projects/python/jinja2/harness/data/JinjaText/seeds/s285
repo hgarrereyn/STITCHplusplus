@@ -1,0 +1,1 @@
+{{ "foo" is lower }}|{{ "FOO" is lower }}

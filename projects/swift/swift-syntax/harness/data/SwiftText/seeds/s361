@@ -1,0 +1,7 @@
+// We allow '.Type' in expr context
+func metaType() {
+  let _ = Foo.Type.self
+  let _ = Foo.Type.self
+  let _ = Foo.Type
+  let _ = type(of: Foo.Type)
+}

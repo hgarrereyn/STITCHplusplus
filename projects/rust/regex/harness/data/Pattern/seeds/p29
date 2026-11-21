@@ -1,0 +1,1 @@
+((IMG|CAM|MG|MB2)_|(DSCN|CIMG))(?P<n>[0-9]+)$

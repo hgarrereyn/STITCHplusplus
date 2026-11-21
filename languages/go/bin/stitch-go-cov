@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""`repro --coverage DIR ...` for Go: build with -cover, run the programs, write lcov.info + html/.
+
+usage: stitch-go-cov APP_DIR [repro args...] --coverage DIR
+"""
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+app = Path(sys.argv[1])
+args = sys.argv[2:]
+i = args.index("--coverage")
+out = Path(args[i + 1]).resolve()
+args = args[:i] + args[i + 2:]
+out.mkdir(parents=True, exist_ok=True)
+mod = app / "mod"
+env = dict(os.environ)
+env.setdefault("GOCACHE", "/project/.stitch/gocache")
+pkgs = [p for p in os.environ.get("STITCH_GO_COVERPKG", "").split(",") if p] + ["stitchharness/..."]
+race = ["-race"] if os.environ.get("STITCH_GO_RACE") else []
+binary = out / "covbin"
+r = subprocess.run(["go", "build", *race, "-cover", "-coverpkg=" + ",".join(pkgs), "-o", str(binary), "./cmd/worker"],
+                   cwd=mod, env=env, capture_output=True, text=True)
+if r.returncode != 0:
+    sys.stderr.write(r.stderr)
+    sys.exit(3)
+raw = out / "gocov"
+raw.mkdir(exist_ok=True)
+run = subprocess.run([str(binary), *args], env={**env, "GOCOVERDIR": str(raw)})
+txt = out / "cover.out"
+subprocess.run(["go", "tool", "covdata", "textfmt", "-i=" + str(raw), "-o", str(txt)], cwd=mod, env=env, check=True)
+fn = subprocess.run(["go", "tool", "cover", "-func=" + str(txt)], cwd=mod, env=env, capture_output=True, text=True)
+(out / "report.txt").write_text(fn.stdout + fn.stderr)
+(out / "html").mkdir(exist_ok=True)
+subprocess.run(["go", "tool", "cover", "-html=" + str(txt), "-o", str(out / "html" / "index.html")], cwd=mod, env=env)
+
+# import path of each package -> directory
+dirs = {}
+lst = subprocess.run(["go", "list", "-deps", "-f", "{{.ImportPath}} {{.Dir}}", "./..."], cwd=mod, env=env,
+                     capture_output=True, text=True)
+for l in lst.stdout.splitlines():
+    if " " in l:
+        ip, d = l.split(" ", 1)
+        dirs[ip] = d
+
+
+def local(path):
+    pkg, _, name = path.rpartition("/")
+    d = dirs.get(pkg)
+    if d:
+        p = f"{d}/{name}"
+        # the harness module is a snapshot of /project/harness
+        return p.replace(str(mod), "/project/harness")
+    return "/" + path
+
+
+lines = {}  # file -> {line: count}
+for l in txt.read_text().splitlines()[1:]:
+    m = re.match(r"(.+):(\d+)\.\d+,(\d+)\.\d+ \d+ (\d+)$", l)
+    if not m:
+        continue
+    f, a, b, c = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+    d = lines.setdefault(f, {})
+    for ln in range(a, b + 1):
+        d[ln] = max(d.get(ln, 0), c)
+funcs = {}
+for l in fn.stdout.splitlines():
+    m = re.match(r"(.+?):(\d+):\s+(\S+)\s+([\d.]+)%", l)
+    if m:
+        funcs.setdefault(m.group(1), []).append((int(m.group(2)), m.group(3), float(m.group(4)) > 0))
+lcov = []
+for f, d in sorted(lines.items()):
+    lcov.append(f"SF:{local(f)}")
+    fs = funcs.get(f, [])
+    for ln, name, hit in fs:
+        lcov += [f"FN:{ln},{name}", f"FNDA:{1 if hit else 0},{name}"]
+    lcov += [f"FNF:{len(fs)}", f"FNH:{sum(1 for x in fs if x[2])}"]
+    for ln in sorted(d):
+        lcov.append(f"DA:{ln},{d[ln]}")
+    lcov += [f"LF:{len(d)}", f"LH:{sum(1 for v in d.values() if v)}", "end_of_record"]
+(out / "lcov.info").write_text("\n".join(lcov) + "\n")
+binary.unlink(missing_ok=True)
+sys.exit(run.returncode)

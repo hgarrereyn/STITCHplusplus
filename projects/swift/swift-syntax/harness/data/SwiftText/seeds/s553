@@ -1,0 +1,3 @@
+@xyz class BadAttributes {
+  func exists() -> Bool { return true }
+}

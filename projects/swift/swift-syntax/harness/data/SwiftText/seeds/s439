@@ -1,0 +1,2 @@
+@_lexicalLifetimes
+func lexy(_ c: C) {}

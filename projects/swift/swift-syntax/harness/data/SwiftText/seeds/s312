@@ -1,0 +1,6 @@
+// Multiple cases per case block
+switch x {
+case 0:
+case 1:
+  x = 0
+}

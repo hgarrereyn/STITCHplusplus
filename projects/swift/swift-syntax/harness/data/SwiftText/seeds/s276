@@ -1,0 +1,6 @@
+// Disallow explicit wildcards.
+if #unavailable(OSX 10.51, *) {}
+// Disallow use as an expression.
+if (#unavailable(OSX 10.51)) {}
+let x = #unavailable(OSX 10.51)
+(#unavailable(OSX 10.51) ? 1 : 0)

@@ -1,0 +1,7 @@
+// <rdar://problem/21432429> Calling rethrows from rethrows crashes Swift compiler
+struct r21432429 {
+  func x(_ f: () throws -> ()) rethrows {}
+  func y(_ f: () throws -> ()) rethrows {
+    x(f)
+  }
+}

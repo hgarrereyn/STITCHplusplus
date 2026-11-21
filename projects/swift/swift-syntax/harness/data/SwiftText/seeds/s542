@@ -1,0 +1,30 @@
+@propertyWrapper
+struct FooWrapper<T> {
+    var value: T
+
+    init(wrappedValue: T) { value = wrappedValue }
+
+    var wrappedValue: T {
+        get { value }
+        nonmutating set {}
+    }
+    var projectedValue: T {
+        get { value }
+        nonmutating set {}
+    }
+}
+
+struct Foo {
+    @FooWrapper var wrapperTest: String
+
+    func copySelf() {
+        _ = copy self
+    }
+
+    func copyPropertyWrapper() {
+        // should still parse, even if it doesn't semantically work out
+        _ = copy wrapperTest // expected-error{{can only be applied to lvalues}}
+        _ = copy _wrapperTest // expected-error{{can only be applied to lvalues}}
+        _ = copy $wrapperTest // expected-error{{can only be applied to lvalues}}
+    }
+}

@@ -1,0 +1,4 @@
+{% macro level1(data1) %}
+{% macro level2(data2) %}{{ data1 }}|{{ data2 }}{% endmacro %}
+{{ level2('bar') }}{% endmacro %}
+{{ level1('foo') }}

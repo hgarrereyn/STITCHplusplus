@@ -1,0 +1,10 @@
+@inlinable
+@derivative(of: differentiableReduce)
+internal func _vjpDifferentiableReduce<Result: Differentiable>(
+  _ initialResult: Result,
+  _ nextPartialResult: @differentiable(reverse) (Result, Element) -> Result
+) -> (
+  value: Result,
+  pullback: (Result.TangentVector)
+    -> (Array.TangentVector, Result.TangentVector)
+) {}

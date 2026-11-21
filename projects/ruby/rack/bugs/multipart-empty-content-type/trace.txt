@@ -1,0 +1,18 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/22b3d9327a2fd02e.stp
+[stitch] #0 multipart(body=Str[94,decoded]"--AaB03x\x0d\nContent-Disposition: form-data; name=\"b\"\x0d\nContent-Type: \x0d\n\x0d\n\xef\xbf\xbd~\xef\xbf\xbd9l?\x0d\n--AaB03x--\x0d\n", boundary="AaB03x")
+
+[stitch] EXCEPTION in multipart: NoMethodError: undefined method 'strip!' for nil
+    #0 0x0 in Rack::Multipart::Parser#tag_multipart_encoding /src/lib/rack/multipart/parser.rb:340
+    #1 0x0 in block (2 levels) in Rack::Multipart::Parser#result /src/lib/rack/multipart/parser.rb:194
+    #2 0x0 in Rack::Multipart::Parser::Collector::MimePart#get_data /src/lib/rack/multipart/parser.rb:104
+    #3 0x0 in block in Rack::Multipart::Parser#result /src/lib/rack/multipart/parser.rb:193
+    #4 0x0 in block in Rack::Multipart::Parser::Collector#each /src/lib/rack/multipart/parser.rb:127
+    #5 0x0 in Array#each /src/lib/rack/multipart/parser.rb:127
+    #6 0x0 in Rack::Multipart::Parser::Collector#each /src/lib/rack/multipart/parser.rb:127
+    #7 0x0 in Rack::Multipart::Parser#result /src/lib/rack/multipart/parser.rb:192
+    #8 0x0 in Rack::Multipart::Parser.parse /src/lib/rack/multipart/parser.rb:81
+    #9 0x0 in Rack::Multipart.extract_multipart /src/lib/rack/multipart.rb:54
+    #10 0x0 in Rack::Multipart.parse_multipart /src/lib/rack/multipart.rb:42
+    #11 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:122
+    #12 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+

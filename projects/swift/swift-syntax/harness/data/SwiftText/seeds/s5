@@ -1,0 +1,9 @@
+    """#
+  )
+}
+
+func testMultilineString45() {
+  assertParse(
+    #"""
+    _ = "hello\("""
+                "world'

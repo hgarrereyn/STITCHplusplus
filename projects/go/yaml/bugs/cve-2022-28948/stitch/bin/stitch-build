@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Build a STITCH Go harness inside the project image.
+
+harness/*.go (package harness) becomes the module `stitchharness` in <out>/app/mod, with
+`stitch` and the library (stitch.toml [go] module, replaced by /src) as dependencies. Writes
+  <out>/app/worker      instrumented worker (-d=libfuzzer counters and comparison hooks)
+  <out>/app/repro       plain build for reproducers
+  <out>/fuzzer, <out>/repro, <out>/manifest.json
+stitch.toml [go]: module = "example.com/lib"     import path of the library (source at /src)
+                  instrument = ["example.com/lib/..."]  packages to instrument (default: all but std)
+                  race = false                   build with the race detector
+                  tags = []                      extra build tags
+"""
+import argparse
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+
+def run(cmd, cwd, env):
+    return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--project", default="/project")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--target", default="all")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    proj = Path(a.project).resolve()
+    cfg = tomllib.loads((proj / "stitch.toml").read_text()) if (proj / "stitch.toml").exists() else {}
+    go = cfg.get("go", {})
+    out = Path(a.out) if a.out else proj / ".stitch" / "build"
+    if not out.is_absolute():
+        out = proj / out
+    out.mkdir(parents=True, exist_ok=True)
+    app = out / "app"
+    mod = app / "mod"
+    shutil.rmtree(app, ignore_errors=True)
+    mod.mkdir(parents=True)
+    srcs = [p for p in (proj / "harness").rglob("*.go") if "data" not in p.relative_to(proj / "harness").parts[:1]]
+    if not srcs:
+        return finish(a, {"ok": False, "errors": [{"file": "harness", "output": "no harness/*.go files"}]})
+    for p in srcs:
+        dst = mod / p.relative_to(proj / "harness")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, dst)
+    lib = go.get("module")
+    replace = go.get("replace", "/src" if lib and Path("/src/go.mod").exists() else None)
+    if (proj / "harness" / "go.mod").exists():
+        gomod = (proj / "harness" / "go.mod").read_text()
+        gomod = "module stitchharness\n" + "\n".join(l for l in gomod.splitlines() if not l.startswith("module "))
+    else:
+        gomod = "module stitchharness\n\ngo 1.22\n"
+        if lib:
+            # major version suffix (/v2, gopkg.in/x.v3) requires a matching placeholder version
+            m = re.search(r"[/.]v(\d+)$", lib)
+            ver = f"v{m.group(1)}.0.0" if m and int(m.group(1)) >= 2 else "v0.0.0"
+            gomod += f"\nrequire {lib} {ver}\n"
+    gomod += "\nrequire stitch v0.0.0\nreplace stitch => /stitch/go/stitch\n"
+    if lib and replace:
+        gomod += f"replace {lib} => {replace}\n"
+    (mod / "go.mod").write_text(gomod)
+    if (proj / "harness" / "go.sum").exists():
+        shutil.copy2(proj / "harness" / "go.sum", mod / "go.sum")
+    (mod / "cmd" / "worker").mkdir(parents=True)
+    (mod / "cmd" / "worker" / "main.go").write_text(
+        'package main\n\nimport (\n\t"stitch"\n\t_ "stitchharness"\n)\n\nfunc main() { stitch.Main() }\n')
+    env = dict(os.environ)
+    env.setdefault("GOCACHE", str(proj / ".stitch" / "gocache"))
+    env["GOFLAGS"] = "-mod=mod"
+    r = run(["go", "mod", "tidy"], mod, env)
+    if r.returncode != 0:
+        return finish(a, {"ok": False, "errors": [{"file": "go mod tidy", "output": r.stderr[-8000:]}]})
+    tags = list(go.get("tags", []))
+    race = ["-race"] if go.get("race") else []
+    if race:
+        env["CGO_ENABLED"] = "1"
+    instr = go.get("instrument") or ["all"]
+    gcflags = [f"-gcflags={p}=-d=libfuzzer" for p in instr] + ["-gcflags=std=", "-gcflags=stitch="]
+    if instr != ["all"]:
+        gcflags = [f"-gcflags={p}=-d=libfuzzer" for p in instr + ["stitchharness/..."]]
+    jobs = [("worker", ["-tags", ",".join(tags + ["stitchcov"])] + gcflags + ["-ldflags=-checklinkname=0"]),
+            ("repro", (["-tags", ",".join(tags)] if tags else []))]
+    if a.target == "repro":
+        jobs = jobs[1:]
+    for name, flags in jobs:
+        r = run(["go", "build", *race, *flags, "-o", str(app / name), "./cmd/worker"], mod, env)
+        if r.returncode != 0:
+            return finish(a, {"ok": False, "errors": [{"file": f"go build ({name})", "output": r.stderr[-8000:]}]})
+    if not (app / "worker").exists():
+        shutil.copy2(app / "repro", app / "worker")
+    cov = " ".join(shlex.quote(x) for x in ([lib + "/..."] if lib else []))
+    head = ["#!/bin/sh", 'HERE="$(cd "$(dirname "$0")" && pwd)"',
+            f"export STITCH_GO_COVERPKG={shlex.quote(','.join(go.get('instrument') or ([lib + '/...'] if lib else [])))}",
+            f"export STITCH_GO_RACE={'1' if race else ''}"]
+    (out / "fuzzer").write_text("\n".join(head + ['export STITCH_WORKER="\'$HERE/app/worker\' worker"',
+                                                  'exec /stitch/bin/stitch-engine "$@"', ""]))
+    (out / "repro").write_text("\n".join(head + [
+        'case " $* " in *" --coverage "*) exec /stitch/bin/stitch-go-cov "$HERE/app" "$@";; esac',
+        'exec "$HERE/app/repro" "$@"', ""]))
+    for f in ("fuzzer", "repro"):
+        (out / f).chmod(0o755)
+    r = subprocess.run([str(out / "repro"), "--manifest"], capture_output=True, text=True, cwd=proj)
+    if r.returncode != 0 or not r.stdout.strip():
+        return finish(a, {"ok": False, "errors": [{"file": "harness", "output": (r.stderr or r.stdout)[-8000:]}]})
+    m = json.loads(r.stdout.strip().splitlines()[-1])
+    (out / "manifest.json").write_text(json.dumps(m))
+    return finish(a, {"ok": True, "endpoints": len(m["endpoints"]), "objects": len(m["objects"]),
+                      "datatypes": len(m["datatypes"]), "errors": []})
+
+
+def finish(a, res):
+    if a.json:
+        print(json.dumps(res))
+    elif res["ok"]:
+        print(f"built: {res['endpoints']} endpoints, {res['objects']} object types, {res['datatypes']} datatypes")
+    else:
+        for e in res["errors"]:
+            sys.stderr.write(e["output"] + "\n")
+    sys.exit(0 if res["ok"] else 1)
+
+
+if __name__ == "__main__":
+    main()

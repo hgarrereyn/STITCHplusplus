@@ -1,0 +1,6 @@
+{% for row in table %}
+            {%- set rowloop = loop -%}
+            {% for cell in row -%}
+                [{{ rowloop.index }}|{{ loop.index }}]
+            {%- endfor %}
+        {%- endfor %}

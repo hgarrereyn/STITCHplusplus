@@ -1,0 +1,1 @@
+// Conflict marker parsing should never conflict with operator parsing.

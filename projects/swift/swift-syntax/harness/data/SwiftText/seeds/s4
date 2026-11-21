@@ -1,0 +1,12 @@
+    """#
+  )
+}
+
+func testMultilineString27() {
+  // contains trailing whitespace
+  assertParse(
+    #"""
+    _ = """
+        foo
+
+        bar

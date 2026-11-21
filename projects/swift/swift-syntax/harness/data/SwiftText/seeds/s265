@@ -1,0 +1,2 @@
+// Bool then #available.
+if 1 != 2, #available(iOS 8.0, *) {}

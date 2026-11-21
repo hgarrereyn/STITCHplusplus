@@ -1,0 +1,4 @@
+// Parsing await syntax.
+struct MyFuture {
+  func await() -> Int { 0 }
+}

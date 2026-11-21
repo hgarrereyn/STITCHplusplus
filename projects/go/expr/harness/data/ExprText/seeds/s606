@@ -1,0 +1,1 @@
+type(true ? f64 : array)

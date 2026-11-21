@@ -1,0 +1,8 @@
+(.+)(?-u)(.+)",
+    R(b"\xCE\x93\xCE\x94\xFF"),
+    Some((0, 5)),
+    Some((0, 4)),
+    Some((4, 5))
+);
+
+mat!(case_ascii_one, r"(?i-u)a

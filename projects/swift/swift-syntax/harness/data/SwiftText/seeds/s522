@@ -1,0 +1,2 @@
+@backDeployed(before: macOS 12.0)
+struct Foo {}

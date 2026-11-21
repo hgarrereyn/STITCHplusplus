@@ -1,0 +1,2 @@
+@objc(_:)
+func f(_: Int)

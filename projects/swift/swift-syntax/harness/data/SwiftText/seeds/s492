@@ -1,0 +1,2 @@
+@available(OSX 10.0, deprecated: 10.12)
+func shorthandFollowedByDeprecated() {}

@@ -1,0 +1,12 @@
+[project]
+name = "python-demo"
+language = "python"
+
+[source]
+path = "lib"
+
+[python]
+include = ["kvlib"]
+
+[fuzz]
+timeout_ms = 2000

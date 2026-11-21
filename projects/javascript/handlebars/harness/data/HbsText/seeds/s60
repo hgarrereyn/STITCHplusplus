@@ -1,0 +1,1 @@
+{{#hellos}}{{text/this/foo}}{{/hellos}}

@@ -1,0 +1,1 @@
+{% set ns = namespace(foo="Bar") %}{{ ns.foo }}

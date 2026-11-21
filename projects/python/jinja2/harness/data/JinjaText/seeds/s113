@@ -1,0 +1,1 @@
+{% extends "master.html" %}{% block item %}{{ super() }}|{{ item * 2 }}{% endblock %}

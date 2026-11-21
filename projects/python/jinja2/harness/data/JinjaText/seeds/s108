@@ -1,0 +1,1 @@
+{% autoescape true %}{% set x = "<x>" %}{{ x }}{% endautoescape %}{{ x }}{{ "<y>" }}

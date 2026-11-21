@@ -1,0 +1,1 @@
+{{#each array as |value|}}{{blockParams value.name}}{{/each}}

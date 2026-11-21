@@ -1,0 +1,4 @@
+@propertyWrapper
+struct Wrapper {
+  var wrappedValue = 0
+}

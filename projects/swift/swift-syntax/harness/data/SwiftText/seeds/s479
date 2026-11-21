@@ -1,0 +1,3 @@
+@available(*, unavailable, message: " ")
+func emptyMessage() {}
+emptyMessage()

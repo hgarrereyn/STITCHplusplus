@@ -1,0 +1,2 @@
+// <rdar://problem/19786845> Warn on "let" and "var" when no data is bound in a pattern
+enum SimpleEnum { case Bar }

@@ -1,0 +1,2 @@
+Expected \(expected.count) tokens but got \(actual.count):
+\(actual.map({ "\($0.rawTokenKind) '\($0.tokenText)'" }).joined(separator: "\n"))

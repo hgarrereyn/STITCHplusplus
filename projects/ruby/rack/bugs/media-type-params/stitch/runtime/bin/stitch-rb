@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The Ruby worker and reproducer (see lib/stitch/main.rb).
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+require "stitch"
+require "stitch/main"
+exit Stitch::Main.main(ARGV)

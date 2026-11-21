@@ -1,0 +1,2 @@
+@available(*, introduced: 4.0, deprecated: 4.1, obsoleted: 4.2)
+func allPlatformsDeprecatedAndObsoleted2() {}

@@ -1,0 +1,16 @@
+# STITCH++ project. Guide: `stitch guide`. JavaScript API: `stitch guide javascript`.
+[project]
+name = "mathjs"
+language = "javascript"
+
+[source]
+git = "https://github.com/josdejong/mathjs"
+rev = "v9.5.2"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[javascript]
+include = ["mathjs", "fraction.js", "complex.js", "typed-function"]   # package names of the code under test (instrumented while fuzzing)
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1

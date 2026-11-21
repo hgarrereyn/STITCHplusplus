@@ -1,0 +1,7 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/2142e831d298e5bb.min.stp
+[stitch] #0 fromJsonML(text=Str[4,decoded]"</a>")
+
+[stitch] EXCEPTION in fromJsonML: ClassCastException: class java.lang.String cannot be cast to class org.json.JSONArray (java.lang.String is in module java.base of loader 'bootstrap'; org.json.JSONArray is in unnamed module of loader 'app')
+    #0 0x0 in JSONML.toJSONArray /org/json/JSONML.java:257
+    #1 0x0 in Stubs.fromJsonML /project/harness/Stubs.java:101
+

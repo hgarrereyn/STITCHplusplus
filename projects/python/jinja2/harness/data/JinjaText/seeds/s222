@@ -1,0 +1,1 @@
+{% set foo | trim | length | string %} 42    {% endset %}{{ foo }}

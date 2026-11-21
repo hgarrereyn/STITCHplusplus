@@ -1,0 +1,4 @@
+"""
+\(gen(xx) { (x) in
+    return """
+    case

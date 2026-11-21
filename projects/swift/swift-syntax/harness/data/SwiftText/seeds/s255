@@ -1,0 +1,5 @@
+// <rdar://problem/23719432> [practicalswift] Compiler crashes on &(Int:_)
+func test23719432() {
+  var x = 42
+    &(Int:x)
+}

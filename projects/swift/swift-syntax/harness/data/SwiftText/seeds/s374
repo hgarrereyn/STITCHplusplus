@@ -1,0 +1,3 @@
+// https://github.com/apple/swift/issues/46040
+// See test/Compatibility/enum_element_pattern.swift for Swift3 behavior.
+// As for FIXME cases: see https://github.com/apple/swift/issues/46054

@@ -1,0 +1,1 @@
+{% autoescape foo %}{{ {"foo": "<test>"}|xmlattr|escape }}{% endautoescape %}

@@ -1,0 +1,5 @@
+@B<Float>.Generic<Float> var test2: Int {
+  1
+  2
+  3
+}

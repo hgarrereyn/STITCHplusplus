@@ -1,0 +1,4 @@
+// <rdar://problem/23086402> Swift compiler crash in CSDiag
+protocol A23086402 {
+  var b: B23086402 { get }
+}

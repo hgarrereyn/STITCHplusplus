@@ -1,0 +1,1 @@
+{% macro say_hello(name) %}<p>Hello {{ name }}!</p>{% endmacro %}{{ say_hello("<blink>foo</blink>") }}

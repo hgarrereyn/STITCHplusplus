@@ -1,23 +1,27 @@
 ---
 name: stitch
-description: Fuzz the API of a C or C++ library with STITCH. Covers the Dockerfile that builds the library, C++ harness stubs, fuzzing campaigns, the health report, crash triage, and reproducers. Use when asked to fuzz a C/C++ library, write or fix a STITCH harness, or triage STITCH crashes.
+description: Fuzz the API of a C, C++, Python, JavaScript, Java, Go, Rust, Ruby or Swift library with STITCH++. Covers the Dockerfile that builds the library, harness stubs, fuzzing campaigns, the health report, crash triage, coverage and reproducers. Use when asked to fuzz a library, write or fix a STITCH++ harness, or triage STITCH++ crashes.
 ---
 
-# STITCH
+# STITCH++
 
-STITCH fuzzes a library through its API. You write small C++ functions (stubs) that call the
-library. The fuzzer chains stubs into programs, mutates their arguments, and reports crashes.
-Everything builds and runs in Docker.
+STITCH++ fuzzes a library through its API. You write small functions (stubs) that call the library.
+The fuzzer chains stubs into programs, mutates their arguments, and reports crashes. Everything
+builds and runs in Docker.
+
+Harness languages: C/C++ (this page), Python, JavaScript, Java, Go, Rust, Ruby, Swift. The workflow and commands
+are the same; only the stub syntax and the Dockerfile differ. For another language, read its page:
+`stitch guide python` (or `javascript`, `java`, `go`, `rust`, `ruby`, `swift`).
 
 ## Setup
 
 ```sh
 pip install stitch-fuzz
-stitch setup
+stitch setup --lang cpp        # or python, javascript, java, go, rust, ruby, swift (repeat for several)
 ```
 
-`stitch setup` checks Docker and downloads the base image (or builds it once if no prebuilt image
-exists for this version). Needs Docker with buildx. Every command accepts `--json`.
+`stitch setup` checks Docker and downloads the language image (or builds it once if no prebuilt
+image exists for this version). Needs Docker with buildx. Every command accepts `--json`.
 
 ## Workflow
 
@@ -35,6 +39,7 @@ stitch init cjson --git https://github.com/DaveGamble/cJSON --rev v1.7.18
 cd cjson
 ```
 
+Other languages: `stitch init tomlkit --lang python --git https://github.com/python-poetry/tomlkit --rev 0.13.2`.
 For a local checkout use `--path ../cJSON` instead of `--git`. This creates:
 
 - `stitch.toml`: source, compile flags, fuzzing options
@@ -43,7 +48,7 @@ For a local checkout use `--path ../cJSON` instead of `--git`. This creates:
 
 ## 2. Build the library
 
-The Dockerfile starts from the STITCH base image. The library source arrives as the `source` build context.
+The Dockerfile starts from the STITCH++ base image. The library source arrives as the `source` build context.
 
 ```dockerfile
 ARG STITCH_BASE
@@ -258,9 +263,13 @@ Decide for each crash:
   stitch repro c1           # Docker reproducer folder, verified from scratch
   stitch bisect c1          # commit that introduced the bug (--good v1.0 if you know a good version)
   stitch bisect c1 --fixed  # commit that fixed it, if HEAD no longer crashes
-  stitch write c1           # the crash as one standalone C++ file
+  stitch write c1           # the crash as one standalone source file
   ```
 - **Unsure**: read the library source at the top stack frames.
+
+A `timeout` bucket is a program that runs past the campaign's `timeout_ms`, named by the call that
+was running (`stitch exec` prints how long it took). It is usually a real slowness bug (a regex with
+catastrophic backtracking, a quadratic loop), unless the stub itself loops for long.
 
 ### Minimal reproducer
 
@@ -303,7 +312,7 @@ Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
 | Command | Does |
 |---|---|
 | `stitch setup` | check Docker, get the base image |
-| `stitch init DIR --git URL --rev REV` | new project (`--path DIR` for local code) |
+| `stitch init DIR --git URL --rev REV [--lang L]` | new project (`--path DIR` for local code) |
 | `stitch build [--rev REV] [--image-only]` | build the library image and the harness |
 | `stitch check` | build + static checks |
 | `stitch probe [STUBS] --secs N` | short run + report (`STUBS`: `'parse,tree/*'`) |
@@ -315,11 +324,11 @@ Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
 | `stitch minimize ID` | shrink a crashing program |
 | `stitch repro ID` | Docker reproducer folder |
 | `stitch bisect ID [--good REV] [--fixed]` | find the commit that introduced (or fixed) a crash |
-| `stitch write ID` | standalone C++ file of a crash |
+| `stitch write ID` | standalone source file of a crash (every language) |
 | `stitch try FILE` | build and run a standalone file, compare the crash |
 | `stitch sample TYPE -n N` | values a decoder produces |
 | `stitch shell` | shell in the project image (project at `/project`) |
-| `stitch guide [api\|reproducers]` | print this guide or a reference |
+| `stitch guide [TOPIC]` | this guide; topics: `api`, `reproducers`, `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift` |
 
 ## Files
 

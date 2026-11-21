@@ -1,0 +1,13 @@
+// Check that we handle multiple consecutive right braces.
+}
+}
+func foo() {}
+// Check that we handle multiple consecutive right braces.
+}
+}
+func bar() {}
+//===--- Recovery for extra braces at top level.
+//===--- Keep this test the last one in the file.
+// Check that we handle multiple consecutive right braces.
+}
+}

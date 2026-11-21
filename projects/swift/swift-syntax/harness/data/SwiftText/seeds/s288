@@ -1,0 +1,7 @@
+// Fallthroughs can only transfer control into a case label with bindings if the previous case binds a superset of those vars.
+switch t {
+case (1, 2):
+  fallthrough
+case (var a, var b):
+  t = (b, a)
+}

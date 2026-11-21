@@ -1,0 +1,9 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/ecdb08112bf8faf5.min.stp
+[stitch] #0 stringify_roundtrip(s=Src[15]7f6105ffffff050a20203f20783a0a, indent=3, lineWidth=21)
+[stitch]     log: value: " ? x:\n" 
+  text: "|1\n ? x:\n"
+[stitch]     log: parsed: "? x:\n"
+
+[stitch] CHECK FAILED: stringify/parse roundtrip (node 0)
+    #0 0x0 in Endpoint.fn /project/.stitch/build/app/harness/stubs.js:158
+

@@ -1,0 +1,6 @@
+// Parsing errors
+struct A0 {
+  subscript -> Int {
+    return 1
+  }
+}

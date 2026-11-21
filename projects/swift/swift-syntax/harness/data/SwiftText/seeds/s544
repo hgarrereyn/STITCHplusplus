@@ -1,0 +1,5 @@
+@propertyWrapper
+struct Wrapper {
+  var wrappedValue: Int
+  var projectedValue: String { String(wrappedValue) }
+}

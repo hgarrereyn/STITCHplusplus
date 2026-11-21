@@ -1,0 +1,2 @@
+Expected \(spec.fixIts.count) fix its but received \(diag.fixIts.count):
+\(diag.fixIts.map { $0.message.message }.joined(separator: "\n"))

@@ -1,0 +1,13 @@
+[project]
+name = "yaml"
+language = "javascript"
+
+[source]
+git = "https://github.com/eemeli/yaml"
+rev = "v2.6.1"
+
+[javascript]
+include = ["yaml"]
+
+[fuzz]
+timeout_ms = 3000

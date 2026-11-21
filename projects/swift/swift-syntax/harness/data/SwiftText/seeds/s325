@@ -1,0 +1,3 @@
+// Not a "version" check, so don't short-circuit.
+#if os(macOS) && hasGreeble(blah)
+#endif

@@ -1,0 +1,19 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/88aeda8effb61f00.stp
+[stitch] #0 template(text=Str[16,decoded]"/path{=%41,list}")
+[stitch]     -> ok produced o0.0
+[stitch] #1 expand_extract(t=o0.0, a=Str[4]"(\x97g\x1e", b=Str[1]"A")
+[stitch]     log: expanded: "/path%28%EF%BF%BDg%1E,A"
+[stitch]     -> ok
+[stitch] #2 template(text=Str[113,decoded]"/pathx}&a?x={?a*,_:0,keys}_.yPqIk%^G-G^Or*B6#=CT)=|i~AQ_vN*tTv}gGq2\"DVHP{()o'a.@$cg6nI Yf*{\\5k}a]Mct`H6Wb&F.14W{.")
+[stitch]     -> ok produced o2.0
+[stitch] #3 partial_expand(t=o2.0, v=Str[3]"q~4")
+
+[stitch] EXCEPTION in partial_expand: RegexpError: numbered backref/call is not allowed. (use name): /^\/pathx\}&a\?x=(?:|\?(?<a>(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*=(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*?(?:&?(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*=(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*?)*)?&?(?<_>(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*=(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*?)?&?(?<keys>(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*=(?:[a-zA-Z0-9\-\.\_\~]|%[a-fA-F0-9][a-fA-F0-9])*?)?
+    #0 0x0 in Regexp#initialize /src/lib/addressable/template.rb:1041
+    #1 0x0 in Class#new /src/lib/addressable/template.rb:1041
+    #2 0x0 in Addressable::Template#parse_template_pattern /src/lib/addressable/template.rb:1041
+    #3 0x0 in Addressable::Template#ordered_variable_defaults /src/lib/addressable/template.rb:693
+    #4 0x0 in Addressable::Template#variables /src/lib/addressable/template.rb:609
+    #5 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:154
+    #6 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+

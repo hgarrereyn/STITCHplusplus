@@ -1,0 +1,2 @@
+// Cases are excluded from non-enums.
+case FloatingCase

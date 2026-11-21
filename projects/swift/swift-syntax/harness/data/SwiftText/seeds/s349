@@ -1,0 +1,8 @@
+// Test operators.
+func *(a : String, b : String) throws -> Int { return 42 }
+let _ = "foo"
+        *
+        "bar"
+let _ = try! "foo"*"bar"
+let _ = try? "foo"*"bar"
+let _ = (try? "foo"*"bar") ?? 0

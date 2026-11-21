@@ -1,0 +1,4 @@
+Removing trivia, formatting using BasicFormat and re-parsing did not produce the same syntax tree.
+
+Formatted source:
+\(formatted)

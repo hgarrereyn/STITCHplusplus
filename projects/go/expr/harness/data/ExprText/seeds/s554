@@ -1,0 +1,1 @@
+toJSON(findLast(list, true))

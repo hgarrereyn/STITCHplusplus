@@ -1,0 +1,1 @@
+{{ 'static'|customfilter }} {{ arg|customfilter }}

@@ -1,0 +1,5 @@
+@frozen
+#if hasAttribute(foo)
+@foo
+#endif
+public struct S2 { }

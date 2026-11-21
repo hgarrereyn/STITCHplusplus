@@ -1,0 +1,2 @@
+@available(swift, deprecated)
+func swiftDeprecated() {}

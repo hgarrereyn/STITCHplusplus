@@ -1,0 +1,3 @@
+// Per rdar://problem/32316666 , it is a common mistake for beginners
+// to start a function name with a number, so it's worth
+// special-casing the diagnostic to make it clearer.

@@ -1,0 +1,2 @@
+@_originallyDefinedIn(module: "foo")
+public class ToplevelClass1 {}

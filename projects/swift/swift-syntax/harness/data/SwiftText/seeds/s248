@@ -1,0 +1,5 @@
+// <rdar://problem/21369926> Malformed Swift Enums crash playground service
+enum Rank: Int {
+  case Ace = 1
+  case Two = 2.1
+}

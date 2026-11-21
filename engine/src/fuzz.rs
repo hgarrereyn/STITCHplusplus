@@ -11,7 +11,7 @@ use libafl::executors::{ExitKind, InProcessForkExecutor};
 use libafl::feedbacks::{Feedback, MaxMapFeedback, StateInitializer};
 use libafl::fuzzer::{Evaluator, Fuzzer, StdFuzzer};
 use libafl::monitors::SimpleMonitor;
-use libafl::observers::{CanTrack, HitcountsMapObserver, StdMapObserver};
+use libafl::observers::{CanTrack, HitcountsMapObserver, VariableMapObserver};
 use libafl::schedulers::{IndexesLenTimeMinimizerScheduler, QueueScheduler};
 use libafl::stages::StdMutationalStage;
 use libafl::common::HasMetadata;
@@ -42,7 +42,8 @@ pub struct FuzzConfig {
 /// Records every execution into the health statistics; never marks anything interesting.
 pub struct StatsFeedback {
     edges: *mut u8,
-    n_edges: usize,
+    /// usable length of the map (changes for worker runtimes)
+    len: *const usize,
 }
 
 impl Named for StatsFeedback {
@@ -63,7 +64,7 @@ impl<EM, OT, S> Feedback<EM, Program, OT, S> for StatsFeedback {
         _observers: &OT,
         exit_kind: &ExitKind,
     ) -> Result<bool, Error> {
-        let edges = unsafe { std::slice::from_raw_parts(self.edges, self.n_edges) };
+        let edges = unsafe { std::slice::from_raw_parts(self.edges, *self.len) };
         health::with(|h| h.record(input, exit_kind, edges));
         Ok(false)
     }
@@ -140,6 +141,7 @@ macro_rules! campaign {
     let executor = &mut $executor;
     let state = &mut $state;
     let mgr = &mut $mgr;
+    let start = Instant::now(); // before loading: those executions count toward execs/s
     // resume from the existing corpus + imported programs
     let mut dirs = vec![cfg.out.join("corpus")];
     dirs.extend(cfg.import.iter().cloned());
@@ -191,7 +193,6 @@ macro_rules! campaign {
     );
 
     let mut stages = tuple_list!(CmplogStage, StdMutationalStage::new(StitchMutator::new()));
-    let start = Instant::now();
     let mut last_stats = Instant::now();
     let mut last_clean = Instant::now();
     let mut last_sync = Instant::now();
@@ -248,14 +249,20 @@ pub fn run(cfg: FuzzConfig) -> Result<(), Error> {
     health::init(n_edges);
     unsafe { ffi::stitch_init_once() };
 
-    let edges_observer =
-        unsafe { HitcountsMapObserver::new(StdMapObserver::from_mut_ptr("edges", edges_ptr, n_edges)).track_indices() };
+    // The usable part of the map: all of it for in-process runtimes; for worker runtimes, the
+    // edges seen so far (worker.rs numbers them densely), so per-run passes stay proportional to
+    // the coverage of the library rather than to the worker's map size.
+    let len_ptr: *mut usize =
+        if crate::worker::active() { crate::worker::with(|c| c.dense_len_ptr()) } else { Box::leak(Box::new(n_edges)) };
+    let edges_observer = unsafe {
+        HitcountsMapObserver::new(VariableMapObserver::from_mut_ptr("edges", edges_ptr, n_edges, len_ptr)).track_indices()
+    };
     let map_feedback = MaxMapFeedback::new(&edges_observer);
     let mut feedback = map_feedback;
     // the objective runs on every execution (the corpus feedback is skipped for crashes), so the
     // statistics hook lives there
     let mut objective =
-        feedback_or!(StatsFeedback { edges: edges_ptr, n_edges }, SolutionFeedback { cap: 5, saved: Default::default() });
+        feedback_or!(StatsFeedback { edges: edges_ptr, len: len_ptr }, SolutionFeedback { cap: 5, saved: Default::default() });
 
     let mut state = StdState::new(
         StdRand::with_seed(cfg.seed),
@@ -286,7 +293,14 @@ pub fn run(cfg: FuzzConfig) -> Result<(), Error> {
     let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, QueueScheduler::new());
     let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
 
-    if cfg.persistent > 0 {
+    if crate::worker::active() {
+        let mut executor = crate::worker::WorkerExecutor::new(
+            tuple_list!(edges_observer),
+            Duration::from_millis(cfg.timeout_ms),
+            cfg.persistent,
+        );
+        campaign!(cfg, fuzzer, executor, state, mgr, n_edges)
+    } else if cfg.persistent > 0 {
         let mut executor = crate::persistent::PersistentExecutor::new(
             tuple_list!(edges_observer),
             Duration::from_millis(cfg.timeout_ms),
@@ -296,8 +310,11 @@ pub fn run(cfg: FuzzConfig) -> Result<(), Error> {
     } else {
         let mut harness = |input: &Program| {
             let b = input.serialize();
-            unsafe { ffi::stitch_exec(b.as_ptr(), b.len(), 0) };
-            ExitKind::Ok
+            if unsafe { ffi::stitch_exec(b.as_ptr(), b.len(), 0) } == ffi::EXEC_FINDING {
+                ExitKind::Crash
+            } else {
+                ExitKind::Ok
+            }
         };
         let mut executor = InProcessForkExecutor::new(
             &mut harness,

@@ -1,0 +1,15 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/436d1c4024c2218a.stp
+[stitch] #0 heuristic_parse(text=Str[27,decoded]"https://localhost%41\x00\x00\x00\x1d%FF")
+[stitch]     -> ok produced o0.0
+[stitch] #1 normalize(u=o0.0)
+
+[stitch] EXCEPTION in normalize: ArgumentError: invalid byte sequence in UTF-8
+    #0 0x0 in String#gsub /src/lib/addressable/uri.rb:467
+    #1 0x0 in Addressable::URI.unencode /src/lib/addressable/uri.rb:467
+    #2 0x0 in Addressable::URI.normalize_component /src/lib/addressable/uri.rb:563
+    #3 0x0 in Addressable::URI#normalized_host /src/lib/addressable/uri.rb:1126
+    #4 0x0 in Addressable::URI#normalized_authority /src/lib/addressable/uri.rb:1246
+    #5 0x0 in Addressable::URI#normalize /src/lib/addressable/uri.rb:2170
+    #6 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:71
+    #7 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+

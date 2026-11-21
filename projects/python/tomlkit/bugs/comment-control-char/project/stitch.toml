@@ -1,0 +1,13 @@
+[project]
+name = "tomlkit"
+language = "python"
+
+[source]
+git = "https://github.com/python-poetry/tomlkit"
+rev = "0.13.2"
+
+[python]
+include = ["tomlkit"]
+
+[fuzz]
+timeout_ms = 3000

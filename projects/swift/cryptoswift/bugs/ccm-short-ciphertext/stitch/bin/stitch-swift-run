@@ -1,0 +1,5 @@
+#!/bin/bash
+# stitch-swift-run BINARY ARGS...: run with Swift names in stderr demangled (stdout and the exit
+# code kept)
+{ "$@" 2>&1 1>&3 3>&- | swift-demangle --simplified >&2; rc=${PIPESTATUS[0]}; } 3>&1
+exit $rc

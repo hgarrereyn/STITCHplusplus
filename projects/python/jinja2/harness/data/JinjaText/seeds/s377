@@ -1,0 +1,1 @@
+{{ foo|batch(3)|list }}|{{ foo|batch(3, 'X')|list }}

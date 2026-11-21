@@ -1,0 +1,2 @@
+A<B?>(x: 0) // parses as type
+_ = a < b ? c : d

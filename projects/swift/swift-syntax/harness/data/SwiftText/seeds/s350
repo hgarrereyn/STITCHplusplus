@@ -1,0 +1,3 @@
+// Test that we disallow user-defined $-prefixed identifiers. However, the error
+// should not be emitted on $-prefixed identifiers that are not considered
+// declarations.

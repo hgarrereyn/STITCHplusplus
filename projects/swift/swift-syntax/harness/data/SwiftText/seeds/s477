@@ -1,0 +1,2 @@
+@available(*, deprecated: 4.2)
+func allPlatformsDeprecatedVersion() {}

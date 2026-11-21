@@ -1,0 +1,6 @@
+
+        {% set i = 1 %}
+        {% macro test() %}
+            {% for i in range(0, 10) %}{{ i }}{% endfor %}
+        {% endmacro %}{{ test() }}
+        

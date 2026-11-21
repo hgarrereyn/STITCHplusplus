@@ -1,0 +1,2 @@
+// Escaping suppresses identifier contextualization.
+var get: (() -> ()) -> () = { $0() }

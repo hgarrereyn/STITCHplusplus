@@ -1,0 +1,2 @@
+verified: same crash
+check failed: isCreatable() true for what createNumber() parses | in createNumber

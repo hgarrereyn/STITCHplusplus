@@ -1,0 +1,1 @@
+{% filter upper|replace('FOO', 'foo') %}foobar{% endfilter %}

@@ -1,0 +1,2 @@
+verified: same crash
+check failed: printed document parses (InvalidControlChar) | in roundtrip

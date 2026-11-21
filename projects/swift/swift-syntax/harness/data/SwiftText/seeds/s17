@@ -1,0 +1,5 @@
+"""
+    Custom(custom: \(interval),\
+    Expr: \(pause?.debugDescription ?? "–"), \
+    PlainWithContinuation: \(countdown), \
+    Plain: \(units))"

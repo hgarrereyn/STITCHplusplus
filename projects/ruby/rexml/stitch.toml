@@ -1,0 +1,16 @@
+# STITCH++ project. Guide: `stitch guide`. Ruby API: `stitch guide ruby`.
+[project]
+name = "rexml"
+language = "ruby"
+
+[source]
+git = "https://github.com/ruby/rexml"
+rev = "v3.2.5"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[ruby]
+include = ["/src/lib"]     # gem names (or path prefixes) of the code under test
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1

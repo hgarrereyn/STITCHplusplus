@@ -1,0 +1,3 @@
+// Future compiler, short-circuit right-hand side
+#if compiler(>=10.0) && hasGreeble(blah)
+#endif

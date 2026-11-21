@@ -1,0 +1,8 @@
+    """#
+  )
+}
+
+func testMultilineString47() {
+  assertParse(
+    #"""
+    _ = """"""

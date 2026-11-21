@@ -1,0 +1,10 @@
+[project]
+name = "smallvec"
+language = "rust"
+
+[source]
+git = "https://github.com/servo/rust-smallvec"
+rev = "v1.6.0"
+
+[rust.dependencies]
+smallvec = { path = "/src" }

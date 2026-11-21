@@ -1,0 +1,1 @@
+{{#each object}}{{wycats name}}{{/each}}

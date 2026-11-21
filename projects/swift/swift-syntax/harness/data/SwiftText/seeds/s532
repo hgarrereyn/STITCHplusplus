@@ -1,0 +1,17 @@
+@inlinable internal subscript(key: Key) -> Value? {
+  @inline(__always) get {
+    return lookup(key)
+  }
+  @inline(__always) _modify {
+    guard isNative else {
+      let cocoa = asCocoa
+      var native = _NativeDictionary<Key, Value>(
+        cocoa, capacity: cocoa.count + 1)
+      self = .init(native: native)
+      yield &native[key, isUnique: true]
+      return
+    }
+    let isUnique = isUniquelyReferenced()
+    yield &asNative[key, isUnique: isUnique]
+  }
+}

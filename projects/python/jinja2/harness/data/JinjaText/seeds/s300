@@ -1,0 +1,1 @@
+{{ 'foo' if x is not defined else x|f }}

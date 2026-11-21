@@ -1,0 +1,6 @@
+@objc(
+  thisMethodHasAVeryLongName:
+  foo:
+  bar:
+)
+func f() {}

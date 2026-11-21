@@ -1,0 +1,5 @@
+
+        {%- for item in foo %}...{{ item }}...{% endfor %}
+        {%- macro item(a) %}...{{ a }}...{% endmacro %}
+        {{- item(2) -}}
+        

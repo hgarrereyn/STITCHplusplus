@@ -1,0 +1,9 @@
+
+            {% macro outer(o) %}
+            {% macro inner() %}
+            {% include "o_printer" %}
+            {% endmacro %}
+            {{ inner() }}
+            {% endmacro %}
+            {{ outer("FOO") }}
+        

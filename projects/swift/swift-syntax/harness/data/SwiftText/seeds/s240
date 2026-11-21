@@ -1,0 +1,3 @@
+/** hello */
+var x: Int
+/* regular comment */

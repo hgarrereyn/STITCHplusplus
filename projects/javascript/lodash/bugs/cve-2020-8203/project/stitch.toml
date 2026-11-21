@@ -1,0 +1,10 @@
+[project]
+name = "lodash"
+language = "javascript"
+
+[source]
+git = "https://github.com/lodash/lodash"
+rev = "4.17.15"
+
+[javascript]
+include = ["lodash"]

@@ -1,0 +1,9 @@
+// Has only good 'appendInterpolation' methods.
+public struct GoodStringInterpolation: StringInterpolationProtocol {
+  public init(literalCapacity: Int, interpolationCount: Int) {}
+  public mutating func appendLiteral(_: String) {}
+  public func appendInterpolation(noResult: ()) {}
+  public func appendInterpolation(voidResult: ()) -> Void {}
+  @discardableResult
+  public func appendInterpolation(discardableResult: ()) -> Int {}
+}

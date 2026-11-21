@@ -1,0 +1,7 @@
+@available(
+  iOSApplicationExtension,
+  introduced: 10.0,
+  deprecated: 11.0,
+  message:
+    "Use something else because this is definitely deprecated.")
+func f2() {}

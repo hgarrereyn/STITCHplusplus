@@ -1,0 +1,8 @@
+"a.txt"
+"dir/b.bin"
+"META-INF/MANIFEST.MF"
+"../x"
+"\xc3\xa9.txt"
+"././@LongLink"
+"PaxHeaders"
+"TRAILER!!!"

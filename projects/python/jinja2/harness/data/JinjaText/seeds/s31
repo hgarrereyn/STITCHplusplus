@@ -1,0 +1,4 @@
+
+    {%- for grouper, list in items()|groupby('foo') -%}
+        {{ grouper }}{% for x in list %}: {{ x.foo }}, {{ x.bar }}{% endfor %}|
+    {%- endfor %}

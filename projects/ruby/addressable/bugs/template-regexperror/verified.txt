@@ -1,0 +1,2 @@
+verified: same crash
+RegexpError | Regexp#initialize template.rb:1041 | Class#new template.rb | Addressable::Template#parse_template_pattern template.rb

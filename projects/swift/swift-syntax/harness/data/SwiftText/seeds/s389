@@ -1,0 +1,2 @@
+// rdar://problem/46742002
+protocol Dummy : class {}

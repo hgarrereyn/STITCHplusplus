@@ -1,0 +1,1 @@
+{{ "o" is in "foo" }}|{{ "foo" is in "foo" }}|{{ "b" is in "foo" }}|{{ 1 is in ((1, 2)) }}|{{ 3 is in ((1, 2)) }}|{{ 1 is in [1, 2] }}|{{ 3 is in [1, 2] }}|{{ "foo" is in {"foo": 1}}}|{{ "baz" is in {"bar": 1}}}

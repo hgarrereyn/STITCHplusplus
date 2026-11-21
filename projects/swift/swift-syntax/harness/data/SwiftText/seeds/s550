@@ -1,0 +1,4 @@
+@transpose(of: Float.-, wrt: (0, 1))
+func subtractTranspose(_ v: Float) -> (Float, Float) {
+  return (v, -v)
+}

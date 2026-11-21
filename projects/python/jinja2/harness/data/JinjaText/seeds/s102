@@ -1,0 +1,5 @@
+bar
+{% raw %}
+  {{baz}}2 spaces
+{% endraw %}
+foo

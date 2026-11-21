@@ -1,0 +1,8 @@
+// https://github.com/apple/swift/issues/42798
+enum Whatever { case Thing }
+func f0(values: [Whatever]) {
+    switch value {
+    case .Thing: // Ok. Don't emit diagnostics about enum case not found in type <<error type>>.
+        break
+    }
+}

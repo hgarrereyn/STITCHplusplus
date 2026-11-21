@@ -1,0 +1,4 @@
+[
+  condition ? firstOption : secondOption,
+  bar(),
+]

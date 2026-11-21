@@ -1,0 +1,7 @@
+{%- set i = 42 -%}
+{{ i }}
+{% block body -%}
+{% set i = 24 -%}
+{{ test() }}
+{% endblock -%}
+{{ i }}

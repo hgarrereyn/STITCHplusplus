@@ -1,0 +1,4 @@
+@transpose(of: +)
+func addTranspose(_ v: Float) -> (Float, Float) {
+  return (v, v)
+}

@@ -1,0 +1,2 @@
+{%- trans trimmed = 'world' %}  hello
+  {{ trimmed }}  {% endtrans -%}

@@ -31,7 +31,7 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
     src = Source(p)
     if not src.is_git:
         raise SourceError("bisect needs a git source ([source] git = URL, or a local path that is a git checkout)")
-    base = docker.ensure_base(tuple(p.cfg["build"]["sanitizers"] or ()))
+    base = docker.ensure_base(p.language, p.sanitizers)
     crash_rel = in_project(p, crash)
     chash = hashlib.sha1(crash.read_bytes()).hexdigest()[:12]
     bdir = p.state_dir / "bisect"

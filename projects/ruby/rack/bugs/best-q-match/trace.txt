@@ -1,0 +1,14 @@
+[stitch] running .stitch/campaigns/main/w1/crashes/3eeab34cd88a9a1d.stp
+[stitch] #0 q_values(header=Str[27,decoded]",*oL42_?L38p+h::,multipart/", avail=["gzip", "identity"])
+
+[stitch] EXCEPTION in q_values: NoMethodError: undefined method 'split' for nil
+    #0 0x0 in Rack::Mime.match? /src/lib/rack/mime.rb:32
+    #1 0x0 in block (2 levels) in Rack::Utils.best_q_match /src/lib/rack/utils.rb:149
+    #2 0x0 in Array#each /src/lib/rack/utils.rb:149
+    #3 0x0 in Enumerable#find /src/lib/rack/utils.rb:149
+    #4 0x0 in block in Rack::Utils.best_q_match /src/lib/rack/utils.rb:149
+    #5 0x0 in Array#map /src/lib/rack/utils.rb:148
+    #6 0x0 in Rack::Utils.best_q_match /src/lib/rack/utils.rb:148
+    #7 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:115
+    #8 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+

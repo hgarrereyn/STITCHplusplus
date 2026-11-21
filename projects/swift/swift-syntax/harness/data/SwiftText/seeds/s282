@@ -1,0 +1,2 @@
+// Enum patterns.
+enum Foo { case A, B, C }

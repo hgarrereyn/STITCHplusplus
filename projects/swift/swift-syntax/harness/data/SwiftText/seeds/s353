@@ -1,0 +1,3 @@
+// This compiler, don't short-circuit.
+#if compiler(<5.8) || hasGreeble(blah)
+#endif

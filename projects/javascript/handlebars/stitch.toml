@@ -1,0 +1,16 @@
+# STITCH++ project. Guide: `stitch guide`. JavaScript API: `stitch guide javascript`.
+[project]
+name = "handlebars"
+language = "javascript"
+
+[source]
+git = "https://github.com/handlebars-lang/handlebars.js"
+rev = "v4.7.6"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[javascript]
+include = ["handlebars"]     # package names of the code under test (instrumented while fuzzing)
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1

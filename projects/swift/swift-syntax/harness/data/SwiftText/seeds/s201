@@ -1,0 +1,4 @@
+#imageLiteral()
+#imageLiteral(resourceName: "foo.png")
+#imageLiteral(resourceName: "foo/bar/baz/qux.png")
+#imageLiteral(resourceName: "foo/bar/baz/quux.png")

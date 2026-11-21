@@ -1,0 +1,9 @@
+{% set i = 42 %}
+{%- for idx in range(2) -%}
+{{ i }}{{ j }}
+{% set i = idx -%}
+{%- set j = loop.index -%}
+{{ test() }}
+{{ i }}{{ j }}
+{% endfor -%}
+{{ i }}{{ j }}

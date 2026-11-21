@@ -1,0 +1,12 @@
+[project]
+name = "ruby-demo"
+language = "ruby"
+
+[source]
+path = "lib"
+
+[ruby]
+include = ["kvrb"]
+
+[fuzz]
+timeout_ms = 2000

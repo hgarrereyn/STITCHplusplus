@@ -1,0 +1,12 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/c2796ed73078a9c9.stp
+[stitch] #0 parse_fragment(html=Str[263,decoded]"<title>vbscript:< dtp=\"E4*3tcK1w}\" Uh},ELfHMj|Hn|]rOPw;8_l1&C4d=Ov_:h:qVM#/WLyOR`f<%zm=yA}NVh <*6a4Vo-VYr_]/CB%%oRjI=@w_tR0sW-:Q4}g0ahv,clFq8t,oUQDX.;lbA/`>lk3+"...)
+[stitch]     -> ok produced o0.0
+[stitch] #1 select(doc=o0.0, q=Str[2,decoded]"td")
+[stitch]     -> ok produced o1.0
+[stitch] #2 roundtrip(doc=o0.0)
+[stitch]     log: html: "<html>\n <head></head>\n <body>\n  <title>vbscript:&lt; dtp=\"E4*3tcK1w}\" Uh},ELfHMj|Hn|]rOPw;8_l1&amp;C4d=Ov_:h:qVM#/WLyOR`f&lt;%zm=yA}NVh &lt;*6a4Vo-VYr_]/CB%%oRjI=@w_tR0sW-:Q4}g0ahv,clFq8t,oUQDX.;lbA/`&gt;lk3+H\\,}-J-bf&gt;(i1Hfv,X;BLf-T1y6NNb1-bbL$x$aKvPzPm&amp; iK9*-:8|su23&amp;\\+@x}x~D\\:Wv=\"</title>\n  <title>\"&gt;</title>\n  <table>\n   <tbody>\n    <tr>\n     <td name=\"\"></td>\n    </tr>\n   </tbody>\n  </table>\n </body>\n</html>"
+[stitch]     -> ok
+[stitch] #3 parse(html=Str[52]"pa\x1b\xeb\xbf\xbd;#########\xef\xbf\xbd\x11\xef\xbf\xbd`rea><!DOCTYPE html><!DOCTYPE")
+Killed
+
+[stitch] TIMEOUT: still running after 10 s

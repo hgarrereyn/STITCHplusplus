@@ -1,0 +1,6 @@
+MyStruct()
+#if CONDITION_1
+  .methodOne()
+#else
+  .methodTwo()
+#endif

@@ -1,0 +1,18 @@
+# STITCH++ project. Guide: `stitch guide`. Java API: `stitch guide java`.
+[project]
+name = "guava"
+language = "java"
+
+[source]
+git = "https://github.com/google/guava"
+rev = "v31.0.1"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[java]
+classpath = ["/deps/*"]           # the library and its dependencies (jars the Dockerfile puts in /deps)
+include = ["com.google.common"]      # packages of the code under test (coverage and comparison tracing)
+sources = ["/src/guava/src"]  # source roots for coverage reports (default: /src/**/src/main/java)
+
+[fuzz]
+timeout_ms = 3000
+max_nodes = 24
+jobs = 1

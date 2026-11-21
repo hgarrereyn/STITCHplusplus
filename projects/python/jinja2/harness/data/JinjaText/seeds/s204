@@ -1,0 +1,2 @@
+{% macro say_hello(name) %}Hello {{ name }}!{% endmacro %}
+{{ say_hello('Peter') }}

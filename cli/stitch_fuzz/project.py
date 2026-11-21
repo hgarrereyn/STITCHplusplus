@@ -7,17 +7,30 @@ from pathlib import Path
 from . import minitoml
 
 _PKG = Path(__file__).resolve().parent
-# Installed package: runtime, Docker files, engine sources and the skill ship in stitch_fuzz/assets.
+# Installed package: language runtimes, Docker files, engine sources and the skill ship in
+# stitch_fuzz/assets.
 # Source checkout: they live at the repository root.
-STITCH_HOME = _PKG / "assets" if (_PKG / "assets" / "docker").is_dir() else _PKG.parents[1]
+STITCH_HOME = _PKG / "assets" if (_PKG / "assets" / "languages").is_dir() else _PKG.parents[1]
 
 DEFAULTS = {
-    "project": {"name": None},
+    "project": {"name": None, "language": "cpp"},
     "source": {"git": None, "rev": None, "path": None, "submodules": False, "keep_git": False},
     "docker": {"dockerfile": "Dockerfile", "platform": None, "build_args": {}},
     "build": {"cflags": [], "ldflags": [], "sanitizers": ["address"], "std": "c++17"},
-    "fuzz": {"timeout_ms": 2000, "max_nodes": 24, "jobs": 1, "exceptions": "finding", "persistent": 200},
+    "fuzz": {"timeout_ms": 2000, "max_nodes": 24, "jobs": 1, "exceptions": "finding", "persistent": None},
 }
+
+
+# Programs per worker process before it is replaced (stitch.toml [fuzz] persistent overrides).
+# C/C++ forks cheaply; other runtimes keep one process until it crashes or grows too large.
+PERSISTENT_DEFAULT = {"cpp": 200, "rust": 5000, "swift": 200}
+
+
+def normalize_language(lang):
+    lang = (lang or "cpp").lower()
+    return {"c": "cpp", "c++": "cpp", "cxx": "cpp", "js": "javascript", "node": "javascript", "nodejs": "javascript",
+            "typescript": "javascript", "ts": "javascript", "golang": "go", "py": "python", "python3": "python",
+            "jvm": "java", "kotlin": "java", "rb": "ruby"}.get(lang, lang)
 
 
 class ProjectError(Exception):
@@ -44,9 +57,19 @@ class Project:
         name = self.cfg["project"]["name"]
         self.name = "".join(c if c.isalnum() or c in "-_." else "-" for c in name.lower())
         src = self.cfg["source"]
+        self.language = normalize_language(self.cfg["project"].get("language"))
         if src.get("path"):
             p = Path(src["path"]).expanduser()
             src["path"] = str((self.root / p).resolve() if not p.is_absolute() else p)
+
+    @property
+    def persistent(self):
+        v = self.cfg["fuzz"].get("persistent")
+        return int(v) if v is not None else PERSISTENT_DEFAULT.get(self.language, 0)
+
+    @property
+    def sanitizers(self):
+        return tuple(self.cfg["build"].get("sanitizers") or ())
 
     # paths -------------------------------------------------------------------------------
     @property

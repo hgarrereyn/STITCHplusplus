@@ -1,0 +1,3 @@
+#if canImport(A, _version: 20A301)
+  let a = 1
+#endif

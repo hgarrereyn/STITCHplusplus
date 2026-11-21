@@ -1,0 +1,3 @@
+{% for item in seq %}{{
+            loop.cycle('<1>', '<2>') }}{% endfor %}{%
+            for item in seq %}{{ loop.cycle(*through) }}{% endfor %}

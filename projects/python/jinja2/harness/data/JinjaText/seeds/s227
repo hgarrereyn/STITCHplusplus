@@ -1,0 +1,1 @@
+{% set ns = namespace() %}{% set ns.a = 13 %}{% macro magic(x) %}{% set x.b = 37 %}{% endmacro %}{{ magic(ns) }}{{ ns.a }}|{{ ns.b }}

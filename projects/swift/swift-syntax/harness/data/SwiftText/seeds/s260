@@ -1,0 +1,3 @@
+// Allow "macOS" as well.
+if #unavailable(macOS 10.51) {
+}

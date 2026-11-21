@@ -1,0 +1,1 @@
+greet("foo") not contains "bar" ? array : half

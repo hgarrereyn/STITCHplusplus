@@ -1,0 +1,1 @@
+{{test_helper}} {{#if cruel}}Goodbye {{cruel}} {{world}}!{{/if}}

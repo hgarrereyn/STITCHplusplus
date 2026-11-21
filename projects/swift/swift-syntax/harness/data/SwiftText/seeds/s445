@@ -1,0 +1,2 @@
+@_originallyDefinedIn(module: "ToasterKit", _iOS13Aligned)
+struct Vehicle {}

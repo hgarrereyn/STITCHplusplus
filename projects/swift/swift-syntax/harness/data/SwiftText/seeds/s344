@@ -1,0 +1,2 @@
+// Should parse () as void type when before or after arrow
+_ = [() -> Int]()

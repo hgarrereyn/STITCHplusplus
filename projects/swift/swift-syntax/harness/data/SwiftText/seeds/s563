@@ -1,0 +1,2 @@
+Diagnostic message should only span a single line. Message was:
+\(diag.message)

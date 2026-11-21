@@ -1,0 +1,5 @@
+
+            {%- set items = [] %}
+            {%- for char in "foo" %}
+                {%- do items.append(loop.index0 ~ char) %}
+            {%- endfor %}{{ items|join(', ') }}

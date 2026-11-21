@@ -1,0 +1,1 @@
+{% macro foo(a, b) %}{% endmacro %}{% macro bar() %}{{ varargs }}{{ kwargs }}{% endmacro %}{% macro baz() %}{{ caller() }}{% endmacro %}

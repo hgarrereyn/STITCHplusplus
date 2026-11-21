@@ -1,0 +1,2 @@
+// https://github.com/apple/swift/issues/57542
+// Make sure we do not parse the '_' on the newline as being part of the 'variable' identifier on the line before.

@@ -1,0 +1,2 @@
+verified: same crash
+check failed: Marshal output unmarshals | in node_decode

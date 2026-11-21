@@ -1,0 +1,2 @@
+@_noImplicitCopy var g: Builtin.NativeObject = getKlass()
+@_noImplicitCopy let g2: Builtin.NativeObject = getKlass()

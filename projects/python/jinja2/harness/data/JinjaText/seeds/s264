@@ -1,0 +1,1 @@
+{{ "a{x.__class__}b".format_map({"x":42}) }}

@@ -1,0 +1,7 @@
+#if arch(x86_64)
+  debugPrint("x86_64")
+#else if arch(arm64)
+  debugPrint("arm64")
+#else
+  debugPrint("Some other architecture.")
+#endif

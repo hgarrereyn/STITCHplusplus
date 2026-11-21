@@ -1,0 +1,2 @@
+{%- trans notrimmed %}  hello
+  world  {% endtrans -%}

@@ -1,0 +1,2 @@
+@available(OSX 1.0.asdf)
+func test() {}

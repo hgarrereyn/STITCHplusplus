@@ -1,0 +1,3 @@
+@available(macOS 11.0, *)
+@_backDeploy(before: _macOS12_1)
+public func backDeployTopLevelFunc2() -> Int { return 48 }

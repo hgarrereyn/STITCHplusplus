@@ -1,0 +1,1 @@
+{{#foo.helper bar=baz}}{{/foo.helper}}

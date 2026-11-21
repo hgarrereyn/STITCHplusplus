@@ -1,0 +1,3 @@
+(
+  (G<X>.Y) -> (P) & X?.Y, (X.Y, [X : Y?].Type), [(G<X>).Y], [A.B.C].D
+).self

@@ -1,0 +1,3 @@
+// https://github.com/apple/swift/issues/44270
+// Dollar was accidentally allowed as an identifier in Swift 3.
+// SE-0144: Reject this behavior in the future.

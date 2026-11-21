@@ -1,0 +1,3 @@
+// Should this be a valid spelling since `#unvailable(*)` cannot be written?
+if #unavailable(<#identifier#>) {
+}

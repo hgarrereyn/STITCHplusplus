@@ -1,0 +1,3 @@
+@objc enum NoRawType {
+  case Zim, Zang, Zung
+}

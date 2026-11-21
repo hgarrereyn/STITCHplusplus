@@ -1,0 +1,7 @@
+// Referencing a nonexistent member or constructor should not trigger errors
+// about the type expression.
+func nonexistentMember() {
+  let cons = Foo("this constructor does not exist")
+  let prop = Foo.nonexistent
+  let meth = Foo.nonexistent()
+}
