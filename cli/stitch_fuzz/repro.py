@@ -28,6 +28,8 @@ RUN_SH = r"""#!/bin/sh
 set -e
 cd "$(dirname "$0")"
 ID={rid}
+# on Linux, run as the calling user so files written into this folder stay yours
+U=""; [ "$(uname)" = Linux ] && U="--user $(id -u):$(id -g) -e HOME=/tmp"
 docker buildx build --load -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
 if [ ! -d source ]; then
 {fetch}
@@ -38,7 +40,7 @@ if [ "$1" = "--standalone" ]; then
 {standalone}
   exit $?
 fi
-docker run --rm -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
+docker run --rm $U -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
   sh -c 'stitch-build --target repro --out /tmp/stitch-build >/dev/null &&
     (timeout -s KILL {limit} /tmp/stitch-build/repro --trace /repro/crash.stp; rc=$?;
      if [ $rc = 137 ]; then echo "[stitch] TIMEOUT: still running after {limit} s" >&2; fi; exit $rc)'
@@ -46,9 +48,9 @@ docker run --rm -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-r
 
 # `./run.sh --standalone`: C/C++ compiles a plain program against the library; other languages
 # build the file next to the harness (it may use the harness's module or crate).
-STANDALONE_CPP = ('  docker run --rm -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
+STANDALONE_CPP = ('  docker run --rm $U -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
                   '    sh -c "$(cat standalone/build.sh)"')
-STANDALONE_LANG = ('  docker run --rm -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
+STANDALONE_LANG = ('  docker run --rm $U -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
                    '    stitch-repro:$ID sh standalone/build.sh')
 
 # report section title and code fence, per language

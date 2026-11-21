@@ -110,7 +110,8 @@ pub fn engine_main() -> i32 {
             stitch_run_file as *const u8, stitch_edges as *const u8, stitch_results as *const u8,
             stitch_cmplog as *const u8, stitch_cmplog_reset as *const u8, stitch_datatype_count as *const u8,
             stitch_has_decoder as *const u8, stitch_decode as *const u8, stitch_generate as *const u8,
-            stitch_dict_add as *const u8, stitch_decode_spans as *const u8, stitch_set_plan as *const u8,
+            stitch_dict_add as *const u8, stitch_decode_spans as *const u8, stitch_decode_items as *const u8,
+            stitch_set_plan as *const u8,
         ]);
         let path = std::env::var("STITCH_ENGINE_LIB").unwrap_or_else(|_| "/stitch/lib/libstitch_engine.so".into());
         let cpath = CString::new(path.clone()).unwrap();
@@ -228,6 +229,14 @@ pub unsafe extern "C" fn stitch_decode_spans(dt: c_int, choices: *const u8, n: u
     let v = rt::spans(dt as usize, std::slice::from_raw_parts(choices, n));
     let k = (v.len() / 3).min(max_spans);
     std::ptr::copy_nonoverlapping(v.as_ptr(), out, 3 * k);
+    k
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn stitch_decode_items(dt: c_int, choices: *const u8, n: usize, out: *mut u32, max_items: usize) -> usize {
+    let v = rt::items(dt as usize, std::slice::from_raw_parts(choices, n));
+    let k = (v.len() / 4).min(max_items);
+    std::ptr::copy_nonoverlapping(v.as_ptr(), out, 4 * k);
     k
 }
 

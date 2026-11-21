@@ -45,6 +45,36 @@ pub trait Datatype: 'static {
     const NAME: Option<&'static str>;
 }
 
+/// A data type with a decoder (implemented by `decoder!`): `Val<D>` parameters and `s.draw::<D>()`.
+pub trait Decoded: Datatype {
+    type Value;
+    fn decode(s: &mut Source) -> Self::Value;
+}
+
+/// A value of data type `D`, built by `D`'s decoder from at most `MAX` bytes of choices. The
+/// decoder can return any type; `Val` dereferences to it.
+pub struct Val<D: Decoded, const MAX: usize = 1024>(pub D::Value);
+impl<D: Decoded, const MAX: usize> Val<D, MAX> {
+    /// Decode recorded choices again (standalone reproducers).
+    pub fn replay(b: &[u8]) -> Self {
+        Val(D::decode(&mut Source::replay(b)))
+    }
+    pub fn into_inner(self) -> D::Value {
+        self.0
+    }
+}
+impl<D: Decoded, const MAX: usize> Deref for Val<D, MAX> {
+    type Target = D::Value;
+    fn deref(&self) -> &D::Value {
+        &self.0
+    }
+}
+impl<D: Decoded, const MAX: usize> DerefMut for Val<D, MAX> {
+    fn deref_mut(&mut self) -> &mut D::Value {
+        &mut self.0
+    }
+}
+
 /// No data type.
 pub struct Plain;
 impl Datatype for Plain {
@@ -416,11 +446,22 @@ macro_rules! flags {
 macro_rules! decoder {
     ($dt:ident, fn $f:ident ($s:ident : $sty:ty) -> $ret:ty $body:block) => {
         pub fn $f($s: $sty) -> $ret $body
+        impl $crate::Decoded for $dt {
+            type Value = $ret;
+            fn decode(s: &mut $crate::Source) -> $ret {
+                $f(s)
+            }
+        }
         #[allow(non_snake_case, dead_code, unused_imports)]
         pub mod $f {
             use super::*;
             pub fn __stitch_register() {
-                $crate::rt::register_decoder(stringify!($dt), |s| $crate::rt::DecoderOut::into_bytes(super::$f(s)));
+                $crate::rt::register_decoder(stringify!($dt), |s| {
+                    #[allow(unused_imports)]
+                    use $crate::rt::render::{RenderAny, RenderBytes, RenderDebug, RenderStr};
+                    let v = super::$f(s);
+                    (&&&$crate::rt::render::Render(&v)).render()
+                });
             }
         }
     };

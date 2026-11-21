@@ -102,7 +102,7 @@ fn param_sites(p: &Program) -> (Vec<(usize, usize)>, Vec<f64>) {
             sites.push((i, k));
             w.push(match pd.kind {
                 Kind::Bool => 0.3,
-                Kind::Bytes | Kind::Str | Kind::File | Kind::Source => 3.0,
+                Kind::Bytes | Kind::Str | Kind::File | Kind::Source | Kind::Value => 3.0,
                 _ => 1.0,
             });
         }
@@ -337,7 +337,7 @@ impl StitchMutator {
         for (i, n) in p.nodes.iter().enumerate() {
             let e = &m.endpoints[n.ep as usize];
             for (k, pd) in e.params.iter().enumerate() {
-                if matches!(pd.kind, Kind::Bytes | Kind::Str | Kind::File) {
+                if matches!(pd.kind, Kind::Bytes | Kind::Str | Kind::File | Kind::Value) {
                     sites.push((i, k));
                 }
             }
@@ -363,12 +363,15 @@ impl StitchMutator {
                     let Some(pos) = find(content, from) else { continue };
                     let mut nc = content.to_vec();
                     nc.splice(pos..pos + from.len(), to.iter().copied());
-                    let cap = if w >= 8 { usize::MAX } else { (1usize << (8 * w)) - 1 };
+                    // w == 0: rest() at the end of the buffer, no length prefix to rewrite
+                    let cap = if w == 0 || w >= 8 { usize::MAX } else { (1usize << (8 * w)) - 1 };
                     if nc.len() > cap || prm.bytes.len() - len + nc.len() > max {
                         continue;
                     }
-                    let nl = (nc.len() as u64).to_le_bytes();
-                    prm.bytes[off..off + w].copy_from_slice(&nl[..w]);
+                    if w > 0 {
+                        let nl = (nc.len() as u64).to_le_bytes();
+                        prm.bytes[off..off + w].copy_from_slice(&nl[..w]);
+                    }
                     prm.bytes.splice(start..start + len, nc);
                     return Ok(true);
                 }
@@ -396,7 +399,11 @@ impl StitchMutator {
             for (j, n) in prog.nodes.iter().enumerate() {
                 let ee = &m.endpoints[n.ep as usize];
                 for (kk, pd) in ee.params.iter().enumerate() {
-                    if (src, j, kk) != (0, i, k) && ee.param_dt[kk] == dt && (pd.kind == kind || dt.is_some()) {
+                    if (src, j, kk) != (0, i, k)
+                        && ee.param_dt[kk] == dt
+                        && (pd.kind == kind || dt.is_some())
+                        && (kind != Kind::Value || n.params[kk].form == FORM_CHOICES)
+                    {
                         cands.push(n.params[kk].clone());
                     }
                 }
@@ -430,6 +437,9 @@ impl StitchMutator {
         }
         let (i, k) = sites[below(r, sites.len())];
         let e = &m.endpoints[p.nodes[i].ep as usize];
+        if e.params[k].kind == Kind::Value {
+            return false; // a typed value has no byte form: it stays choices
+        }
         let Some(dt) = e.param_dt[k] else { return false };
         let v = ffi::decode(dt, &p.nodes[i].params[k].bytes, e.params[k].size as usize);
         p.nodes[i].params[k].bytes = v;
@@ -461,6 +471,129 @@ impl StitchMutator {
         p.nodes[i].params[k].bytes = ffi::generate(dt, seed, &prefix, e.params[k].size as usize);
         true
     }
+
+    /// Loop-element mutations on a decoder choice buffer: delete, duplicate, move or swap one
+    /// iteration of a `more()` loop, or copy in an iteration of the same loop from another buffer of
+    /// the same data type. The boundaries come from replaying the decoder, so the other values keep
+    /// their positions relative to their own iteration.
+    fn param_elements<R: Rand>(&self, r: &mut R, p: &mut Program, other: &Program) -> bool {
+        let m = manifest::get();
+        let mut sites = vec![];
+        for (i, n) in p.nodes.iter().enumerate() {
+            let e = &m.endpoints[n.ep as usize];
+            for (k, prm) in n.params.iter().enumerate() {
+                if let Some(dt) = e.param_dt[k] {
+                    if prm.form == FORM_CHOICES && m.datatype_decoder[dt] {
+                        sites.push((i, k, dt));
+                    }
+                }
+            }
+        }
+        if sites.is_empty() {
+            return false;
+        }
+        let (i, k, dt) = sites[below(r, sites.len())];
+        let max = m.endpoints[p.nodes[i].ep as usize].params[k].size as usize;
+        let buf = p.nodes[i].params[k].bytes.clone();
+        let items = ffi::decode_items(dt, &buf);
+        let elems: Vec<ffi::Item> = items.iter().copied().filter(|x| x.start < x.end).collect();
+        // insertion points per loop execution: every iteration start and the end marker
+        let points = |site: u32| -> Vec<(u32, usize)> {
+            items.iter().filter(|x| x.site == site).map(|x| (x.inst, x.start)).collect()
+        };
+        let u = unit(r);
+        let new = if u < 0.25 {
+            // delete an iteration
+            if elems.is_empty() {
+                return false;
+            }
+            let e = elems[below(r, elems.len())];
+            let mut b = buf.clone();
+            b.drain(e.start..e.end);
+            b
+        } else if u < 0.5 {
+            // duplicate an iteration (right after itself, or elsewhere in the same loop execution)
+            if elems.is_empty() {
+                return false;
+            }
+            let e = elems[below(r, elems.len())];
+            let pts: Vec<usize> = points(e.site).into_iter().filter(|(inst, _)| *inst == e.inst).map(|(_, x)| x).collect();
+            let at = if unit(r) < 0.5 || pts.is_empty() { e.end } else { pts[below(r, pts.len())] };
+            let mut b = buf.clone();
+            b.splice(at..at, buf[e.start..e.end].iter().copied());
+            b
+        } else if u < 0.65 {
+            // swap two iterations of one loop execution
+            let mut by_inst: std::collections::HashMap<u32, Vec<ffi::Item>> = Default::default();
+            for e in &elems {
+                by_inst.entry(e.inst).or_default().push(*e);
+            }
+            let multi: Vec<&Vec<ffi::Item>> = by_inst.values().filter(|v| v.len() >= 2).collect();
+            if multi.is_empty() {
+                return false;
+            }
+            let v = multi[below(r, multi.len())];
+            let (mut a, mut c) = (below(r, v.len()), below(r, v.len()));
+            if a == c {
+                return false;
+            }
+            if a > c {
+                std::mem::swap(&mut a, &mut c);
+            }
+            let (a, c) = (v[a], v[c]);
+            if a.end > c.start {
+                return false;
+            }
+            let mut b = buf[..a.start].to_vec();
+            b.extend_from_slice(&buf[c.start..c.end]);
+            b.extend_from_slice(&buf[a.end..c.start]);
+            b.extend_from_slice(&buf[a.start..a.end]);
+            b.extend_from_slice(&buf[c.end..]);
+            b
+        } else {
+            // copy in an iteration of the same loop from another buffer of this data type
+            let mut donors: Vec<Vec<u8>> = vec![];
+            for prog in [&*p, other] {
+                for (j, n) in prog.nodes.iter().enumerate() {
+                    let ee = &m.endpoints[n.ep as usize];
+                    for (kk, prm) in n.params.iter().enumerate() {
+                        if ee.param_dt[kk] == Some(dt) && prm.form == FORM_CHOICES && !(std::ptr::eq(prog, &*p) && j == i && kk == k) {
+                            donors.push(prm.bytes.clone());
+                        }
+                    }
+                }
+            }
+            donors.push(buf.clone());
+            let d = donors.swap_remove(below(r, donors.len()));
+            let delems: Vec<ffi::Item> = ffi::decode_items(dt, &d).into_iter().filter(|x| x.start < x.end).collect();
+            let sites_here: Vec<u32> = items.iter().map(|x| x.site).collect();
+            let fit: Vec<ffi::Item> = delems.into_iter().filter(|x| sites_here.contains(&x.site)).collect();
+            if fit.is_empty() {
+                return false;
+            }
+            let e = fit[below(r, fit.len())];
+            let pts = points(e.site);
+            if pts.is_empty() {
+                return false;
+            }
+            let at = pts[below(r, pts.len())].1;
+            let mut b = buf.clone();
+            b.splice(at..at, d[e.start..e.end].iter().copied());
+            if unit(r) < 0.3 {
+                // replace instead of insert: drop the iteration that was at `at`
+                if let Some(old) = elems.iter().find(|x| x.start == at && x.site == e.site) {
+                    let l = e.end - e.start;
+                    b.drain(old.start + l..old.end + l);
+                }
+            }
+            b
+        };
+        if new == buf || new.len() > max {
+            return false;
+        }
+        p.nodes[i].params[k].bytes = new;
+        true
+    }
 }
 
 impl<S> Mutator<Program, S> for StitchMutator
@@ -472,22 +605,31 @@ where
         let stack = 1 << below(state.rand_mut(), 3);
         let mut changed = false;
         // weights: graph ops, then parameter ops
-        const W: [f64; 13] = [10.0, 7.0, 5.0, 6.0, 4.0, 3.0, 3.0, 24.0, 14.0, 4.0, 5.0, 6.0, 5.0];
+        // STITCH_NO_ELEMENTS=1 turns the loop-element mutations off (for comparisons)
+        static NO_ELEM: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let no_elem = *NO_ELEM.get_or_init(|| std::env::var("STITCH_NO_ELEMENTS").map(|v| v == "1").unwrap_or(false));
+        const W0: [f64; 15] = [10.0, 7.0, 5.0, 6.0, 4.0, 3.0, 3.0, 24.0, 14.0, 4.0, 5.0, 6.0, 5.0, 0.0, 5.0];
+        let mut w = W0;
+        if no_elem {
+            w[14] = 0.0;
+        }
         let mut applied = vec![];
         for _ in 0..stack {
-            let op = weighted(state.rand_mut(), &W).unwrap_or(7);
+            let op = weighted(state.rand_mut(), &w).unwrap_or(7);
             let mut op_used = op;
             let ok = match op {
                 0 => self.append(state.rand_mut(), input),
                 1 => self.insert(state.rand_mut(), input),
                 2 => self.delete(state.rand_mut(), input),
                 3 => self.rewire(state.rand_mut(), input),
-                4 | 11 => {
+                4 | 11 | 14 => {
                     let other = random_other(state)?;
                     if op == 4 {
                         self.splice(state.rand_mut(), input, &other)
-                    } else {
+                    } else if op == 11 {
                         self.param_crossover(state.rand_mut(), input, &other)
+                    } else {
+                        self.param_elements(state.rand_mut(), input, &other)
                     }
                 }
                 5 => self.regen_node_params(state.rand_mut(), input),

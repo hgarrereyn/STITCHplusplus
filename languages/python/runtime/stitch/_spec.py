@@ -223,6 +223,18 @@ class BufParam(Param):
         return rt.temp_file(b)
 
 
+class ValParam(Param):
+    """Val[Tag, max]: the value Tag's decoder builds (any Python object) from at most max choice bytes."""
+    kind, ctype = "value", "Val"
+
+    def __init__(self, datatype, size):
+        self.datatype = _name_of(datatype)
+        self.size = int(size)
+
+    def decode(self, raw, form, rt):
+        return rt.decode_value(self.datatype, bytes(raw[:self.size]), self.size)
+
+
 class SrcParam(Param):
     kind, ctype = "source", "Source"
 
@@ -287,6 +299,15 @@ class Flags:
 
     def __class_getitem__(cls, args):
         return FlagsParam(args if isinstance(args, tuple) else (args,))
+
+
+class Val:
+    """Val[Tag] or Val[Tag, max]: the value Tag's decoder returns (any type), from at most max
+    (default 1024) choice bytes."""
+
+    def __class_getitem__(cls, args):
+        dt, size = args if isinstance(args, tuple) else (args, 1024)
+        return ValParam(dt, size)
 
 
 class Src:

@@ -150,6 +150,16 @@ pub fn fresh_param<R: Rand>(r: &mut R, p: &ParamDef, dt: Option<usize>) -> Param
             let l = 8 + below(r, (p.size as usize).saturating_sub(8).max(1));
             (0..l.min(p.size as usize)).map(|_| r.next() as u8).collect()
         }
+        Kind::Value => {
+            let max = p.size as usize;
+            if let Some(dt) = dt {
+                if manifest::get().datatype_decoder[dt] {
+                    return Param { form: FORM_CHOICES, bytes: ffi::generate(dt, r.next(), &[], max) };
+                }
+            }
+            let l = 8 + below(r, max.saturating_sub(8).max(1));
+            return Param { form: FORM_CHOICES, bytes: (0..l.min(max)).map(|_| r.next() as u8).collect() };
+        }
         Kind::Bytes | Kind::Str | Kind::File => {
             let max = p.size as usize;
             if let Some(dt) = dt {

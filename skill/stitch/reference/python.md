@@ -69,6 +69,7 @@ def remove(doc: Borrow[Doc], s: Src[8]):
 | `Str[max, Tag]`, `str` | str (UTF-8, invalid bytes replaced) |
 | `Bytes[max, Tag]`, `bytes` | bytes |
 | `File[max, Tag]` | path of a temporary file |
+| `Val[Tag, max]` | the value `Tag`'s decoder returns (any object); `max` defaults to 1024 |
 | `Src[max]` | `stitch.Source` |
 
 ## Bugs
@@ -98,6 +99,25 @@ stitch.set(doc, "count", 1)
 stitch.get(doc, "count", 0)
 stitch.get_obj(doc, "parent")      # a linked object, or None
 ```
+
+A decoder can return any object; take it as `Val[Tag, max]`, and build decoders on each other
+with `s.draw(Tag)`:
+
+```python
+@stitch.decoder(Rows)
+def rows(s):
+    out = []
+    while s.more():
+        out.append(s.draw(Row))         # Row: another data type with a decoder
+    return out
+
+@stitch.endpoint
+def insert_all(t: Borrow[Table], rows: Val[Rows, 512]): ...
+```
+
+`stitch.Source`: `u8`..`u64`, `i8`..`i64`, `f32()`, `f64()`, `f64(lo, hi)` (finite, in range),
+`range(lo, hi)`, `choice(n)`, `pick(list)`, `coin(p)`, `more()`, `str(max)`, `bytes(max)`, `fixed(n)`
+(exactly n bytes), `rest()` (every byte left), `token()`, `draw(Tag)`.
 
 ## Coverage and comparisons
 

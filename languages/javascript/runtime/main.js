@@ -113,6 +113,17 @@ async function worker(project) {
       const b = Buffer.alloc(4 * spans.length);
       spans.forEach((v, i) => b.writeUInt32LE(v, 4 * i));
       send("R", b);
+    } else if (tag === "I") {
+      const dt = dts[p.readUInt32LE(0)];
+      const items = [];
+      if (dt && dt.decoder) {
+        const src = new Source(p.subarray(4), { cap: p.length - 4, items });
+        RT.runDecoder(dt, src);
+        src._finishItems();
+      }
+      const b = Buffer.alloc(4 * items.length);
+      items.forEach((v, i) => b.writeUInt32LE(v >>> 0, 4 * i));
+      send("R", b);
     } else if (tag === "T") {
       const di = p.readUInt32LE(0);
       const toks = REG.dicts.get(di) || [];

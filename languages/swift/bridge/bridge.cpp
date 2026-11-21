@@ -245,6 +245,26 @@ const uint8_t* stitch_c_src_token(void* s, size_t* len) {
     return g_draw.data();
 }
 double stitch_c_src_f64(void* s) { return S(s).f64(); }
+double stitch_c_src_f64_in(void* s, double lo, double hi) { return S(s).f64(lo, hi); }
+float stitch_c_src_f32_in(void* s, float lo, float hi) { return S(s).f32(lo, hi); }
+int32_t stitch_c_src_more_at(void* s, uint32_t site, uintptr_t frame) { return source_more_at(S(s), site, frame) ? 1 : 0; }
+const uint8_t* stitch_c_src_fixed(void* s, size_t n, size_t* len) {
+    g_draw = S(s).fixed(n);
+    *len = g_draw.size();
+    return g_draw.data();
+}
+const uint8_t* stitch_c_src_rest(void* s, size_t* len) {
+    g_draw = S(s).rest();
+    *len = g_draw.size();
+    return g_draw.data();
+}
+// a Val parameter's choices as a Source (its decoder's draws are not stub draws in plans)
+void* stitch_c_value_source(void* ctx, int32_t k, size_t max) {
+    QuietDraws q;
+    Ctx& c = C(ctx);
+    size_t n = std::min(c.plen[k], max);
+    return new Source(c.pbuf[k], n, max);
+}
 size_t stitch_c_src_position(void* s) { return S(s).position(); }
 size_t stitch_c_src_remaining(void* s) { return S(s).remaining(); }
 int32_t stitch_c_src_exhausted(void* s) { return S(s).exhausted() ? 1 : 0; }

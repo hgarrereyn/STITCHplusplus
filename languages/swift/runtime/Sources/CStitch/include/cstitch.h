@@ -66,6 +66,12 @@ const uint8_t* stitch_c_src_bytes(void* s, size_t max, size_t* len);  // valid u
 const uint8_t* stitch_c_src_str(void* s, size_t max, size_t* len);
 const uint8_t* stitch_c_src_token(void* s, size_t* len);
 double stitch_c_src_f64(void* s);
+double stitch_c_src_f64_in(void* s, double lo, double hi);
+float stitch_c_src_f32_in(void* s, float lo, float hi);
+int32_t stitch_c_src_more_at(void* s, uint32_t site, uintptr_t frame);  // more() with the loop's site and frame
+const uint8_t* stitch_c_src_fixed(void* s, size_t n, size_t* len);
+const uint8_t* stitch_c_src_rest(void* s, size_t* len);
+void* stitch_c_value_source(void* ctx, int32_t k, size_t max);  // owned by the caller (stitch_c_source_free)
 size_t stitch_c_src_position(void* s);
 size_t stitch_c_src_remaining(void* s);
 int32_t stitch_c_src_exhausted(void* s);

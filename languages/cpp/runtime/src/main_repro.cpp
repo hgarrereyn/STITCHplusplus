@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 #include <unistd.h>
 #include <fstream>
 #include <string>
@@ -60,6 +63,9 @@ static int run_each(const std::vector<std::string>& files, unsigned timeout) {
 }
 
 int main(int argc, char** argv) {
+#ifdef __linux__
+    prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);  // no core dumps (see the engine's real_main)
+#endif
     unsigned flags = 0, timeout = 10;
     bool each = false;
     int nfiles = 0;

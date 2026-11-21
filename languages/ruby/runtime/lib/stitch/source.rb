@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "zlib"
+
 module Stitch
   # Stitch::Source: decisions inside decoders and stubs, read from a fuzzer-owned choice buffer.
   #
@@ -10,6 +12,8 @@ module Stitch
   #   coin(p)   1 byte b; true if b < p*256
   #   more      1 byte; low bit
   #   str/bytes length prefix (1, 2 or 4 bytes, depending on max) + content
+  #   f64(lo, hi) 8 bytes; the value itself when finite and in range, other bit patterns map into it
+  #   fixed(n)  n bytes;  rest  every byte left
   class Source
     INTERESTING = [0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 100, 127, 128, 255, 256, 512, 1000, 1024, 4096,
                    0x7fff, 0x8000, 0xffff, 0x10000, 0x7fffffff, 0x80000000, 0xffffffff].freeze
@@ -18,7 +22,7 @@ module Stitch
     attr_reader :buf
     attr_accessor :log # plan mode: ->(op, value, is_bytes)
 
-    def initialize(buf = "".b, cap: nil, gen: false, seed: 0, dict: nil, spans: nil)
+    def initialize(buf = "".b, cap: nil, gen: false, seed: 0, dict: nil, spans: nil, items: nil)
       @buf = buf.b.dup
       @pos = 0
       @cap = [cap || @buf.bytesize, @buf.bytesize].max
@@ -29,13 +33,17 @@ module Stitch
       @exhausted = false
       @log = nil
       @depth = 0
+      # loop iterations for the engine: site, instance, start, end per more iteration
+      @items = items
+      @open = {}
+      @next_inst = 0
     end
 
     # ---------------------------------------------------------------- low level
     def rnd = @rng.rand(M64 + 1)
     def unit = @rng.rand
 
-    def draw(n)
+    def take_bytes(n)
       if @pos + n <= @buf.bytesize
         out = @buf.byteslice(@pos, n)
         @pos += n
@@ -66,7 +74,7 @@ module Stitch
     def le_bytes(v, width) = [v & M64].pack("Q<").byteslice(0, width)
 
     def uint(width)
-      b = draw(width) do
+      b = take_bytes(width) do
         x = unit < 0.3 ? interesting(width) : rnd
         le_bytes(x & ((1 << (8 * width)) - 1), width)
       end
@@ -94,7 +102,7 @@ module Stitch
 
     def blob_inner(mx, use_dict, w)
       content = nil
-      raw = draw(w) do
+      raw = take_bytes(w) do
         content = if use_dict && !@dict.empty? && unit < 0.5
                     @dict[rnd % @dict.size].b.byteslice(0, mx)
                   else
@@ -130,7 +138,7 @@ module Stitch
     def range_raw(lo, hi)
       lo, hi = hi, lo if hi < lo
       span = (hi - lo + 1) & M64
-      raw = draw(8) do
+      raw = take_bytes(8) do
         u = unit
         v = if u < 0.05 then lo
             elsif u < 0.1 then hi
@@ -165,8 +173,6 @@ module Stitch
       (v >> (8 * w - 1)) == 1 ? v - (1 << (8 * w)) : v
     end
 
-    def f32 = logged("f32", [uint(4)].pack("L<").unpack1("e"))
-    def f64 = logged("f64", [uint(8)].pack("Q<").unpack1("E"))
     def range(lo, hi) = logged("range(#{lo}, #{hi})", range_raw(lo, hi))
     def choice(n) = logged("choice(#{n})", n <= 0 ? 0 : range_raw(0, n - 1))
 
@@ -185,7 +191,7 @@ module Stitch
 
     def coin(p = 0.5)
       thr = p * 256.0
-      b = draw(1) do
+      b = take_bytes(1) do
         yes = unit < p
         r = rnd
         if yes
@@ -198,14 +204,129 @@ module Stitch
     end
 
     def more
-      return logged("more", false) if @exhausted && !@gen
-
-      b = draw(1) do
-        fill = @cap.zero? ? 1.0 : @buf.bytesize.to_f / @cap
-        p = fill > 0.5 ? 0.15 : 0.65
-        [(rnd & 0xfe) | (unit < p ? 1 : 0)].pack("C")
+      at = [@pos, @buf.bytesize].min
+      v = false
+      unless @exhausted && !@gen
+        b = take_bytes(1) do
+          fill = @cap.zero? ? 1.0 : @buf.bytesize.to_f / @cap
+          p = fill > 0.5 ? 0.15 : 0.65
+          [(rnd & 0xfe) | (unit < p ? 1 : 0)].pack("C")
+        end
+        v = b.getbyte(0).odd? && !@exhausted
       end
-      logged("more", b.getbyte(0).odd? && !@exhausted)
+      if @items
+        # the loop: its source line, and the stack depth (recursion level)
+        loc = caller_locations(1, 1).first
+        site = Zlib.crc32("#{loc&.path}:#{loc&.lineno}")
+        loop_item(site, caller_locations.size, at, v)
+      end
+      logged("more", v)
+    end
+
+    def loop_item(site, depth, p, v)
+      st = (@open[[site, depth]] ||= [(@next_inst += 1) - 1, -1, site])
+      @items.push(site, st[0], st[1], p) if st[1] >= 0
+      if v
+        st[1] = p
+      else
+        @items.push(site, st[0], p, p)
+        @open.delete([site, depth])
+      end
+    end
+
+    def finish_items
+      n = @buf.bytesize
+      @open.each_value do |inst, start, site|
+        @items.push(site, inst, start, n) if start >= 0
+        @items.push(site, inst, n, n)
+      end
+      @open = {}
+    end
+
+    # f64: any double. f64(lo, hi): a finite double in [lo, hi].
+    def f64(lo = nil, hi = nil)
+      return logged("f64", [uint(8)].pack("Q<").unpack1("E")) if lo.nil?
+
+      lo, hi = hi, lo if hi < lo
+      lo = lo.to_f
+      hi = hi.to_f
+      bits = take_bytes(8) do
+        u = unit
+        x = if u < 0.08 then lo
+            elsif u < 0.16 then hi
+            elsif u < 0.22 && lo <= 0 && hi >= 0 then 0.0
+            else lo + (hi - lo) * unit
+            end
+        x = lo unless x.between?(lo, hi)
+        [x].pack("E")
+      end.unpack1("Q<")
+      v = [bits].pack("Q<").unpack1("E")
+      unless v.finite? && v.between?(lo, hi)
+        p = (bits >> 11) / 9_007_199_254_740_992.0
+        w = hi - lo
+        v = if w.finite? then lo + w * p
+            elsif p < 0.5 then lo + (hi / 2 - lo / 2) * (2 * p)
+            else lo / 2 + hi / 2 + (hi / 2 - lo / 2) * (2 * p - 1)
+            end
+        v = v.clamp(lo, hi)
+      end
+      logged("f64(#{lo}, #{hi})", v)
+    end
+
+    def f32(lo = nil, hi = nil)
+      return logged("f32", [uint(4)].pack("L<").unpack1("e")) if lo.nil?
+
+      lo, hi = hi, lo if hi < lo
+      lo = lo.to_f
+      hi = hi.to_f
+      bits = take_bytes(4) do
+        u = unit
+        x = u < 0.08 ? lo : (u < 0.16 ? hi : lo + (hi - lo) * unit)
+        x = [x].pack("e").unpack1("e")
+        x = lo unless x.between?(lo, hi)
+        [x].pack("e")
+      end.unpack1("L<")
+      v = [bits].pack("L<").unpack1("e")
+      unless v.finite? && v.between?(lo, hi)
+        p = (bits >> 8) / 16_777_216.0
+        v = [(lo + (hi - lo) * p).clamp(lo, hi)].pack("e").unpack1("e")
+      end
+      logged("f32(#{lo}, #{hi})", v)
+    end
+
+    # Exactly n bytes (zeros past the end of the input).
+    def fixed(n)
+      return logged("fixed(#{n})", "".b, true) if n <= 0
+
+      v = take_bytes(n) do
+        pr = unit < 0.5
+        Array.new(n) { pr ? 32 + rnd % 95 : rnd & 0xff }.pack("C*")
+      end
+      logged("fixed(#{n})", v, true)
+    end
+
+    # Every byte that is left.
+    def rest
+      p0 = @pos
+      if @gen && @pos >= @buf.bytesize && @buf.bytesize < @cap
+        room = @cap - @buf.bytesize
+        l = [synth_len(room), room].min
+        pr = unit < 0.7
+        @buf = @buf.byteslice(0, @pos)
+        @buf << Array.new(l) { pr ? 32 + rnd % 95 : rnd & 0xff }.pack("C*")
+      end
+      v = @buf.byteslice([@pos, @buf.bytesize].min..) || "".b
+      @pos = @buf.bytesize
+      @spans&.push(p0, 0, v.bytesize) # no length prefix
+      logged("rest", v, true)
+    end
+
+    # A value from data type dt's decoder, drawn from this source: decoders build on each other.
+    def draw(dt)
+      fn = dt.respond_to?(:decoder) ? dt.decoder : nil
+      raise TypeError, "#{dt.inspect} has no decoder" unless fn
+
+      fn.call(self)
     end
 
     def bytes(max = 64) = logged("bytes(#{max})", blob(max, false), true)

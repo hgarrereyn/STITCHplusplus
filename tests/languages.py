@@ -6,7 +6,7 @@
     tests/languages.py --secs 120 rust  longer fuzzing
 
 Per language: build, check, fuzz, crashes (a planted bug in the library), minimize, exec --trace,
-write (the standalone file reproduces the crash), try (a file that does not crash is rejected),
+write (the standalone file reproduces the crash; a program with a Val parameter replays), try (a file that does not crash is rejected),
 repro (a verified Docker folder) and cov (lcov with library lines).
 """
 import argparse
@@ -30,6 +30,10 @@ DEMOS = {
     "ruby": ("kvrb.rb", "nocrash.rb", 'puts "ok"\n'),
     "swift": ("KV.swift", "nocrash.swift", "import Stitch\n#if canImport(Glibc)\nimport Glibc\n#endif\nexit(reproMain {})\n"),
 }
+
+# how each writer replays a Val parameter
+VAL_LITERAL = {"python": "stitch.value(", "javascript": "stitch.value(", "java": "Standalone.value(",
+               "go": "stitch.Value(", "rust": "Val::replay(", "ruby": "Stitch.value(", "swift": "Val(replay:"}
 
 
 class Fail(Exception):
@@ -89,6 +93,24 @@ def test(lang, secs):
     r = run(p, "try", str(out / nocrash_name), check=False)
     if r.returncode != 1:
         raise Fail(f"try must reject a program that does not crash (rc={r.returncode})\n{r.stdout[-1000:]}")
+
+    step("write a program with a Val parameter")
+    corpus = p / ".stitch" / "campaigns" / "lang-test"
+    stub = b"putAll" if lang == "java" else b"put_all"
+    progs = [f for f in sorted(corpus.glob("w*/corpus/*")) + sorted(corpus.glob("w*/corpus/.*"))
+             if f.is_file() and stub in f.read_bytes()]
+    out = p / ".stitch" / "standalone" / "lang-test-val"
+    w = None
+    for prog in progs[:12]:  # a program whose call actually runs (not skipped for a missing object)
+        shutil.rmtree(out, ignore_errors=True)
+        w = js(run(p, "write", str(prog), "-o", str(out), "--no-check"))
+        if VAL_LITERAL[lang] in Path(w["file"]).read_text():
+            break
+    else:
+        raise Fail(f"none of {len(progs)} corpus programs that mention {stub.decode()} runs it")
+    w = js(run(p, "write", str(prog), "-o", str(out)))
+    if w.get("check", {}).get("status") != "same":
+        raise Fail(f"write (Val program): {w}")
 
     step("repro")
     with tempfile.TemporaryDirectory() as t:

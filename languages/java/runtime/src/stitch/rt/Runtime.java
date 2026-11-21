@@ -230,6 +230,19 @@ public final class Runtime {
         return java.util.Arrays.copyOf(raw, Math.min(raw.length, max));
     }
 
+    /** A @Val parameter: the decoder's value (a bail in the decoder bails the call). */
+    Object decodeValue(String dt, byte[] raw, int max) {
+        return new Source(raw, max, false, 0, null, null).draw(dt);
+    }
+
+    static String render(Object v) {
+        if (v instanceof Object[]) return java.util.Arrays.deepToString((Object[]) v);
+        if (v instanceof int[]) return java.util.Arrays.toString((int[]) v);
+        if (v instanceof long[]) return java.util.Arrays.toString((long[]) v);
+        if (v instanceof double[]) return java.util.Arrays.toString((double[]) v);
+        return String.valueOf(v);
+    }
+
     byte[] runDecoder(Registry.Datatype d, Source s, int max) {
         Object v;
         try {
@@ -237,7 +250,7 @@ public final class Runtime {
         } catch (Throwable t) {
             v = new byte[0];
         }
-        byte[] b = v instanceof byte[] ? (byte[]) v : String.valueOf(v).getBytes(StandardCharsets.UTF_8);
+        byte[] b = v instanceof byte[] ? (byte[]) v : render(v).getBytes(StandardCharsets.UTF_8);
         return max >= 0 && b.length > max ? java.util.Arrays.copyOf(b, max) : b;
     }
 
@@ -249,6 +262,10 @@ public final class Runtime {
             }
             case "source":
                 return "Src[" + raw.length + "]" + Json.hex(java.util.Arrays.copyOf(raw, Math.min(raw.length, 48))) + (raw.length > 48 ? "..." : "");
+            case "value": {
+                String t = render(p.decode(raw, form, this));
+                return "Val<" + p.datatype + ">[" + raw.length + " choices] " + (t.length() > 300 ? t.substring(0, 300) + "..." : t);
+            }
             default: {
                 Object v = p.decode(raw, form, this);
                 String lit = Json.javaLiteral(v);
@@ -298,6 +315,12 @@ public final class Runtime {
             case "source":
                 b.append(",\"hex\":\"").append(Json.hex(java.util.Arrays.copyOf(raw, Math.min(raw.length, p.size)))).append('"');
                 break;
+            case "value": {
+                b.append(",\"hex\":\"").append(Json.hex(java.util.Arrays.copyOf(raw, Math.min(raw.length, p.size)))).append('"');
+                String t = render(p.decode(raw, form, this));
+                b.append(",\"v\":").append(Json.str(t.length() > 300 ? t.substring(0, 300) : t));
+                break;
+            }
             default: {
                 Object v = p.decode(raw, form, this);
                 b.append(",\"v\":").append(Json.str(String.valueOf(v)));

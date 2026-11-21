@@ -71,10 +71,13 @@ trailing `error` is a bail). Fuzzed parameters: `string`, `[]byte`, ints, floats
 | `"n:range=0..9"` | integer in [0, 9] |
 | `"mode:oneof=1\|2\|4"` | one of the values (strings for a string parameter) |
 | `"flags:flags=1\|2\|4"` | OR of a subset |
+| `"pts:val=Polygon,max=512"` | the value of the `Polygon` decoder (any Go type) |
 | `"node:take"` | the call consumes this object |
 | `"out1:optional"` | result 1 may be nil |
 
-Also `stitch.Decoder(name, fn)`, `stitch.Init(fn)`, `stitch.Bail/Require/Check/Log/Consume`,
+Also `stitch.Decoder(name, fn)` (`fn` returns a string / `[]byte`, or any type for `val=`; build on
+another with `stitch.Draw[T](s, name)`), Source extras `s.F64Range(lo, hi)`, `s.F32Range(lo, hi)`,
+`s.Fixed(n)`, `s.Rest()`, `stitch.Init(fn)`, `stitch.Bail/Require/Check/Log/Consume`,
 `stitch.Set/Get/GetInt/GetObj`, and `stitch.Pick(s, items...)` on a Source.
 
 ## Bugs

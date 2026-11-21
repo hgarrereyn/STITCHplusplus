@@ -115,6 +115,20 @@ func worker() {
 				binary.LittleEndian.PutUint32(b[4*i:], x)
 			}
 			send(out, 'R', b)
+		case 'I':
+			dt := int(binary.LittleEndian.Uint32(p))
+			var items []uint32
+			if dt < len(dts) && dts[dt].decoder != nil {
+				s := newSource(p[4:], len(p)-4, false, 0, nil, nil)
+				s.items = &items
+				RT.runDecoder(dts[dt], s, -1)
+				s.finishItems()
+			}
+			b := make([]byte, 4*len(items))
+			for i, x := range items {
+				binary.LittleEndian.PutUint32(b[4*i:], x)
+			}
+			send(out, 'R', b)
 		case 'T':
 			dt := int(binary.LittleEndian.Uint32(p))
 			if dt < len(dts) && len(dts[dt].dict) < 4096 {

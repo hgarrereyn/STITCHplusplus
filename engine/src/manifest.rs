@@ -48,6 +48,8 @@ pub enum Kind {
     File,
     Raw,
     Source,
+    /// a typed value from a data type's decoder: always stored as the decoder's choices
+    Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,7 +76,7 @@ impl ParamDef {
     /// Fixed-size value encodings (everything except variable-length buffers).
     pub fn fixed_size(&self) -> Option<usize> {
         match self.kind {
-            Kind::Bytes | Kind::Str | Kind::File | Kind::Source => None,
+            Kind::Bytes | Kind::Str | Kind::File | Kind::Source | Kind::Value => None,
             Kind::Range | Kind::Oneof | Kind::Flags => Some(8),
             _ => Some(self.size as usize),
         }

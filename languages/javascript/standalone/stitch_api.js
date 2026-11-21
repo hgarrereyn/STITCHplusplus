@@ -25,6 +25,7 @@ const cur = [-1, "?"];
 const TRACE = !!process.env.STITCH_REPRO_TRACE;
 const spec = () => ({ optional() { return this; } });
 const named = (name) => ({ name });
+const datatypes = new Map();
 
 function attrMap(o) {
   if (!attrs.has(o)) attrs.set(o, new Map());
@@ -54,8 +55,16 @@ module.exports = {
     stubs.set(name, { fn, named: !Array.isArray(args), bailsOn: opts.bailsOn || [] });
   },
   object: named,
-  datatype: named,
-  decoder: (dt, fn) => fn,
+  datatype: (name) => {
+    if (!datatypes.has(name)) datatypes.set(name, { name });
+    return datatypes.get(name);
+  },
+  decoder: (dt, fn) => {
+    dt.decoder = fn;
+    return fn;
+  },
+  // a Val(...) parameter: the recorded choices decoded again by the data type's decoder
+  value: (name, buf) => datatypes.get(name).decoder(new Source(buf)),
   init: (fn) => fn(),
   bail(reason = "bail") {
     throw new Bail(reason);
@@ -143,7 +152,7 @@ module.exports = {
       process.exit(1);
     });
   },
-  Borrow: spec, Take: spec, New: spec, Str: spec, Bytes: spec, File: spec, Src: spec, Range: spec,
+  Borrow: spec, Take: spec, New: spec, Str: spec, Bytes: spec, File: spec, Src: spec, Val: spec, Range: spec,
   OneOf: spec, Flags: spec, Bool: spec(), U8: spec(), U16: spec(), U32: spec(), U64: spec(), I8: spec(),
   I16: spec(), I32: spec(), I64: spec(), BigU64: spec(), BigI64: spec(), F32: spec(), F64: spec(),
 };

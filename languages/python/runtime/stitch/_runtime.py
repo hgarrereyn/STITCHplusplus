@@ -13,7 +13,7 @@ from ._source import Source
 
 # set by the engine's `fuzz` command for the workers it starts (not for exec / triage)
 _FUZZING = os.environ.get("STITCH_FUZZING") == "1"
-from ._spec import (BufParam, Datatype, ObjectType, OneOfParam, Param, SrcParam, _NewSpec, resolve)
+from ._spec import (BufParam, Datatype, ObjectType, OneOfParam, Param, SrcParam, ValParam, _NewSpec, resolve)
 
 ST_NOT_RUN, ST_OK, ST_BAIL, ST_SKIP_MISSING, ST_SKIP_INVALID = 0, 1, 2, 3, 4
 MAX_NODES = 256
@@ -337,6 +337,12 @@ class Runtime:
             return self.run_decoder(dt, Source(raw, cap=max(len(raw), mx)), mx)
         return bytes(raw[:mx])
 
+    def decode_value(self, dtname, raw, mx):
+        dt = self.reg.datatypes.get(dtname)
+        if dt is None or dt.decoder is None:
+            raise TypeError(f"Val[{dtname}]: the data type has no decoder")
+        return dt.decoder(Source(raw, cap=mx))
+
     def run_decoder(self, dt, src, mx=None):
         try:
             v = dt.decoder(src)
@@ -347,7 +353,7 @@ class Runtime:
         if isinstance(v, str):
             v = v.encode("utf-8", "replace")
         elif not isinstance(v, (bytes, bytearray)):
-            v = str(v).encode()
+            v = repr(v).encode("utf-8", "replace")  # a typed decoder: its value as text
         return bytes(v[:mx]) if mx is not None else bytes(v)
 
     def describe(self, p, raw, form):
@@ -356,6 +362,8 @@ class Runtime:
             return f"{p.ctype}[{len(v)}{',decoded' if form == 1 else ''}]{_preview(v)}"
         if isinstance(p, SrcParam):
             return f"Src[{len(raw)}]{bytes(raw[:48]).hex()}{'...' if len(raw) > 48 else ''}"
+        if isinstance(p, ValParam):
+            return f"Val<{p.datatype}>[{len(raw)} choices] {repr(p.decode(raw, form, self))[:300]}"
         if isinstance(p, OneOfParam):
             return repr(p.decode(raw, form, self))
         v = p.decode(raw, form, self)
@@ -381,7 +389,7 @@ class Runtime:
         if isinstance(p, BufParam):
             d["decoded"] = form == 1
             d["hex"] = p.raw_value(raw, form, self).hex()
-        elif isinstance(p, SrcParam):
+        elif isinstance(p, (SrcParam, ValParam)):
             d["hex"] = bytes(raw[:p.size]).hex()
         else:
             v = p.decode(raw, form, self)

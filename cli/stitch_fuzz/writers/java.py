@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "Repro.java"
 SHIM = "stitch.Standalone"  # in /stitch/java/stitch.jar (the runtime jar)
@@ -29,7 +30,10 @@ def _literal(a, draws):
         return lit, None
     if k == "source":
         lines = "; ".join(f"{d['op']} -> {d.get('v', bytes.fromhex(d.get('hex', '')).decode('utf-8', 'replace'))}" for d in draws)
-        return f'new stitch.Source(Standalone.hex("{a["hex"]}"))', (f"draws: {lines[:300]}" if lines else None)
+        return f'new stitch.Source(Standalone.hex("{a["hex"]}"))', (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return (f'Standalone.value({_jstr(a.get("datatype") or "")}, Standalone.hex("{a["hex"]}"))',
+                comment_safe(f"{a.get('name', '?')} = {a.get('v')}")[:300])
     if a.get("java") is not None:
         return a["java"], None
     return "null", f"{a.get('name', '?')} was {a.get('v')}: not a literal, fill it in"

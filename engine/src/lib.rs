@@ -111,6 +111,13 @@ pub fn glob_match(pat: &str, s: &str) -> bool {
 }
 
 fn real_main(args: Vec<String>) -> Result<i32, String> {
+    // No core dumps from this process or the workers it forks. A sanitizer's abort would otherwise
+    // dump core: where core_pattern pipes dumps to a handler (Ubuntu's apport), RLIMIT_CORE = 0 is
+    // ignored and every crash costs ~90 ms while the kernel streams the sanitizer's address space.
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0);
+    }
     let cmd = args.first().cloned().unwrap_or_default();
     let rest = &args[args.len().min(1)..];
     match cmd.as_str() {

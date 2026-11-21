@@ -20,11 +20,11 @@ Reference: `stitch guide python`.
 from ._runtime import REG, RT, Bail, CheckFailed, Endpoint, _MISSING
 from ._source import Source
 from ._spec import (F32, F64, I8, I16, I32, I64, U8, U16, U32, U64, Bool, Borrow, Bytes, File, Flags, New, OneOf, Range,
-                    Src, Str, Take)
+                    Src, Str, Take, Val)
 
 __all__ = ["endpoint", "object", "time_limit", "datatype", "decoder", "init", "bail", "require", "check", "log", "consume", "set",
            "get", "get_obj", "has", "delete", "global_set", "global_get", "Source", "Borrow", "Take", "New", "Str",
-           "Bytes", "File", "Src", "Range", "OneOf", "Flags", "Bool", "U8", "U16", "U32", "U64", "I8", "I16", "I32",
+           "Bytes", "File", "Src", "Val", "Range", "OneOf", "Flags", "Bool", "U8", "U16", "U32", "U64", "I8", "I16", "I32",
            "I64", "F32", "F64", "Bail"]
 
 
@@ -47,7 +47,8 @@ def datatype(name):
 
 
 def decoder(dt):
-    """Register a decoder for a data type: fn(Source) -> str | bytes."""
+    """Register a decoder for a data type: fn(Source) -> str | bytes (values for Str/Bytes/File), or any
+    other value (for Val[T])."""
     d = datatype(dt)
 
     def wrap(fn):

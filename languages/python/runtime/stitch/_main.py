@@ -116,6 +116,15 @@ def worker(project):
             if d and d.decoder:
                 RT.run_decoder(d, Source(payload[4:], cap=len(payload) - 4, spans=spans))
             send(b"R", struct.pack(f"<{len(spans)}I", *spans))
+        elif tag == b"I":
+            dt, = struct.unpack_from("<I", payload)
+            d = dts[dt] if dt < len(dts) else None
+            items = []
+            if d and d.decoder:
+                src = Source(payload[4:], cap=len(payload) - 4, items=items)
+                RT.run_decoder(d, src)
+                src._finish_items()
+            send(b"R", struct.pack(f"<{len(items)}I", *[x & 0xFFFFFFFF for x in items]))
         elif tag == b"T":
             dt, = struct.unpack_from("<I", payload)
             toks = REG.dicts.setdefault(dt, [])

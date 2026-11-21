@@ -41,9 +41,9 @@ pub struct Health {
     pub n_edges: usize,
 }
 
-pub const OP_NAMES: [&str; 14] = [
+pub const OP_NAMES: [&str; 15] = [
     "append", "insert", "delete", "rewire", "splice", "regen_call_params", "duplicate_call", "havoc", "i2s",
-    "tokens", "regen_param", "param_crossover", "lower_or_regen_tail", "i2s_strings",
+    "tokens", "regen_param", "param_crossover", "lower_or_regen_tail", "i2s_strings", "elements",
 ];
 
 pub static HEALTH: Mutex<Option<Health>> = Mutex::new(None);

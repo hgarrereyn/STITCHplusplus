@@ -79,6 +79,7 @@ STITCH_DROP(Name, [](Handle h) { free_it(h); });  // optional: frees objects lef
 | `Str<Max, Tag = void>` | `.c_str()`, `.size()`; converts to `const char*` |
 | `File<Max, Tag = void>` | `.path()` of a temporary file holding the data; `.data()` |
 | `Raw<T>` | a `T` (plain struct), `->`, `*` |
+| `stitch::Val<Tag, Max = 1024>` | the value `Tag`'s decoder returns (any type): `->`, `*`, converts to it |
 | `Src<Max>` | a `stitch::Source` for choices inside the stub |
 
 Values start random, not zero. When the library compares an argument against a constant, the
@@ -120,6 +121,29 @@ STITCH_DATATYPE(JsonText);       // folder: harness/data/JsonText/
 STITCH_DECODER(JsonText, fn);    // fn: (stitch::Source&) -> std::string or std::vector<uint8_t>
 ```
 
+A decoder can return any type. Such a data type is a parameter as `stitch::Val<Tag, Max>`, and decoders
+build on each other with `s.draw<Tag>()`. Write it `stitch::Val` (it is not exported globally, so a
+harness may have its own `Val`):
+
+```cpp
+struct Point { int x, y; };
+STITCH_DATATYPE(AnyPoint);
+STITCH_DECODER(AnyPoint, [](stitch::Source& s) { return Point{(int)s.range(-100, 100), (int)s.range(-100, 100)}; });
+STITCH_DATATYPE(Polygon);
+STITCH_DECODER(Polygon, [](stitch::Source& s) {
+    std::vector<Point> v;
+    while (s.more()) v.push_back(s.draw<AnyPoint>());
+    return v;
+});
+
+void fill(Borrow<Canvas> c, stitch::Val<Polygon, 512> poly) { canvas_fill(c, poly->data(), poly->size()); }
+```
+
+Put a typed decoder where the stubs that use it can see it (a header). Its values are always
+stored as choices: the engine mutates single values, and inserts, deletes, duplicates or swaps the
+iterations of its `more()` loops (here: whole points). Seeds (`seeds/`) are for string and byte data
+types only.
+
 `stitch::Source` methods:
 
 | Method | Returns |
@@ -130,8 +154,12 @@ STITCH_DECODER(JsonText, fn);    // fn: (stitch::Source&) -> std::string or std:
 | `pick({a, b, c})` | one of the values |
 | `coin(p = 0.5)` | true with probability about p |
 | `more()` | loop condition: `while (s.more()) { ... }` |
+| `f64(lo, hi)`, `f32(lo, hi)` | finite float in [lo, hi] |
 | `str(max)`, `bytes(max)` | literal text or bytes |
+| `fixed(n)` | exactly n bytes |
+| `rest()` | every byte that is left |
 | `token()` | a token from the data type's `.dict` files |
+| `draw<Tag>()` | a value from data type `Tag`'s decoder |
 
 Running out of choices is fine: later draws decode from zero bytes and `more()` returns false, so
 every input decodes to some value.

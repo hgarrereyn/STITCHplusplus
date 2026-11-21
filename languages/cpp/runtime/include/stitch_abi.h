@@ -97,6 +97,9 @@ void stitch_dict_add(int dt, const uint8_t* tok, size_t len);
 /* where the decoder's str()/bytes()/token() draws live in a choice buffer:
  * triples (prefix offset, prefix width, content length); returns the number of triples */
 size_t stitch_decode_spans(int dt, const uint8_t* choices, size_t n, uint32_t* out, size_t max_spans);
+/* the decoder's more() loop iterations in a choice buffer: (site, instance, start, end) per
+ * iteration, plus (site, instance, p, p) where each loop execution ended; returns the record count */
+size_t stitch_decode_items(int dt, const uint8_t* choices, size_t n, uint32_t* out, size_t max_items);
 void stitch_cmplog_reset(void); /* clear comparison records and per-run dedupe */
 
 /* misc */

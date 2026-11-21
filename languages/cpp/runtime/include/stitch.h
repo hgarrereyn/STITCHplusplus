@@ -27,6 +27,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <sstream>
+#include <ostream>
 
 namespace stitch {
 
@@ -50,7 +52,7 @@ void log(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 namespace detail {
 
 // ----------------------------------- registry descriptors -----------------------------------
-enum class PKind : uint8_t { Int, Float, Bool, Range, OneOf, Flags, Bytes, Str, File, Raw, Source };
+enum class PKind : uint8_t { Int, Float, Bool, Range, OneOf, Flags, Bytes, Str, File, Raw, Source, Value };
 
 struct ParamDesc {
     PKind kind;
@@ -406,13 +408,20 @@ class Source {
     int64_t i64() { return (int64_t)u64(); }
     float f32();
     double f64();
+    float f32(float lo, float hi);    // in [lo, hi]
+    double f64(double lo, double hi);  // in [lo, hi]
     int64_t range(int64_t lo, int64_t hi);  // inclusive
     size_t choice(size_t n);                // 0..n-1
     bool coin(double p = 0.5);
     bool more();  // loop continuation: `while (s.more()) {...}`; false once the buffer is exhausted
     std::string str(size_t max);
     std::vector<uint8_t> bytes(size_t max);
+    std::vector<uint8_t> fixed(size_t n);  // exactly n bytes (zeros past the end of the input)
+    std::vector<uint8_t> rest();           // every byte that is left
     std::string token();  // a token from the datatype dictionary (stored verbatim)
+    // A value from data type Tag's decoder, drawn from this source: decoders build on each other.
+    template <class Tag>
+    auto draw();
     template <class T>
     T pick(std::initializer_list<T> xs) {
         size_t i = choice(xs.size());
@@ -432,6 +441,88 @@ class Source {
    private:
     Impl* impl_;
 };
+
+namespace detail {
+// While alive, Source draws are not recorded in plans (decoders behind a parameter).
+struct QuietDraws {
+    bool saved;
+    QuietDraws();
+    ~QuietDraws();
+};
+// `more()` with an explicit loop site and frame (for language bridges; C++ uses the call site).
+bool source_more_at(Source& s, uint32_t site, uintptr_t frame);
+// Decoders are found by argument-dependent lookup on the data type tag: STITCH_DECODER(Tag, fn)
+// defines stitch_decoder_fn(Tag*) next to the tag. This deleted fallback names the missing case.
+template <class T>
+void stitch_decoder_fn(T*) = delete;
+template <class Tag>
+using decoded_t = std::decay_t<decltype(stitch_decoder_fn((Tag*)nullptr)(std::declval<::stitch::Source&>()))>;
+template <class R, class = void>
+struct is_byte_range : std::false_type {};
+// Text for a decoded value in traces and `stitch sample`: operator<< if the type has one, else
+// numbers, strings, containers, pairs and optionals element by element, else a placeholder.
+template <class T, class = void>
+struct has_ostream : std::false_type {};
+template <class T>
+struct has_ostream<T, std::void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>> : std::true_type {};
+template <class T, class = void>
+struct is_range_t : std::false_type {};
+template <class T>
+struct is_range_t<T, std::void_t<decltype(std::declval<const T&>().begin()), decltype(std::declval<const T&>().end())>> : std::true_type {};
+template <class T>
+struct is_pair_t : std::false_type {};
+template <class A, class B>
+struct is_pair_t<std::pair<A, B>> : std::true_type {};
+template <class T>
+struct is_optional_t : std::false_type {};
+template <class T>
+struct is_optional_t<std::optional<T>> : std::true_type {};
+template <class T>
+void render_to(std::ostream& o, const T& v) {
+    if constexpr (std::is_same<T, std::string>::value) o << '"' << v << '"';
+    else if constexpr (std::is_same<T, bool>::value) o << (v ? "true" : "false");
+    else if constexpr (std::is_same<T, char>::value || std::is_same<T, signed char>::value || std::is_same<T, unsigned char>::value) o << (int)v;
+    else if constexpr (std::is_enum<T>::value) o << (long long)v;
+    else if constexpr (has_ostream<T>::value) o << v;
+    else if constexpr (is_pair_t<T>::value) {
+        o << '(';
+        render_to(o, v.first);
+        o << ", ";
+        render_to(o, v.second);
+        o << ')';
+    } else if constexpr (is_optional_t<T>::value) {
+        if (v) render_to(o, *v);
+        else o << "nullopt";
+    } else if constexpr (is_range_t<T>::value) {
+        o << '[';
+        size_t i = 0;
+        for (const auto& x : v) {
+            if (i) o << ", ";
+            if (++i > 32) {
+                o << "...";
+                break;
+            }
+            render_to(o, x);
+        }
+        o << ']';
+    } else o << "<value>";
+}
+template <class T>
+std::string render(const T& v) {
+    std::ostringstream o;
+    render_to(o, v);
+    return o.str();
+}
+template <class R>
+struct is_byte_range<R, std::void_t<typename R::value_type, decltype(std::declval<R>().begin())>>
+    : std::bool_constant<sizeof(typename R::value_type) == 1 && std::is_integral<typename R::value_type>::value> {};
+}  // namespace detail
+
+template <class Tag>
+auto Source::draw() {
+    using detail::stitch_decoder_fn;
+    return stitch_decoder_fn((Tag*)nullptr)(*this);
+}
 
 // ---------------------------------------------------------------------------------------------
 // Fuzz parameters
@@ -656,6 +747,35 @@ struct Raw {
     }
 };
 
+// A value of data type Tag, built by Tag's decoder from at most Max bytes of choices. The decoder
+// can return any type (a struct, a vector, ...): `p->x`, `*p`, or use it where a T is expected. Its
+// definition (STITCH_DECODER) must be visible where it is used. Written stitch::Val (not exported
+// globally: Val is a common name in harnesses).
+template <class Tag, size_t Max = 1024>
+struct Val {
+    using value_type = detail::decoded_t<Tag>;
+    value_type v;
+    operator value_type&() { return v; }
+    operator const value_type&() const { return v; }
+    value_type* operator->() { return &v; }
+    const value_type* operator->() const { return &v; }
+    value_type& operator*() { return v; }
+    const value_type& operator*() const { return v; }
+    static Val decode(const uint8_t* b, size_t n, uint8_t) {
+        detail::QuietDraws q;  // the decoder's draws are not stub draws in plans
+        Source s(b, n < Max ? n : Max, Max);
+        return Val{s.draw<Tag>()};
+    }
+    static detail::ParamDesc desc() {
+        detail::ParamDesc d{};
+        d.kind = detail::PKind::Value;
+        d.size = Max;
+        d.datatype = detail::TagName<Tag>::get();
+        d.ctype = "Val";
+        return d;
+    }
+};
+
 // In-stub choice source of at most Max bytes, for values that depend on object state
 // (e.g. pick an existing key or index).
 template <size_t Max>
@@ -798,10 +918,20 @@ struct DecoderReg {
     template <class Fn>
     static int reg(Fn fn) {
         static Fn f = fn;
-        return register_decoder(Tag::stitch_name(), +[](void* src) -> std::vector<uint8_t> {
-            auto out = f(*static_cast<Source*>(src));
-            return std::vector<uint8_t>(out.begin(), out.end());
-        });
+        using R = std::decay_t<decltype(fn(std::declval<Source&>()))>;
+        if constexpr (is_byte_range<R>::value) {
+            return register_decoder(Tag::stitch_name(), +[](void* src) -> std::vector<uint8_t> {
+                auto out = f(*static_cast<Source*>(src));
+                return std::vector<uint8_t>(out.begin(), out.end());
+            });
+        } else {
+            // a typed decoder (Val<Tag>): the engine runs it to generate and inspect choices; the
+            // bytes it gets back are only a rendering of the value for traces and `stitch sample`
+            return register_decoder(Tag::stitch_name(), +[](void* src) -> std::vector<uint8_t> {
+                auto t = render(f(*static_cast<Source*>(src)));
+                return std::vector<uint8_t>(t.begin(), t.end());
+            });
+        }
     }
 };
 
@@ -833,9 +963,12 @@ void set_param_names(const char* endpoint, const std::vector<std::string>& names
     };                                                                       \
     inline const int STITCH_CAT(stitch_dtreg_, Name) = ::stitch::detail::register_datatype(#Name)
 
-// Register a decoder for a data type: STITCH_DECODER(JsonText, fn) with fn(stitch::Source&) -> string/bytes
-#define STITCH_DECODER(Tag, fn) \
-    static const int STITCH_CAT(stitch_decreg_, Tag) = ::stitch::detail::DecoderReg<Tag>::reg(fn)
+// Register a decoder for a data type: STITCH_DECODER(JsonText, fn) with fn(stitch::Source&) -> T.
+// T = std::string / bytes: values for Str<N, Tag> / Bytes<N, Tag>. Any other T: values for Val<Tag>.
+#define STITCH_DECODER(Tag, ...)                                               \
+    [[maybe_unused]] inline auto stitch_decoder_fn(Tag*) { return __VA_ARGS__; } \
+    static const int STITCH_CAT(stitch_decreg_, Tag) =                \
+        ::stitch::detail::DecoderReg<Tag>::reg(stitch_decoder_fn((Tag*)nullptr))
 
 // Register an endpoint function. Qualified names are fine (STITCH_ENDPOINT(json::parse)); the
 // endpoint id is the name as written. Do not overload endpoint functions.

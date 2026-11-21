@@ -346,6 +346,20 @@ func (p *param) decode(raw []byte, form byte) reflect.Value {
 			b = b[:p.size]
 		}
 		return reflect.ValueOf(RT.newSource(b, p.size))
+	case "value":
+		b := raw
+		if len(b) > p.size {
+			b = b[:p.size]
+		}
+		d := reg.datatype(p.datatype)
+		if d.value == nil {
+			panic(fmt.Sprintf("val=%s: the data type has no decoder", p.datatype))
+		}
+		x := d.value(newSource(b, p.size, false, 0, nil, nil))
+		if x == nil {
+			return reflect.Zero(p.typ)
+		}
+		return reflect.ValueOf(x).Convert(p.typ)
 	case "oneof":
 		i := p.oneofIndex(raw)
 		if p.choices != nil {
@@ -431,6 +445,12 @@ func (r *rt) describe(p *param, raw []byte, form byte) string {
 			b = b[:48]
 		}
 		return fmt.Sprintf("Src[%d]%x", len(raw), b)
+	case "value":
+		t := fmt.Sprintf("%+v", p.decode(raw, form).Interface())
+		if len(t) > 300 {
+			t = t[:300] + "..."
+		}
+		return fmt.Sprintf("Val<%s>[%d choices] %s", p.datatype, len(raw), t)
 	}
 	return goLiteral(p.decode(raw, form))
 }
@@ -497,12 +517,19 @@ func (r *rt) planParam(a arg, raw []byte, form byte) map[string]any {
 	case "str", "bytes", "file":
 		d["decoded"] = form == 1
 		d["hex"] = hex.EncodeToString(p.bufValue(raw, form))
-	case "source":
+	case "source", "value":
 		b := raw
 		if len(b) > p.size {
 			b = b[:p.size]
 		}
 		d["hex"] = hex.EncodeToString(b)
+		if p.kind == "value" {
+			t := fmt.Sprintf("%+v", p.decode(raw, form).Interface())
+			if len(t) > 300 {
+				t = t[:300]
+			}
+			d["v"] = t
+		}
 	default:
 		v := p.decode(raw, form)
 		d["v"] = fmt.Sprint(v.Interface())

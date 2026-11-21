@@ -74,7 +74,12 @@ let removeChild = endpoint("remove_child") { (doc: Borrow<Doc>, s: Choices<8>) t
 | `Str<max, T>` | String (UTF-8, invalid bytes replaced); `T` a data type or `Plain` |
 | `Bytes<max, T>` | `[UInt8]` |
 | `FilePath<max, T>` | path of a temporary file (`.path`) |
+| `Val<T, max>` | the value of `T`'s decoder (`.value`), any type |
 | `Choices<max>` | a `Source` for choices inside the stub (`.source`) |
+
+A decoder (`enum T: Decoded { static func decode(_ s: Source) -> V }`) returns a String for `Str<max,
+T>` or any `V` for `Val<T, max>`; `s.draw(T.self)` builds on another decoder. `Source` also has
+`f64(lo, hi)`, `f32(lo, hi)`, `fixed(n)`, `rest()`.
 
 An object type is `enum T: StitchObject { typealias Handle = H }`; handles may be classes or
 values (a `Borrow`'s `.value` is stored in a box, so mutations of value types stay).

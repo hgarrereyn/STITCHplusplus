@@ -3,7 +3,7 @@
 #![allow(static_mut_refs)]
 use crate::cov;
 use crate::source::Source;
-use crate::{Arg, Borrow, Bytes, Choices, Datatype, File, FlagSet, Flags, New, Object, OneOf, Range, Ret, Src, Str, Take, Value};
+use crate::{Arg, Borrow, Bytes, Choices, Datatype, Decoded, File, FlagSet, Flags, New, Object, OneOf, Range, Ret, Src, Str, Take, Val, Value};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -122,6 +122,44 @@ pub fn register_endpoint(e: EndpointDef) {
     }
     r.by_name.insert(e.name, r.stubs.len());
     r.stubs.push(e);
+}
+
+/// What a decoder's value looks like to the engine: the bytes of a String / Vec<u8> (Str and
+/// Bytes parameters), else its Debug text for traces and `stitch sample` (autoref specialization).
+pub mod render {
+    pub struct Render<'a, T>(pub &'a T);
+    pub trait RenderStr {
+        fn render(&self) -> Vec<u8>;
+    }
+    impl RenderStr for &&Render<'_, String> {
+        fn render(&self) -> Vec<u8> {
+            self.0.as_bytes().to_vec()
+        }
+    }
+    pub trait RenderBytes {
+        fn render(&self) -> Vec<u8>;
+    }
+    impl RenderBytes for &&Render<'_, Vec<u8>> {
+        fn render(&self) -> Vec<u8> {
+            self.0.clone()
+        }
+    }
+    pub trait RenderDebug {
+        fn render(&self) -> Vec<u8>;
+    }
+    impl<T: std::fmt::Debug> RenderDebug for &Render<'_, T> {
+        fn render(&self) -> Vec<u8> {
+            format!("{:?}", self.0).into_bytes()
+        }
+    }
+    pub trait RenderAny {
+        fn render(&self) -> Vec<u8>;
+    }
+    impl<T> RenderAny for Render<'_, T> {
+        fn render(&self) -> Vec<u8> {
+            b"<value>".to_vec()
+        }
+    }
 }
 
 pub trait DecoderOut {
@@ -554,6 +592,16 @@ impl<F: FlagSet> Arg for Flags<F> {
         Flags::new(le(&ctx.next_param().1, 8) as i64 & mask)
     }
 }
+impl<D: Decoded, const MAX: usize> Arg for Val<D, MAX> {
+    fn spec(name: &'static str) -> ArgSpec {
+        ArgSpec::Param { p: ParamSpec { datatype: D::NAME, ..pspec("value", "Val", MAX, false) }, name }
+    }
+    fn fetch(ctx: &mut Ctx, _i: usize) -> Self {
+        let (_, raw) = ctx.next_param();
+        let mut s = Source::new(&raw[..raw.len().min(MAX)], MAX, false, 0);
+        Val(D::decode(&mut s))
+    }
+}
 impl<const MAX: usize> Arg for Src<MAX> {
     fn spec(name: &'static str) -> ArgSpec {
         ArgSpec::Param { p: pspec("source", "Source", MAX, false), name }
@@ -866,6 +914,13 @@ fn describe(p: &ParamSpec, raw: &[u8], form: u8) -> (String, String) {
             let b = &raw[..raw.len().min(p.size)];
             (format!("Src[{}]{}", raw.len(), hex(&b[..b.len().min(48)])),
              format!("\"hex\":\"{}\",\"rust\":{}", hex(b), json_str(&format!("Src::replay(&{}[..])", byte_lit(b)))))
+        }
+        "value" => {
+            let b = &raw[..raw.len().min(p.size)];
+            let shown = String::from_utf8_lossy(&decode_value_text(p.datatype, b)).into_owned();
+            let shown: String = shown.chars().take(300).collect();
+            (format!("Val<{}>[{} choices] {}", p.datatype.unwrap_or("?"), raw.len(), shown),
+             format!("\"hex\":\"{}\",\"v\":{},\"rust\":{}", hex(b), json_str(&shown), json_str(&format!("Val::replay(&{}[..])", byte_lit(b)))))
         }
         _ => {
             let v = le(raw, if p.kind == "int" || p.kind == "float" || p.kind == "bool" { p.size } else { 8 });
@@ -1360,6 +1415,13 @@ fn worker() {
                 }
                 send(&mut tx, b'R', &out);
             }
+            b'I' => {
+                let mut out = vec![];
+                for x in items(u32_at(0) as usize, &p[4..]) {
+                    out.extend_from_slice(&x.to_le_bytes());
+                }
+                send(&mut tx, b'R', &out);
+            }
             b'T' => dict_add(u32_at(0) as usize, &p[4..]),
             b'P' => set_plan(&String::from_utf8_lossy(&p)),
             b'Q' => return,
@@ -1387,6 +1449,26 @@ pub(crate) fn generate(dt: usize, seed: u64, pre: &[u8], cap: usize) -> Vec<u8> 
         }
     }
     v
+}
+
+/// A Val parameter's value as text (its decoder run through the registry).
+fn decode_value_text(dt: Option<&str>, raw: &[u8]) -> Vec<u8> {
+    match dt.and_then(|n| reg().datatypes.iter().find(|x| x.name == n)).and_then(|d| d.decoder) {
+        Some(f) => run_decoder(f, Source::new(raw, raw.len(), false, 0), None),
+        None => vec![],
+    }
+}
+
+pub(crate) fn items(dt: usize, ch: &[u8]) -> Vec<u32> {
+    let mut out = vec![];
+    if let Some(f) = reg().datatypes.get(dt).and_then(|d| d.decoder) {
+        let mut s = Source::new(ch, ch.len(), false, 0);
+        s.items = Some(vec![]);
+        let _ = catch_unwind(AssertUnwindSafe(|| f(&mut s)));
+        s.finish_items();
+        out = s.items.take().unwrap_or_default();
+    }
+    out
 }
 
 pub(crate) fn spans(dt: usize, ch: &[u8]) -> Vec<u32> {

@@ -25,6 +25,7 @@ pub const OP_EXEC: u8 = b'X';
 pub const OP_DECODE: u8 = b'D';
 pub const OP_GENERATE: u8 = b'G';
 pub const OP_SPANS: u8 = b'S';
+pub const OP_ITEMS: u8 = b'I';
 pub const OP_DICT: u8 = b'T';
 pub const OP_PLAN: u8 = b'P';
 pub const OP_QUIT: u8 = b'Q';
@@ -420,6 +421,13 @@ impl Client {
         let mut m = dt.to_le_bytes().to_vec();
         m.extend_from_slice(choices);
         let v = self.rpc(OP_SPANS, &m);
+        v.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
+    }
+
+    pub fn items(&mut self, dt: u32, choices: &[u8]) -> Vec<u32> {
+        let mut m = dt.to_le_bytes().to_vec();
+        m.extend_from_slice(choices);
+        let v = self.rpc(OP_ITEMS, &m);
         v.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
     }
 

@@ -1,10 +1,12 @@
 """`stitch write` for Ruby: the harness code plus a main that calls each stub in order."""
+import json
 import re
 import shlex
 from pathlib import Path
 
 from ..project import STITCH_HOME
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.rb"
 SHIM = "stitch.rb"
@@ -48,7 +50,10 @@ def _literal(a, draws):
     if k == "source":
         lines = "; ".join(f"{d['op']} -> {d.get('v', bytes.fromhex(d.get('hex', '')).decode('utf-8', 'replace'))!s}"
                           for d in draws)
-        return f"Stitch::Source.new([{a['hex']!r}].pack(\"H*\"))", (f"draws: {lines[:300]}" if lines else None)
+        return f"Stitch::Source.new([{a['hex']!r}].pack(\"H*\"))", (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return (f"Stitch.value({json.dumps(a.get('datatype') or '')}, [{a['hex']!r}].pack(\"H*\"))",
+                comment_safe(f"{a.get('name', '?')} = {a.get('v')}")[:300])
     rb = a.get("rb")
     if k == "float":
         return {"NaN": "Float::NAN", "Infinity": "Float::INFINITY", "-Infinity": "-Float::INFINITY"}.get(rb, rb), None
@@ -61,7 +66,7 @@ def _harness_code(p):
     """All harness files, in load order, without requires of each other."""
     parts = []
     for f in sorted((p.root / "harness").rglob("*.rb")):
-        if "data" in f.relative_to(p.root / "harness").parts[:1]:
+        if "seeds" in f.relative_to(p.root / "harness").parts:
             continue
         text = f.read_text()
         text = re.sub(r"^(\s*require_relative\s[^\n]*)$", r"# \1  (pasted above)", text, flags=re.M)

@@ -107,9 +107,10 @@ final class Registry {
         for (Method m : ms) {
             if (m.isAnnotationPresent(Decoder.class)) {
                 need(Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == Source.class,
-                    m, "@Decoder must be public static String|byte[] name(Source s)");
+                    m, "@Decoder must be public static T name(Source s)");
                 m.setAccessible(true);
                 datatype(m.getAnnotation(Decoder.class).value()).decoder = m;
+                Source.registerDecoder(m.getAnnotation(Decoder.class).value(), m);
             }
             if (m.isAnnotationPresent(Init.class)) {
                 need(Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 0, m, "@Init must be static with no parameters");
@@ -130,7 +131,7 @@ final class Registry {
             s.optional = e.optional();
             for (Parameter p : m.getParameters()) {
                 String an = p.isNamePresent() ? p.getName() : p.getName();
-                if (Param.isData(p.getType())) {
+                if (Param.isData(p.getType()) || p.isAnnotationPresent(stitch.Val.class)) {
                     Param q = Param.of(p, an);
                     if (q.datatype != null) datatype(q.datatype);
                     s.args.add(new Arg(an, null, false, q));

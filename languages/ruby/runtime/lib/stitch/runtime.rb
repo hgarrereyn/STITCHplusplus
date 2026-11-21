@@ -327,13 +327,20 @@ module Stitch
       raw.byteslice(0, mx).b
     end
 
+    def decode_value(dtname, raw, mx)
+      dt = @reg.datatypes[dtname]
+      raise TypeError, "Val[#{dtname}]: the data type has no decoder" unless dt&.decoder
+
+      dt.decoder.call(Source.new(raw, cap: mx))
+    end
+
     def run_decoder(dt, src, mx = nil)
       v = begin
         dt.decoder.call(src)
       rescue Exception # rubocop:disable Lint/RescueException
         "".b
       end
-      v = v.to_s unless v.is_a?(String)
+      v = v.inspect unless v.is_a?(String) # a typed decoder: its value as text
       v = v.b
       mx ? v.byteslice(0, mx) : v
     end
@@ -345,6 +352,8 @@ module Stitch
         "#{p.ctype}[#{v.bytesize}#{form == 1 ? ',decoded' : ''}]#{Stitch.preview(v)}"
       when SrcParam
         "Src[#{raw.bytesize}]#{raw.byteslice(0, 48).unpack1('H*')}#{raw.bytesize > 48 ? '...' : ''}"
+      when ValParam
+        "Val<#{p.datatype}>[#{raw.bytesize} choices] #{p.decode(raw, form, self).inspect[0, 300]}"
       else
         p.decode(raw, form, self).inspect
       end
@@ -375,8 +384,9 @@ module Stitch
       when BufParam
         d["decoded"] = form == 1
         d["hex"] = p.raw_value(raw, form, self).unpack1("H*")
-      when SrcParam
+      when SrcParam, ValParam
         d["hex"] = raw.byteslice(0, p.size).unpack1("H*")
+        d["v"] = p.decode(raw, form, self).inspect[0, 300] if p.is_a?(ValParam)
       else
         v = p.decode(raw, form, self)
         d["signed"] = p.signed ? true : false
@@ -384,7 +394,7 @@ module Stitch
         d["index"] = p.index(raw) if p.is_a?(OneOfParam)
         d["d"] = v.inspect if p.kind == "float"
       end
-      d["rb"] = p.is_a?(SrcParam) || p.kind == "file" ? nil : p.decode(raw, form, self).inspect
+      d["rb"] = p.is_a?(SrcParam) || p.is_a?(ValParam) || p.kind == "file" ? nil : p.decode(raw, form, self).inspect
       d["datatype"] = p.datatype if p.datatype
       d
     end

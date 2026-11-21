@@ -35,7 +35,7 @@ class _Any:
     __ror__ = __or__
 
 
-Borrow = Take = New = Str = Bytes = File = Src = Range = OneOf = Flags = _Any
+Borrow = Take = New = Str = Bytes = File = Src = Val = Range = OneOf = Flags = _Any
 U8 = U16 = U32 = U64 = I8 = I16 = I32 = I64 = F32 = F64 = Bool = _Any
 _bails_on = {}
 _attrs = {}
@@ -53,12 +53,23 @@ def object(name, drop=None):
     return _Named(name)
 
 
+_datatypes = {}
+
+
 def datatype(name):
-    return _Named(name)
+    return _datatypes.setdefault(name, _Named(name))
 
 
 def decoder(dt):
-    return lambda fn: fn
+    def wrap(fn):
+        dt.decoder = fn
+        return fn
+    return wrap
+
+
+def value(name, data):
+    """A Val[...] parameter: the recorded choices decoded again by the data type's decoder."""
+    return _datatypes[name].decoder(Source(data))
 
 
 def init(fn):

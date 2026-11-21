@@ -466,6 +466,41 @@ class Source {
     }
     std::vector<uint8_t> bytes(size_t max) { return blob(max); }
     std::string token() { return str(255); }
+    double f64(double lo, double hi) {
+        if (!(lo <= hi)) std::swap(lo, hi);
+        uint64_t bits = uint(8);
+        double v;
+        memcpy(&v, &bits, 8);
+        if (std::isfinite(v) && v >= lo && v <= hi) return v;
+        double p = (double)(bits >> 11) * (1.0 / 9007199254740992.0);
+        double w = hi - lo;
+        double r = std::isfinite(w) ? lo + w * p : (p < 0.5 ? lo + (hi / 2 - lo / 2) * (2 * p) : lo / 2 + hi / 2 + (hi / 2 - lo / 2) * (2 * p - 1));
+        return std::min(hi, std::max(lo, r));
+    }
+    float f32(float lo, float hi) {
+        if (!(lo <= hi)) std::swap(lo, hi);
+        uint32_t bits = (uint32_t)uint(4);
+        float v;
+        memcpy(&v, &bits, 4);
+        if (std::isfinite(v) && v >= lo && v <= hi) return v;
+        double p = (double)(bits >> 8) * (1.0 / 16777216.0);
+        return (float)std::min<double>(hi, std::max<double>(lo, lo + ((double)hi - lo) * p));
+    }
+    std::vector<uint8_t> fixed(size_t n) {
+        std::vector<uint8_t> out(n, 0);
+        size_t k = std::min(n, remaining());
+        if (k) memcpy(out.data(), buf_.data() + pos_, k);
+        pos_ += k;
+        if (k < n) exhausted_ = true;
+        return out;
+    }
+    std::vector<uint8_t> rest() {
+        std::vector<uint8_t> out(buf_.begin() + std::min(pos_, buf_.size()), buf_.end());
+        pos_ = buf_.size();
+        return out;
+    }
+    template <class Tag>
+    auto draw();
     template <class T>
     T pick(std::initializer_list<T> xs) {
         return *(xs.begin() + choice(xs.size()));
@@ -638,6 +673,36 @@ struct Raw {
     T& operator*() { return v; }
 };
 
+namespace detail {
+template <class T>
+void stitch_decoder_fn(T*) = delete;
+template <class Tag>
+using decoded_t = std::decay_t<decltype(stitch_decoder_fn((Tag*)nullptr)(std::declval<::stitch::Source&>()))>;
+}  // namespace detail
+template <class Tag>
+auto Source::draw() {
+    using detail::stitch_decoder_fn;
+    return stitch_decoder_fn((Tag*)nullptr)(*this);
+}
+
+// A value of data type Tag, decoded again from the recorded choices by the harness's decoder.
+template <class Tag, size_t Max = 1024>
+struct Val {
+    using value_type = detail::decoded_t<Tag>;
+    value_type v;
+    Val(const char* p, size_t n) : v(decode(p, n)) {}
+    static value_type decode(const char* p, size_t n) {
+        Source s(p, n);
+        return s.draw<Tag>();
+    }
+    operator value_type&() { return v; }
+    operator const value_type&() const { return v; }
+    value_type* operator->() { return &v; }
+    const value_type* operator->() const { return &v; }
+    value_type& operator*() { return v; }
+    const value_type& operator*() const { return v; }
+};
+
 template <size_t Max>
 struct Src {
     std::shared_ptr<Source> s;
@@ -678,7 +743,8 @@ inline void init() {
     struct Name {                                          \
         static const char* stitch_name() { return #Name; } \
     }
-#define STITCH_DECODER(Tag, fn) static_assert(true, "")
+#define STITCH_DECODER(Tag, ...) \
+    [[maybe_unused]] inline auto stitch_decoder_fn(Tag*) { return __VA_ARGS__; }
 #define STITCH_ENDPOINT(fn) static_assert(true, "")
 #define STITCH_INIT                                                                                         \
     static void STITCH_CAT(stitch_init_fn_, __LINE__)();                                                   \

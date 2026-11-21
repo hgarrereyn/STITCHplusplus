@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.rs"
 SHIM = "stitch::"  # the stitch crate in the image (stitch::run / stitch::call)
@@ -17,7 +18,7 @@ def _literal(a, draws):
     if a.get("rust"):
         comment = None
         if a["kind"] == "source" and draws:
-            comment = "draws: " + "; ".join(f"{d['op']} -> {d.get('v', d.get('hex', ''))}" for d in draws)[:300]
+            comment = "draws: " + comment_safe("; ".join(f"{d['op']} -> {d.get('v', d.get('hex', ''))}" for d in draws))[:300]
         return a["rust"], comment
     return "Default::default()", f"{a.get('name', '?')} was {a.get('v')}: fill it in"
 

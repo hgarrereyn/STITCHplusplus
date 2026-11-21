@@ -1,7 +1,30 @@
 "use strict";
 // stitch.Source: decisions inside decoders and stubs, read from a fuzzer-owned choice buffer.
 // Same encoding as the C++ runtime (languages/cpp/runtime/src/runtime.cpp): little-endian fixed
-// width integers, 8-byte ranges, 1-byte coin/more, length-prefixed strings.
+// width integers, 8-byte ranges, 1-byte coin/more, length-prefixed strings, f64(lo, hi) as the value
+// itself when finite and in range.
+
+// FNV-1a: a stable 32-bit id for a loop's source location
+function site32(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h >>> 0;
+}
+
+// The loop calling more(): its source location and the stack depth (recursion level).
+function loopCaller() {
+  const limit = Error.stackTraceLimit;
+  const prep = Error.prepareStackTrace;
+  Error.stackTraceLimit = Infinity;
+  Error.prepareStackTrace = (_, cs) => cs;
+  const holder = {};
+  Error.captureStackTrace(holder, loopCaller);
+  const cs = holder.stack;
+  Error.stackTraceLimit = limit;
+  Error.prepareStackTrace = prep;
+  const c = cs[1]; // [0] is Source.more
+  return { site: site32(c ? `${c.getFileName()}:${c.getLineNumber()}:${c.getColumnNumber()}` : "?"), depth: cs.length };
+}
 
 const INTERESTING = [0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 100, 127, 128, 255, 256, 512, 1000, 1024, 4096,
   0x7fff, 0x8000, 0xffff, 0x10000, 0x7fffffff, 0x80000000, 0xffffffff].map(BigInt);
@@ -45,6 +68,9 @@ class Source {
     this._rnd = this._gen ? rng(opts.seed ?? 0) : null;
     this._dict = opts.dict || [];
     this._spans = opts.spans || null;
+    this._items = opts.items || null; // loop iterations for the engine: site, instance, start, end
+    this._open = new Map();
+    this._nextInst = 0;
     this._exhausted = false;
     this._log = null; // plan mode: (op, value, isBytes) => void
   }
@@ -177,8 +203,6 @@ class Source {
   i16() { return this._logged("i16()", Number(BigInt.asIntN(16, this._uint(2)))); }
   i32() { return this._logged("i32()", Number(BigInt.asIntN(32, this._uint(4)))); }
   i64() { return this._logged("i64()", BigInt.asIntN(64, this._uint(8))); }
-  f32() { return this._logged("f32()", leWrite(this._uint(4), 4).readFloatLE(0)); }
-  f64() { return this._logged("f64()", leWrite(this._uint(8), 8).readDoubleLE(0)); }
   range(lo, hi) { return this._logged(`range(${lo}, ${hi})`, Number(this._range(lo, hi))); }
   choice(n) { return this._logged(`choice(${n})`, n <= 0 ? 0 : Number(this._range(0, n - 1))); }
   pick(items) {
@@ -198,13 +222,111 @@ class Source {
     return this._logged(`coin(${p})`, b < thr && !this._exhausted);
   }
   more() {
-    if (this._exhausted && !this._gen) return this._logged("more()", false);
-    const b = this._draw(1, () => {
-      const fill = this._cap ? this._len / this._cap : 1;
-      const p = fill > 0.5 ? 0.15 : 0.65;
-      return [Number(this._rnd() & 0xfen) | (this._unit() < p ? 1 : 0)];
-    })[0];
-    return this._logged("more()", !!(b & 1) && !this._exhausted);
+    const at = Math.min(this._pos, this._len);
+    let v = false;
+    if (!(this._exhausted && !this._gen)) {
+      const b = this._draw(1, () => {
+        const fill = this._cap ? this._len / this._cap : 1;
+        const p = fill > 0.5 ? 0.15 : 0.65;
+        return [Number(this._rnd() & 0xfen) | (this._unit() < p ? 1 : 0)];
+      })[0];
+      v = !!(b & 1) && !this._exhausted;
+    }
+    if (this._items) {
+      const { site, depth } = loopCaller();
+      this._loopItem(site, depth, at, v);
+    }
+    return this._logged("more()", v);
+  }
+  _loopItem(site, frame, p, v) {
+    const key = `${site}:${frame}`;
+    let st = this._open.get(key);
+    if (!st) {
+      st = { site, inst: this._nextInst++, start: -1 };
+      this._open.set(key, st);
+    }
+    if (st.start >= 0) this._items.push(site, st.inst, st.start, p);
+    if (v) st.start = p;
+    else {
+      this._items.push(site, st.inst, p, p);
+      this._open.delete(key);
+    }
+  }
+  _finishItems() {
+    for (const st of this._open.values()) {
+      if (st.start >= 0) this._items.push(st.site, st.inst, st.start, this._len);
+      this._items.push(st.site, st.inst, this._len, this._len);
+    }
+    this._open.clear();
+  }
+  // f64(): any double. f64(lo, hi): a finite double in [lo, hi].
+  f64(lo, hi) {
+    if (lo === undefined) return this._logged("f64()", leWrite(this._uint(8), 8).readDoubleLE(0));
+    if (!(lo <= hi)) [lo, hi] = [hi, lo];
+    const bits = leRead(this._draw(8, () => {
+      const u = this._unit();
+      let v = u < 0.08 ? lo : u < 0.16 ? hi : u < 0.22 && lo <= 0 && 0 <= hi ? 0 : lo + (hi - lo) * this._unit();
+      if (!(v >= lo && v <= hi)) v = lo;
+      const b = Buffer.alloc(8);
+      b.writeDoubleLE(v, 0);
+      return b;
+    }));
+    let v = leWrite(bits, 8).readDoubleLE(0);
+    if (!(Number.isFinite(v) && v >= lo && v <= hi)) {
+      const p = Number(bits >> 11n) / 9007199254740992;
+      const w = hi - lo;
+      v = Number.isFinite(w) ? lo + w * p : p < 0.5 ? lo + (hi / 2 - lo / 2) * (2 * p) : lo / 2 + hi / 2 + (hi / 2 - lo / 2) * (2 * p - 1);
+      v = Math.min(hi, Math.max(lo, v));
+    }
+    return this._logged(`f64(${lo}, ${hi})`, v);
+  }
+  f32(lo, hi) {
+    if (lo === undefined) return this._logged("f32()", leWrite(this._uint(4), 4).readFloatLE(0));
+    if (!(lo <= hi)) [lo, hi] = [hi, lo];
+    const bits = leRead(this._draw(4, () => {
+      const u = this._unit();
+      let v = u < 0.08 ? lo : u < 0.16 ? hi : lo + (hi - lo) * this._unit();
+      if (!(v >= lo && v <= hi)) v = lo;
+      const b = Buffer.alloc(4);
+      b.writeFloatLE(v, 0);
+      return b;
+    }));
+    let v = leWrite(bits, 4).readFloatLE(0);
+    if (!(Number.isFinite(v) && v >= lo && v <= hi)) v = Math.fround(Math.min(hi, Math.max(lo, lo + (hi - lo) * (Number(bits >> 8n) / 16777216))));
+    return this._logged(`f32(${lo}, ${hi})`, v);
+  }
+  // exactly n bytes (zeros past the end of the input)
+  fixed(n) {
+    if (n <= 0) return this._logged(`fixed(${n})`, Buffer.alloc(0), true);
+    const v = this._draw(n, () => {
+      const pr = this._unit() < 0.5;
+      const b = Buffer.alloc(n);
+      for (let i = 0; i < n; i++) b[i] = pr ? 32 + Number(this._rnd() % 95n) : Number(this._rnd() & 0xffn);
+      return b;
+    });
+    return this._logged(`fixed(${n})`, v, true);
+  }
+  // every byte that is left
+  rest() {
+    const p0 = this._pos;
+    if (this._gen && this._pos >= this._len && this._len < this._cap) {
+      const room = this._cap - this._len;
+      const l = Math.min(this._synthLen(room), room);
+      const pr = this._unit() < 0.7;
+      const b = Buffer.alloc(l);
+      for (let i = 0; i < l; i++) b[i] = pr ? 32 + Number(this._rnd() % 95n) : Number(this._rnd() & 0xffn);
+      this._len = this._pos;
+      this._append(b);
+    }
+    const v = Buffer.from(this._buf.subarray(Math.min(this._pos, this._len), this._len));
+    this._pos = this._len;
+    if (this._spans) this._spans.push(p0, 0, v.length); // no length prefix
+    return this._logged("rest()", v, true);
+  }
+  // a value from data type dt's decoder, drawn from this source: decoders build on each other
+  draw(dt) {
+    if (!dt || typeof dt.decoder !== "function") throw new TypeError(`${dt && dt.name} has no decoder`);
+    return dt.decoder(this);
   }
   bytes(max = 64) { return this._logged(`bytes(${max})`, this._blob(max, false), true); }
   str(max = 64) {

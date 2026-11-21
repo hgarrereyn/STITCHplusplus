@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <map>
 #include <random>
@@ -422,6 +423,35 @@ struct Source::Impl {
     std::vector<uint32_t>* spans = nullptr;  // (prefix offset, prefix width, content length) per str draw
     int log_id = -1;  // plan mode: index of the Src parameter this source belongs to
     int depth = 0;    // nesting of public draw calls (only the outermost one is logged)
+    // loop iterations (stitch_decode_items): (site, instance, start, end) per more() iteration
+    std::vector<uint32_t>* items = nullptr;
+    std::map<std::pair<uint32_t, uintptr_t>, std::pair<uint32_t, int64_t>> open_loops;  // -> (instance, start)
+    uint32_t next_inst = 0;
+
+    // A more() at byte p (the loop's site and frame identify one execution of one loop): closes
+    // the iteration in progress, opens the next one, or ends the loop execution.
+    void loop_item(uint32_t site, uintptr_t frame, size_t p, bool v) {
+        auto key = std::make_pair(site, frame);
+        auto it = open_loops.find(key);
+        if (it == open_loops.end()) it = open_loops.emplace(key, std::make_pair(next_inst++, (int64_t)-1)).first;
+        auto& [inst, start] = it->second;
+        if (start >= 0) push_item(site, inst, (size_t)start, p);
+        if (v) start = (int64_t)p;
+        else {
+            push_item(site, inst, p, p);
+            open_loops.erase(it);
+        }
+    }
+    void finish_items() {
+        for (auto& [key, st] : open_loops) {
+            if (st.second >= 0) push_item(key.first, st.first, (size_t)st.second, buf.size());
+            push_item(key.first, st.first, buf.size(), buf.size());
+        }
+        open_loops.clear();
+    }
+    void push_item(uint32_t site, uint32_t inst, size_t a, size_t b) {
+        items->insert(items->end(), {site, inst, (uint32_t)a, (uint32_t)b});
+    }
 
     uint64_t rnd() { return rng(); }
     double unit() { return (rnd() >> 11) * (1.0 / 9007199254740992.0); }
@@ -613,8 +643,9 @@ bool Source::coin(double p) {
     if (g_.top()) plan_draw(impl_->log_id, ("coin(" + num_s(p) + ")").c_str(), v ? "true" : "false", false);
     return v;
 }
-bool Source::more() {
+static bool more_impl(Source::Impl* impl_, uint32_t site, uintptr_t frame) {
     DrawGuard g_(impl_);
+    size_t at = impl_->pos;
     bool v;
     if (impl_->exhausted && !impl_->gen) v = false;
     else {
@@ -626,7 +657,98 @@ bool Source::more() {
         });
         v = (b & 1) && !impl_->exhausted;
     }
+    if (impl_->items) impl_->loop_item(site, frame, std::min(at, impl_->buf.size()), v);
     if (g_.top()) plan_draw(impl_->log_id, "more()", v ? "true" : "false", false);
+    return v;
+}
+static uint32_t site_hash(uintptr_t x) {
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdull;
+    x ^= x >> 33;
+    return (uint32_t)x;
+}
+// The loop is identified by the call site (return address) and the caller's stack depth (this
+// frame's address), so nested and recursive loops are told apart.
+__attribute__((noinline)) bool Source::more() {
+    if (!impl_->items) return more_impl(impl_, 0, 0);
+    return more_impl(impl_, site_hash((uintptr_t)__builtin_return_address(0)), (uintptr_t)__builtin_frame_address(0));
+}
+namespace detail {
+bool source_more_at(Source& s, uint32_t site, uintptr_t frame) { return more_impl(s.impl(), site, frame); }
+QuietDraws::QuietDraws() : saved(g_plan_quiet) { g_plan_quiet = true; }
+QuietDraws::~QuietDraws() { g_plan_quiet = saved; }
+}  // namespace detail
+// A finite double in [lo, hi]: the 8 bytes are the value itself when it is in range; other bit
+// patterns map onto the range.
+static double f64_in(Source::Impl* impl_, double lo, double hi) {
+    if (!(lo <= hi)) std::swap(lo, hi);
+    uint64_t bits = 0;
+    impl_->draw((uint8_t*)&bits, 8, [&](uint8_t* o) {
+        double u = impl_->unit(), v;
+        if (u < 0.08) v = lo;
+        else if (u < 0.16) v = hi;
+        else if (u < 0.22 && lo <= 0 && 0 <= hi) v = 0;
+        else v = lo + (hi - lo) * impl_->unit();
+        if (!(v >= lo && v <= hi)) v = lo;
+        memcpy(o, &v, 8);
+    });
+    double v;
+    memcpy(&v, &bits, 8);
+    if (std::isfinite(v) && v >= lo && v <= hi) return v;
+    double p = (double)(bits >> 11) * (1.0 / 9007199254740992.0);
+    double w = hi - lo;
+    double r = std::isfinite(w) ? lo + w * p : (p < 0.5 ? lo + (hi / 2 - lo / 2) * (2 * p) : lo / 2 + hi / 2 + (hi / 2 - lo / 2) * (2 * p - 1));
+    return std::min(hi, std::max(lo, r));
+}
+double Source::f64(double lo, double hi) {
+    DrawGuard g_(impl_);
+    double v = f64_in(impl_, lo, hi);
+    if (g_.top()) plan_draw(impl_->log_id, ("f64(" + num_s(lo) + ", " + num_s(hi) + ")").c_str(), num_s(v), false);
+    return v;
+}
+float Source::f32(float lo, float hi) {
+    DrawGuard g_(impl_);
+    if (!(lo <= hi)) std::swap(lo, hi);
+    uint32_t bits = 0;
+    impl_->draw((uint8_t*)&bits, 4, [&](uint8_t* o) {
+        double u = impl_->unit();
+        float v = u < 0.08 ? lo : u < 0.16 ? hi : (float)(lo + ((double)hi - lo) * impl_->unit());
+        if (!(v >= lo && v <= hi)) v = lo;
+        memcpy(o, &v, 4);
+    });
+    float v;
+    memcpy(&v, &bits, 4);
+    if (!(std::isfinite(v) && v >= lo && v <= hi)) {
+        double p = (double)(bits >> 8) * (1.0 / 16777216.0);
+        v = (float)std::min<double>(hi, std::max<double>(lo, lo + ((double)hi - lo) * p));
+    }
+    if (g_.top()) plan_draw(impl_->log_id, ("f32(" + num_s(lo) + ", " + num_s(hi) + ")").c_str(), num_s(v), false);
+    return v;
+}
+std::vector<uint8_t> Source::fixed(size_t n) {
+    DrawGuard g_(impl_);
+    std::vector<uint8_t> v(n);
+    if (n) impl_->draw(v.data(), n, [&](uint8_t* o) {
+            bool printable = impl_->unit() < 0.5;
+            for (size_t i = 0; i < n; i++) o[i] = printable ? (uint8_t)(32 + impl_->rnd() % 95) : (uint8_t)impl_->rnd();
+        });
+    if (g_.top()) plan_draw(impl_->log_id, ("fixed(" + std::to_string(n) + ")").c_str(), std::string(v.begin(), v.end()), true);
+    return v;
+}
+std::vector<uint8_t> Source::rest() {
+    DrawGuard g_(impl_);
+    auto* I = impl_;
+    size_t p0 = I->pos;
+    if (I->gen && I->pos >= I->buf.size() && I->buf.size() < I->cap) {
+        size_t l = std::min(I->synth_len(I->cap - I->buf.size()), I->cap - I->buf.size());
+        bool printable = I->unit() < 0.7;
+        I->buf.resize(I->pos);
+        for (size_t i = 0; i < l; i++) I->buf.push_back(printable ? (uint8_t)(32 + I->rnd() % 95) : (uint8_t)I->rnd());
+    }
+    std::vector<uint8_t> v(I->buf.begin() + std::min(I->pos, I->buf.size()), I->buf.end());
+    I->pos = I->buf.size();
+    if (I->spans) I->spans->insert(I->spans->end(), {(uint32_t)p0, 0u, (uint32_t)v.size()});  // no length prefix
+    if (g_.top()) plan_draw(impl_->log_id, "rest()", std::string(v.begin(), v.end()), true);
     return v;
 }
 std::string Source::str(size_t max) {
@@ -714,6 +836,7 @@ static const char* kind_name(PKind k) {
         case PKind::File: return "file";
         case PKind::Raw: return "raw";
         case PKind::Source: return "source";
+        case PKind::Value: return "value";
     }
     return "?";
 }
@@ -956,6 +1079,12 @@ static std::string describe_param(const ParamDesc& p, const std::vector<uint8_t>
             std::string pre = p.kind == PKind::Bytes ? "Bytes" : p.kind == PKind::Str ? "Str" : "File";
             return pre + "[" + std::to_string(val.size()) + (form == 1 ? ",decoded" : "") + "]" + esc_preview(val);
         }
+        case PKind::Value: {
+            auto val = decode_param(datatype_id(p.datatype), raw.data(), raw.size(), 1, 1 << 20);
+            std::string t(val.begin(), val.end());
+            if (t.size() > 300) t = t.substr(0, 300) + "...";
+            return std::string("Val<") + (p.datatype ? p.datatype : "?") + ">[" + std::to_string(raw.size()) + " choices] " + t;
+        }
         case PKind::Raw:
         case PKind::Source: {
             std::string o = p.kind == PKind::Raw ? "Raw[" : "Src[";
@@ -1055,9 +1184,17 @@ static std::string plan_param(const ParamDesc& p, const std::vector<uint8_t>& ra
             break;
         }
         case PKind::Raw:
+        case PKind::Value:
         case PKind::Source: {
             size_t n = std::min<size_t>(raw.size(), p.size);
             o += ",\"hex\":\"" + hex_of(raw.data(), n) + "\"";
+            if (p.kind == PKind::Value) {  // the decoder's value as text, for the reproducer's comment
+                auto val = decode_param(datatype_id(p.datatype), raw.data(), n, 1, 1 << 20);
+                std::string t(val.begin(), val.end());
+                if (t.size() > 300) t.resize(300);
+                o += ",\"v\":";
+                json_str(o, t);
+            }
             break;
         }
     }
@@ -1462,6 +1599,22 @@ size_t stitch_decode_spans(int dt, const uint8_t* choices, size_t n, uint32_t* o
     }
     size_t k = std::min(spans.size() / 3, max_spans);
     memcpy(out, spans.data(), k * 3 * sizeof(uint32_t));
+    return k;
+}
+
+size_t stitch_decode_items(int dt, const uint8_t* choices, size_t n, uint32_t* out, size_t max_items) {
+    auto& r = reg();
+    if (dt < 0 || dt >= (int)r.datatypes.size() || !r.datatypes[dt].decoder) return 0;
+    Source s(choices, n, n);
+    std::vector<uint32_t> items;
+    s.impl()->items = &items;
+    try {
+        r.datatypes[dt].decoder(&s);
+    } catch (...) {
+    }
+    s.impl()->finish_items();
+    size_t k = std::min(items.size() / 4, max_items);
+    memcpy(out, items.data(), k * 4 * sizeof(uint32_t));
     return k;
 }
 

@@ -146,6 +146,16 @@ class BufParam extends Param {
   }
 }
 
+// Val(Tag, max): the value Tag's decoder builds (any JS value) from at most max choice bytes
+class ValParam extends Param {
+  constructor(datatype, size) {
+    super("value", "Val", size, { datatype: nameOf(datatype) });
+  }
+  decode(raw, form, rt) {
+    return rt.decodeValue(this.datatype, Buffer.from(raw).subarray(0, this.size), this.size);
+  }
+}
+
 class SrcParam extends Param {
   constructor(size) {
     super("source", "Source", size);
@@ -166,7 +176,7 @@ const sized = (kind, def) => (a, b) => {
 };
 
 module.exports = {
-  ObjectType, Datatype, ObjSpec, NewSpec, Param, BufParam, SrcParam, OneOfParam,
+  ObjectType, Datatype, ObjSpec, NewSpec, Param, BufParam, SrcParam, ValParam, OneOfParam,
   Borrow: (t) => new ObjSpec(t, "borrow"),
   Take: (t) => new ObjSpec(t, "take"),
   New: (t) => new NewSpec(t),
@@ -174,6 +184,7 @@ module.exports = {
   Bytes: sized("bytes", 256),
   File: sized("file", 4096),
   Src: (size = 64) => new SrcParam(size),
+  Val: (dt, size = 1024) => new ValParam(dt, size),
   Range: (lo, hi) => new RangeParam(lo, hi),
   OneOf: (...choices) => new OneOfParam(choices.length === 1 && Array.isArray(choices[0]) ? choices[0] : choices),
   Flags: (...flags) => new FlagsParam(flags.length === 1 && Array.isArray(flags[0]) ? flags[0] : flags),

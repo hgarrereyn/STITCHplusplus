@@ -235,9 +235,19 @@ extension Datatype {
     public static var stitchName: String { String(describing: self) }
 }
 
-/// A data type with a decoder: builds the value from fuzzer choices.
+/// A data type with a decoder: builds the value from fuzzer choices. A String: values for
+/// `Str<N, T>`; any other type: values for `Val<T, N>` (and `s.draw(T.self)`).
 public protocol Decoded: Datatype {
-    static func decode(_ s: Source) -> String
+    associatedtype Value
+    static func decode(_ s: Source) -> Value
+}
+
+/// What the engine sees of a decoder's value: the text of a String, else its description.
+func decodedBytes<D: Decoded>(_ d: D.Type, _ s: Source) -> [UInt8] {
+    let v = d.decode(s)
+    if let str = v as? String { return Array(str.utf8) }
+    if let b = v as? [UInt8] { return b }
+    return Array(String(describing: v).utf8)
 }
 
 /// A data type with a decoder that builds bytes.
@@ -260,7 +270,7 @@ enum Datatypes {
             if let d = t as? any Decoded.Type {
                 let i = stitch_c_datatype(n, 1)
                 precondition(Int(i) == decoders.count)
-                decoders.append { Array(d.decode($0).utf8) }
+                decoders.append { decodedBytes(d, $0) }
             } else if let d = t as? any DecodedBytes.Type {
                 let i = stitch_c_datatype(n, 1)
                 precondition(Int(i) == decoders.count)
@@ -347,6 +357,18 @@ public struct Pick<E: CaseIterable>: StitchArg {
     }
 }
 
+/// A value of data type T, built by T's decoder from at most N bytes of choices: `Val<Polygon, 1024>`.
+public struct Val<T: Decoded, let N: Int>: StitchArg {
+    public let value: T.Value
+    public init(_ value: T.Value) { self.value = value }
+    /// the recorded choices decoded again (reproducers)
+    public init(replay bytes: [UInt8]) { value = T.decode(Source(bytes: bytes, cap: N)) }
+    public static var spec: Spec { param(11, N, datatype: Datatypes.name(T.self), ctype: "Val") }
+    public static func make(_ c: Call, _ i: Int) -> Self {
+        Self(T.decode(Source(adopting: stitch_c_value_source(c.ctx, Int32(i), N))))
+    }
+}
+
 /// A Source for choices made inside the stub (at most N bytes of choices): `Choices<256>`.
 public struct Choices<let N: Int>: StitchArg {
     public let source: Source
@@ -406,6 +428,10 @@ public final class Source {
         p = bytes.withUnsafeBufferPointer { stitch_c_source_new($0.baseAddress, $0.count, max(cap, $0.count)) }
         owned = true
     }
+    init(adopting p: UnsafeMutableRawPointer) {
+        self.p = p
+        owned = true
+    }
     deinit {
         if owned { stitch_c_source_free(p) }
     }
@@ -417,6 +443,24 @@ public final class Source {
     public func i32() -> Int32 { Int32(truncatingIfNeeded: stitch_c_src_uint(p, 4)) }
     public func i64() -> Int64 { Int64(bitPattern: stitch_c_src_uint(p, 8)) }
     public func f64() -> Double { stitch_c_src_f64(p) }
+    /// A finite Double in lo...hi (the value itself when its bits are in range).
+    public func f64(_ lo: Double, _ hi: Double) -> Double { stitch_c_src_f64_in(p, lo, hi) }
+    /// A finite Float in lo...hi.
+    public func f32(_ lo: Float, _ hi: Float) -> Float { stitch_c_src_f32_in(p, lo, hi) }
+    /// Exactly n bytes (zeros past the end of the input).
+    public func fixed(_ n: Int) -> [UInt8] {
+        var k = 0
+        let b = stitch_c_src_fixed(p, n, &k)
+        return Array(UnsafeRawBufferPointer(start: b, count: k))
+    }
+    /// Every byte that is left.
+    public func rest() -> [UInt8] {
+        var k = 0
+        let b = stitch_c_src_rest(p, &k)
+        return Array(UnsafeRawBufferPointer(start: b, count: k))
+    }
+    /// A value of data type T, drawn from this source by T's decoder: decoders build on each other.
+    public func draw<T: Decoded>(_ t: T.Type) -> T.Value { T.decode(self) }
     /// An Int in lo...hi.
     public func range(_ lo: Int, _ hi: Int) -> Int { Int(stitch_c_src_range(p, Int64(lo), Int64(hi))) }
     /// 0..<n
@@ -424,7 +468,15 @@ public final class Source {
     public func pick<T>(_ xs: [T]) -> T { xs[choice(xs.count)] }
     public func coin(_ prob: Double = 0.5) -> Bool { stitch_c_src_coin(p, prob) != 0 }
     /// Loop continuation: `while s.more() { ... }`; false once the buffer is exhausted.
-    public func more() -> Bool { stitch_c_src_more(p) != 0 }
+    public func more(_ file: StaticString = #fileID, _ line: UInt = #line, _ column: UInt = #column) -> Bool {
+        // the loop's source location and stack depth (an address in this frame), so the engine can
+        // tell nested and recursive loops apart
+        var marker: UInt8 = 0
+        let frame = withUnsafeMutablePointer(to: &marker) { UInt(bitPattern: $0) }
+        var h: UInt32 = 0x811c9dc5
+        for c in "\(file):\(line):\(column)".utf8 { h = (h ^ UInt32(c)) &* 0x01000193 }
+        return stitch_c_src_more_at(p, h, frame) != 0
+    }
     public func bytes(_ max: Int = 64) -> [UInt8] {
         var n = 0
         let b = stitch_c_src_bytes(p, max, &n)

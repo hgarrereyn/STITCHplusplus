@@ -16,3 +16,13 @@ def get(language):
         return importlib.import_module(f".{language}", __name__)
     except ModuleNotFoundError:
         raise ValueError(f"no standalone writer for {language}")
+
+
+def comment_safe(text: str) -> str:
+    """Text for a one-line source comment: printable ASCII, other characters escaped, backslashes
+    doubled (so no `\\u` becomes a Java unicode escape)."""
+    out = []
+    for c in text.replace("\\", "\\\\"):
+        o = ord(c)
+        out.append(c if 32 <= o < 127 else (f"\\x{o:02x}" if o < 256 else f"U+{o:04X}"))
+    return "".join(out)

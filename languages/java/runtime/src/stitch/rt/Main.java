@@ -141,6 +141,23 @@ public final class Main {
                     send(out, 'R', b.array());
                     break;
                 }
+                case 'I': {
+                    int dt = p.getInt();
+                    byte[] ch = new byte[len - 4];
+                    p.get(ch);
+                    Registry.Datatype d = dt < dts.size() ? dts.get(dt) : null;
+                    List<Integer> items = new ArrayList<>();
+                    if (d != null && d.decoder != null) {
+                        Source s = new Source(ch, ch.length, false, 0, null, null);
+                        s.recordItems(items);
+                        RT.runDecoder(d, s, -1);
+                        s.finishItems();
+                    }
+                    ByteBuffer b = ByteBuffer.allocate(4 * items.size()).order(ByteOrder.LITTLE_ENDIAN);
+                    for (int x : items) b.putInt(x);
+                    send(out, 'R', b.array());
+                    break;
+                }
                 case 'T': {
                     int dt = p.getInt();
                     byte[] tok = new byte[len - 4];

@@ -40,7 +40,8 @@ module Stitch
     # Declare a data type: harness/data/<name>/ holds seeds and *.dict tokens.
     def datatype(name) = REG.datatype(Stitch.name_of(name))
 
-    # Register a decoder for a data type: the block gets a Stitch::Source, returns a String.
+    # Register a decoder for a data type: the block gets a Stitch::Source and returns a String (values
+    # for Str/Bytes/FilePath of that type) or any other object (values for Val[T]).
     def decoder(dt, &fn)
       datatype(dt).decoder = fn
     end

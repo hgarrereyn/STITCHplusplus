@@ -195,6 +195,23 @@ STITCH_DECODER(JsonText, [](stitch::Source& s) { return value(s, 0); });
 Draw literal text with `s.str()` and `s.token()`. Compute lengths and checksums instead of drawing
 them. Look at the output with `stitch sample JsonText -n 5`.
 
+A decoder can also return a typed value (a struct, a vector of structs, a tree). Take it as
+`stitch::Val<Tag, Max>` and compose decoders with `s.draw<Tag>()`:
+
+```cpp
+STITCH_DECODER(Polygon, [](stitch::Source& s) {
+    std::vector<Point> v;
+    while (s.more()) v.push_back(s.draw<AnyPoint>());   // AnyPoint: another decoder
+    return v;
+});
+void fill(Borrow<Canvas> c, stitch::Val<Polygon, 512> poly) { ... }
+```
+
+Prefer this over drawing a structure from a `Src` inside the stub when the structure does not
+depend on object state: the fuzzer then generates, splices and resizes it one element at a time.
+`s.f64(lo, hi)`, `s.fixed(n)` and `s.rest()` cover float ranges, fixed-size fields and trailing
+payloads.
+
 ## 5. Run
 
 ```sh

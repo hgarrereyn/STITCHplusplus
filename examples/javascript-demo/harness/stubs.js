@@ -24,3 +24,17 @@ stitch.endpoint("dump", { st: Borrow(Store) }, null, ({ st }) => st.dump());
 stitch.endpoint("set_path", { st: Borrow(Store), path: Str(64, Path), value: Str(8) }, null, ({ st, path, value }) => {
   kv.setPath(st.data, path, value);
 }, { bailsOn: [(e) => e.message === "forbidden key"] });
+
+// A typed data type: Pairs decodes to an array of [key, value], drawing each with Pair's decoder.
+const Pair = stitch.datatype("Pair");
+const Pairs = stitch.datatype("Pairs");
+stitch.decoder(Pair, (s) => [s.coin(0.3) ? s.token() : s.str(8), s.coin() ? s.str(12) : s.f64(0, 100).toFixed(2)]);
+stitch.decoder(Pairs, (s) => {
+  const out = [];
+  while (s.more()) out.push(s.draw(Pair));
+  return out;
+});
+
+stitch.endpoint("put_all", { st: Borrow(Store), kvs: stitch.Val(Pairs, 256) }, null, ({ st, kvs }) => {
+  for (const [k, v] of kvs) st.put(k, v);
+}, { bailsOn: [RangeError] });

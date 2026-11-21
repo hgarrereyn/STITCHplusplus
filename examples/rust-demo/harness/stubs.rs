@@ -49,3 +49,30 @@ endpoint! {
         check(again.unwrap().len() == st.len(), "dump/load roundtrip");
     }
 }
+
+// A typed data type: Pairs decodes to a Vec of (key, value), drawing each with Pair's decoder.
+datatype!(Pair);
+datatype!(Pairs);
+
+decoder!(Pair, fn pair(s: &mut Source) -> (String, String) {
+    let k = if s.coin(0.3) { s.token() } else { s.str(8) };
+    let v = if s.coin(0.5) { s.str(12) } else { format!("{:.2}", s.f64_range(0.0, 100.0)) };
+    (k, v)
+});
+
+decoder!(Pairs, fn pairs(s: &mut Source) -> Vec<(String, String)> {
+    let mut out = vec![];
+    while s.more() {
+        out.push(s.draw::<Pair>());
+    }
+    out
+});
+
+endpoint! {
+    fn put_all(st: Borrow<Store>, kvs: Val<Pairs, 256>) -> Result<(), String> {
+        for (k, v) in kvs.iter() {
+            st.put(k, v)?;
+        }
+        Ok(())
+    }
+}

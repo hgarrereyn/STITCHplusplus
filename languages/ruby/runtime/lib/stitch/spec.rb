@@ -222,6 +222,18 @@ module Stitch
     end
   end
 
+  # Val[Tag, max]: the value Tag's decoder builds (any Ruby object) from at most max choice bytes.
+  class ValParam < Param
+    def initialize(datatype, size)
+      @kind = "value"
+      @ctype = "Val"
+      @size = Integer(size)
+      @datatype = Stitch.name_of(datatype)
+    end
+
+    def decode(raw, _form, rt) = rt.decode_value(@datatype, raw.byteslice(0, @size).b, @size)
+  end
+
   class SrcParam < Param
     def initialize(size)
       @kind = "source"
@@ -275,6 +287,12 @@ module Stitch
     def self.[](size) = SrcParam.new(size)
   end
 
+  # Val[Tag] or Val[Tag, max]: the value Tag's decoder returns (any object), from at most max
+  # (default 1024) choice bytes.
+  module Val
+    def self.[](dt, size = 1024) = ValParam.new(dt, size)
+  end
+
   U8 = IntParam.new(1, false, "U8")
   U16 = IntParam.new(2, false, "U16")
   U32 = IntParam.new(4, false, "U32")
@@ -314,6 +332,7 @@ module Stitch
     OneOf = Stitch::OneOf
     Flags = Stitch::Flags
     Src = Stitch::Src
+    Val = Stitch::Val
     Bool = Stitch::Bool
     U8 = Stitch::U8
     U16 = Stitch::U16

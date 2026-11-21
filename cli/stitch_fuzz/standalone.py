@@ -383,10 +383,12 @@ def param_decl(typ: str, name: str, arg: dict, draws, indent: str, resolve=lambd
     elif k == "float":
         val = float_literal(arg)
         pre.append(f"{name} = {arg.get('d')}")
-    elif k in ("str", "bytes", "file", "raw", "source"):
+    elif k in ("str", "bytes", "file", "raw", "source", "value"):
         b = bytes.fromhex(arg["hex"])
         lit = c_bytes(b, indent, raw_ok=k in ("str", "file"))
         val = lit if (k == "str" and b"\0" not in b) else f"{lit}, {len(b)}"
+        if k == "value":
+            pre.append(f"{name}: {len(b)} choice bytes, decoded again by the {arg.get('datatype')} decoder")
         if k == "source":
             for d in draws:
                 shown = d.get("v")

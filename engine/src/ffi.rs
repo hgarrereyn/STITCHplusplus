@@ -74,6 +74,7 @@ extern "C" {
     pub fn stitch_generate(dt: c_int, seed: u64, prefix: *const u8, plen: usize, out: *mut u8, cap: usize) -> usize;
     pub fn stitch_dict_add(dt: c_int, tok: *const u8, len: usize);
     pub fn stitch_decode_spans(dt: c_int, choices: *const u8, n: usize, out: *mut u32, max_spans: usize) -> usize;
+    pub fn stitch_decode_items(dt: c_int, choices: *const u8, n: usize, out: *mut u32, max_items: usize) -> usize;
     pub fn stitch_run_file(path: *const c_char, flags: u32) -> c_int;
     pub fn stitch_set_plan(path: *const c_char);
 }
@@ -130,4 +131,26 @@ pub fn decode_spans(dt: usize, choices: &[u8]) -> Vec<(usize, usize, usize)> {
     let mut out = vec![0u32; 3 * 512];
     let k = unsafe { stitch_decode_spans(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 512) };
     (0..k).map(|i| (out[3 * i] as usize, out[3 * i + 1] as usize, out[3 * i + 2] as usize)).collect()
+}
+
+/// One `more()` loop iteration found by replaying the decoder: bytes [start, end) of the choice
+/// buffer, starting with the iteration's `more()` byte. `site` identifies the loop in the decoder
+/// source (stable for the run); `inst` groups the iterations of one execution of the loop. A record
+/// with start == end marks where that loop execution ended (its final `more()` byte, or the end of
+/// the buffer): new iterations can be inserted there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Item {
+    pub site: u32,
+    pub inst: u32,
+    pub start: usize,
+    pub end: usize,
+}
+
+pub fn decode_items(dt: usize, choices: &[u8]) -> Vec<Item> {
+    let mut out = vec![0u32; 4 * 1024];
+    let k = unsafe { stitch_decode_items(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 1024) };
+    (0..k)
+        .map(|i| Item { site: out[4 * i], inst: out[4 * i + 1], start: out[4 * i + 2] as usize, end: out[4 * i + 3] as usize })
+        .filter(|it| it.start <= it.end && it.end <= choices.len())
+        .collect()
 }

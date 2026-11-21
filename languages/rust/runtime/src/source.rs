@@ -17,6 +17,10 @@ pub struct Source {
     pub(crate) spans: Option<Vec<u32>>,
     exhausted: bool,
     pub(crate) log: Option<Box<dyn FnMut(&str, String, bool)>>,
+    /// loop iterations for the engine: site, instance, start, end per more() iteration
+    pub(crate) items: Option<Vec<u32>>,
+    open: Vec<(u32, usize, u32, i64)>, // (site, frame, instance, start)
+    next_inst: u32,
 }
 
 impl Source {
@@ -26,7 +30,20 @@ impl Source {
     }
 
     pub(crate) fn new(b: &[u8], cap: usize, gen: bool, seed: u64) -> Source {
-        Source { buf: b.to_vec(), pos: 0, cap: cap.max(b.len()), gen, rng: seed, dict: vec![], spans: None, exhausted: false, log: None }
+        Source {
+            buf: b.to_vec(),
+            pos: 0,
+            cap: cap.max(b.len()),
+            gen,
+            rng: seed,
+            dict: vec![],
+            spans: None,
+            exhausted: false,
+            log: None,
+            items: None,
+            open: vec![],
+            next_inst: 0,
+        }
     }
 
     fn rnd(&mut self) -> u64 {
@@ -41,7 +58,7 @@ impl Source {
         (self.rnd() >> 11) as f64 / 9007199254740992.0
     }
 
-    fn draw(&mut self, n: usize, synth: impl FnOnce(&mut Self) -> Vec<u8>) -> Vec<u8> {
+    fn take_bytes(&mut self, n: usize, synth: impl FnOnce(&mut Self) -> Vec<u8>) -> Vec<u8> {
         let mut out = vec![0u8; n];
         if self.pos + n <= self.buf.len() {
             out.copy_from_slice(&self.buf[self.pos..self.pos + n]);
@@ -84,7 +101,7 @@ impl Source {
     }
 
     fn uint(&mut self, width: usize) -> u64 {
-        let b = self.draw(width, |s| {
+        let b = self.take_bytes(width, |s| {
             let x = if s.unit() < 0.3 { s.interesting(width) } else { s.rnd() };
             Self::to_le(x, width)
         });
@@ -121,7 +138,7 @@ impl Source {
 
     fn blob_inner(&mut self, max: usize, use_dict: bool, w: usize) -> Vec<u8> {
         let mut content: Option<Vec<u8>> = None;
-        let raw = Self::le(&self.draw(w, |s| {
+        let raw = Self::le(&self.take_bytes(w, |s| {
             let c = if use_dict && !s.dict.is_empty() && s.unit() < 0.5 {
                 let i = (s.rnd() % s.dict.len() as u64) as usize;
                 let t = &s.dict[i];
@@ -160,7 +177,7 @@ impl Source {
             std::mem::swap(&mut lo, &mut hi);
         }
         let span = (hi as u64).wrapping_sub(lo as u64).wrapping_add(1);
-        let raw = Self::le(&self.draw(8, |s| {
+        let raw = Self::le(&self.take_bytes(8, |s| {
             let u = s.unit();
             let v = if u < 0.05 {
                 lo
@@ -226,7 +243,7 @@ impl Source {
     /// True with probability about p.
     pub fn coin(&mut self, p: f64) -> bool {
         let thr = p * 256.0;
-        let b = self.draw(1, |s| {
+        let b = self.take_bytes(1, |s| {
             let yes = s.unit() < p;
             let r = s.rnd();
             if yes {
@@ -241,18 +258,163 @@ impl Source {
     }
 
     /// Loop condition: `while s.more() { ... }`.
+    #[track_caller]
     pub fn more(&mut self) -> bool {
-        if self.exhausted && !self.gen {
-            return self.logged(|| "more()".into(), false);
+        let at = self.pos.min(self.buf.len());
+        let v = if self.exhausted && !self.gen {
+            false
+        } else {
+            let b = self.take_bytes(1, |s| {
+                let fill = if s.cap > 0 { s.buf.len() as f64 / s.cap as f64 } else { 1.0 };
+                let p = if fill > 0.5 { 0.15 } else { 0.65 };
+                let bit = if s.unit() < p { 1 } else { 0 };
+                vec![(s.rnd() as u8 & 0xfe) | bit]
+            })[0];
+            b & 1 == 1 && !self.exhausted
+        };
+        if self.items.is_some() {
+            // the loop: its source location, and the stack depth (recursion level)
+            let loc = std::panic::Location::caller();
+            let mut h: u32 = 0x811c9dc5;
+            for c in format!("{}:{}:{}", loc.file(), loc.line(), loc.column()).bytes() {
+                h = (h ^ c as u32).wrapping_mul(0x01000193);
+            }
+            let marker = 0u8;
+            let frame = std::hint::black_box(&marker) as *const u8 as usize;
+            self.loop_item(h, frame, at, v);
         }
-        let b = self.draw(1, |s| {
-            let fill = if s.cap > 0 { s.buf.len() as f64 / s.cap as f64 } else { 1.0 };
-            let p = if fill > 0.5 { 0.15 } else { 0.65 };
-            let bit = if s.unit() < p { 1 } else { 0 };
-            vec![(s.rnd() as u8 & 0xfe) | bit]
-        })[0];
-        let v = b & 1 == 1 && !self.exhausted;
         self.logged(|| "more()".into(), v)
+    }
+
+    fn loop_item(&mut self, site: u32, frame: usize, p: usize, v: bool) {
+        let i = match self.open.iter().position(|o| o.0 == site && o.1 == frame) {
+            Some(i) => i,
+            None => {
+                self.open.push((site, frame, self.next_inst, -1));
+                self.next_inst += 1;
+                self.open.len() - 1
+            }
+        };
+        let (_, _, inst, start) = self.open[i];
+        let items = self.items.as_mut().unwrap();
+        if start >= 0 {
+            items.extend_from_slice(&[site, inst, start as u32, p as u32]);
+        }
+        if v {
+            self.open[i].3 = p as i64;
+        } else {
+            items.extend_from_slice(&[site, inst, p as u32, p as u32]);
+            self.open.remove(i);
+        }
+    }
+
+    pub(crate) fn finish_items(&mut self) {
+        let n = self.buf.len() as u32;
+        let open = std::mem::take(&mut self.open);
+        if let Some(items) = self.items.as_mut() {
+            for (site, _, inst, start) in open {
+                if start >= 0 {
+                    items.extend_from_slice(&[site, inst, start as u32, n]);
+                }
+                items.extend_from_slice(&[site, inst, n, n]);
+            }
+        }
+    }
+
+    /// A finite f64 in [lo, hi]: the 8 bytes are the value itself when it is in range.
+    pub fn f64_range(&mut self, lo: f64, hi: f64) -> f64 {
+        let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+        let b = self.take_bytes(8, |s| {
+            let u = s.unit();
+            let mut x = if u < 0.08 {
+                lo
+            } else if u < 0.16 {
+                hi
+            } else if u < 0.22 && lo <= 0.0 && 0.0 <= hi {
+                0.0
+            } else {
+                lo + (hi - lo) * s.unit()
+            };
+            if !(x >= lo && x <= hi) {
+                x = lo;
+            }
+            x.to_bits().to_le_bytes().to_vec()
+        });
+        let bits = u64::from_le_bytes(b[..8].try_into().unwrap());
+        let mut v = f64::from_bits(bits);
+        if !(v.is_finite() && v >= lo && v <= hi) {
+            let p = (bits >> 11) as f64 / 9007199254740992.0;
+            let w = hi - lo;
+            v = if w.is_finite() {
+                lo + w * p
+            } else if p < 0.5 {
+                lo + (hi / 2.0 - lo / 2.0) * (2.0 * p)
+            } else {
+                lo / 2.0 + hi / 2.0 + (hi / 2.0 - lo / 2.0) * (2.0 * p - 1.0)
+            };
+            v = v.max(lo).min(hi);
+        }
+        self.logged(|| format!("f64({lo}, {hi})"), v)
+    }
+
+    /// A finite f32 in [lo, hi].
+    pub fn f32_range(&mut self, lo: f32, hi: f32) -> f32 {
+        let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+        let b = self.take_bytes(4, |s| {
+            let u = s.unit();
+            let mut x = if u < 0.08 { lo } else if u < 0.16 { hi } else { (lo as f64 + (hi as f64 - lo as f64) * s.unit()) as f32 };
+            if !(x >= lo && x <= hi) {
+                x = lo;
+            }
+            x.to_bits().to_le_bytes().to_vec()
+        });
+        let bits = u32::from_le_bytes(b[..4].try_into().unwrap());
+        let mut v = f32::from_bits(bits);
+        if !(v.is_finite() && v >= lo && v <= hi) {
+            let p = (bits >> 8) as f64 / 16777216.0;
+            v = ((lo as f64 + (hi as f64 - lo as f64) * p).max(lo as f64).min(hi as f64)) as f32;
+        }
+        self.logged(|| format!("f32({lo}, {hi})"), v)
+    }
+
+    /// Exactly n bytes (zeros past the end of the input).
+    pub fn fixed(&mut self, n: usize) -> Vec<u8> {
+        if n == 0 {
+            return vec![];
+        }
+        let v = self.take_bytes(n, |s| {
+            let pr = s.unit() < 0.5;
+            (0..n).map(|_| if pr { 32 + (s.rnd() % 95) as u8 } else { s.rnd() as u8 }).collect()
+        });
+        self.logged_bytes(format!("fixed({n})"), &v);
+        v
+    }
+
+    /// Every byte that is left.
+    pub fn rest(&mut self) -> Vec<u8> {
+        let p0 = self.pos;
+        if self.gen && self.pos >= self.buf.len() && self.buf.len() < self.cap {
+            let room = self.cap - self.buf.len();
+            let l = self.synth_len(room).min(room);
+            let pr = self.unit() < 0.7;
+            self.buf.truncate(self.pos);
+            for _ in 0..l {
+                let c = if pr { 32 + (self.rnd() % 95) as u8 } else { self.rnd() as u8 };
+                self.buf.push(c);
+            }
+        }
+        let v = self.buf[self.pos.min(self.buf.len())..].to_vec();
+        self.pos = self.buf.len();
+        if let Some(sp) = &mut self.spans {
+            sp.extend_from_slice(&[p0 as u32, 0, v.len() as u32]); // no length prefix
+        }
+        self.logged_bytes("rest()".into(), &v);
+        v
+    }
+
+    /// A value of data type `D`, drawn from this source by its decoder: decoders build on each other.
+    pub fn draw<D: crate::Decoded>(&mut self) -> D::Value {
+        D::decode(self)
     }
 
     pub fn bytes(&mut self, max: usize) -> Vec<u8> {

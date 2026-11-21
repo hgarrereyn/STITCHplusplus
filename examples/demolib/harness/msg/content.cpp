@@ -26,3 +26,13 @@ void get_header(Borrow<Msg> m, Str<32> key) {
     msg_get(m, key.c_str());
 }
 STITCH_ENDPOINT(get_header);
+
+// Several appends from one typed value: a Val parameter of the Chunks data type.
+void append_all(Borrow<Msg> m, stitch::Val<Chunks, 512> chunks) {
+    for (auto& c : *chunks) {
+        size_t before = msg_len(m);
+        if (msg_append(m, c.data(), c.size()) != 0) stitch::bail("does not fit");
+        stitch::check(msg_len(m) == before + c.size(), "append grows by data size");
+    }
+}
+STITCH_ENDPOINT(append_all);

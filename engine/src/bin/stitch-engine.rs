@@ -135,6 +135,15 @@ pub extern "C" fn stitch_decode_spans(dt: c_int, choices: *const u8, n: usize, o
 }
 
 #[no_mangle]
+pub extern "C" fn stitch_decode_items(dt: c_int, choices: *const u8, n: usize, out: *mut u32, max_items: usize) -> usize {
+    let ch = unsafe { std::slice::from_raw_parts(choices, n) };
+    let v = worker::with(|c| c.items(dt as u32, ch));
+    let k = (v.len() / 4).min(max_items);
+    unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, 4 * k) };
+    k
+}
+
+#[no_mangle]
 pub extern "C" fn stitch_set_plan(path: *const c_char) {
     let p = if path.is_null() { None } else { Some(unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned()) };
     worker::with(|c| c.set_plan(p.as_deref()))

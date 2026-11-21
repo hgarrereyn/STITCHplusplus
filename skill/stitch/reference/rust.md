@@ -56,9 +56,12 @@ endpoint! {
 | `Range<LO, HI>` | integer in [LO, HI] (`*r`) |
 | `OneOf<C>` / `Flags<F>` | with `choices!(C: u32 = [1, 2, 4]);` / `flags!(F = [1, 2, 4]);` |
 | `Str<MAX, Tag>`, `Bytes<MAX, Tag>`, `File<MAX, Tag>` | String, Vec<u8>, temp file path |
+| `Val<Tag, MAX = 1024>` | the value of `Tag`'s decoder (any type; derefs to it) |
 | `Src<MAX>` | a `Source` |
 
-Also `decoder!(Tag, fn f(s: &mut Source) -> String { ... });`, `object!(T, Handle, drop = |h| ...)`,
+Also `decoder!(Tag, fn f(s: &mut Source) -> T { ... });` (`String`/`Vec<u8>` for buffers of that type,
+any `T` for `Val<Tag>`; `s.draw::<Tag>()` builds on another decoder; `Source` also has
+`f64_range(lo, hi)`, `f32_range(lo, hi)`, `fixed(n)`, `rest()`), `object!(T, Handle, drop = |h| ...)`,
 `bail`, `require`, `check`, `log`, `consume`, `set_int`/`get_int`/`set_obj`/`get_obj`.
 
 ## Bugs

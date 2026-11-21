@@ -60,7 +60,7 @@ module.exports = {
   Source,
   Bail,
   Borrow: S.Borrow, Take: S.Take, New: S.New,
-  Str: S.Str, Bytes: S.Bytes, File: S.File, Src: S.Src,
+  Str: S.Str, Bytes: S.Bytes, File: S.File, Src: S.Src, Val: S.Val,
   Range: S.Range, OneOf: S.OneOf, Flags: S.Flags, Bool: S.Bool,
   U8: S.U8, U16: S.U16, U32: S.U32, U64: S.U64, I8: S.I8, I16: S.I16, I32: S.I32, I64: S.I64,
   BigU64: S.BigU64, BigI64: S.BigI64, F32: S.F32, F64: S.F64,

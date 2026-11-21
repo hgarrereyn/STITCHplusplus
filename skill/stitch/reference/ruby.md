@@ -69,6 +69,7 @@ end
 | `Str[max, Tag]`, `String` | UTF-8 String (invalid bytes replaced) |
 | `Bytes[max, Tag]` | binary String |
 | `FilePath[max, Tag]` | path of a temporary file (not `File`, for the same reason) |
+| `Val[Tag, max]` | the value `Tag`'s decoder returns (any object; `max` defaults to 1024) |
 | `Src[max]` | `Stitch::Source` |
 
 ## Bugs
@@ -97,8 +98,11 @@ Stitch.get(doc, "count", 0)
 Stitch.get_obj(doc, "parent")                 # a linked object, or nil
 ```
 
-`Stitch::Source`: `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `range(lo, hi)`, `choice(n)`,
-`pick(list)`, `coin(p)`, `more`, `str(max)`, `bytes(max)`, `token`.
+A decoder can return any object (for `Val[Tag]`); `s.draw(Tag)` builds on another decoder.
+
+`Stitch::Source`: `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `f64(lo, hi)` (finite, in range),
+`range(lo, hi)`, `choice(n)`, `pick(list)`, `coin(p)`, `more`, `str(max)`, `bytes(max)`, `fixed(n)`,
+`rest`, `token`, `draw(Tag)`.
 
 ## Coverage and comparisons
 

@@ -3,7 +3,9 @@ package stitch
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"math"
+	"runtime"
 )
 
 // Source provides decisions inside decoders and stubs, read from a fuzzer-owned choice buffer.
@@ -19,6 +21,10 @@ type Source struct {
 	spans     *[]uint32
 	exhausted bool
 	log       func(op string, v any, isBytes bool)
+	// loop iterations for the engine: site, instance, start, end per More() iteration
+	items    *[]uint32
+	open     map[[2]uint64]*[3]uint32 // (site, depth) -> {instance, start+1, site}
+	nextInst uint32
 }
 
 var interesting = []uint64{0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 100, 127, 128, 255, 256, 512, 1000, 1024, 4096,
@@ -299,7 +305,12 @@ func (s *Source) Coin(p float64) bool {
 
 // More is a loop condition: `for s.More() { ... }`.
 func (s *Source) More() bool {
+	at := s.pos
+	if at > len(s.buf) {
+		at = len(s.buf)
+	}
 	if s.exhausted && !s.gen {
+		s.loopItem(at, false)
 		s.logged(label("more()"), false, false)
 		return false
 	}
@@ -319,8 +330,181 @@ func (s *Source) More() bool {
 		return []byte{byte(s.rnd()&0xfe | bit)}
 	})[0]
 	v := b&1 == 1 && !s.exhausted
+	s.loopItem(at, v)
 	s.logged(label("more()"), v, false)
 	return v
+}
+
+// loopItem records one More() for the engine: the loop is its call site plus the stack depth
+// (recursion level).
+func (s *Source) loopItem(p int, v bool) {
+	if s.items == nil {
+		return
+	}
+	var pcs [1]uintptr
+	runtime.Callers(3, pcs[:])
+	h := fnv.New32a()
+	fmt.Fprintf(h, "%x", pcs[0])
+	site := h.Sum32()
+	big := make([]uintptr, 1024)
+	depth := runtime.Callers(0, big)
+	if s.open == nil {
+		s.open = map[[2]uint64]*[3]uint32{}
+	}
+	key := [2]uint64{uint64(site), uint64(depth)}
+	st := s.open[key]
+	if st == nil {
+		st = &[3]uint32{s.nextInst, 0, site}
+		s.nextInst++
+		s.open[key] = st
+	}
+	if st[1] > 0 {
+		*s.items = append(*s.items, site, st[0], st[1]-1, uint32(p))
+	}
+	if v {
+		st[1] = uint32(p) + 1
+	} else {
+		*s.items = append(*s.items, site, st[0], uint32(p), uint32(p))
+		delete(s.open, key)
+	}
+}
+
+func (s *Source) finishItems() {
+	n := uint32(len(s.buf))
+	for _, st := range s.open {
+		if st[1] > 0 {
+			*s.items = append(*s.items, st[2], st[0], st[1]-1, n)
+		}
+		*s.items = append(*s.items, st[2], st[0], n, n)
+	}
+	s.open = nil
+}
+
+// F64Range returns a finite float64 in [lo, hi]: the 8 bytes are the value itself when it is in range.
+func (s *Source) F64Range(lo, hi float64) float64 {
+	if !(lo <= hi) {
+		lo, hi = hi, lo
+	}
+	bits := le(s.draw(8, func() []byte {
+		u := s.unit()
+		x := lo + (hi-lo)*s.unit()
+		switch {
+		case u < 0.08:
+			x = lo
+		case u < 0.16:
+			x = hi
+		case u < 0.22 && lo <= 0 && 0 <= hi:
+			x = 0
+		}
+		if !(x >= lo && x <= hi) {
+			x = lo
+		}
+		return toLE(math.Float64bits(x), 8)
+	}))
+	v := math.Float64frombits(bits)
+	if !(!math.IsNaN(v) && !math.IsInf(v, 0) && v >= lo && v <= hi) {
+		p := float64(bits>>11) / 9007199254740992.0
+		w := hi - lo
+		if !math.IsInf(w, 0) {
+			v = lo + w*p
+		} else if p < 0.5 {
+			v = lo + (hi/2-lo/2)*(2*p)
+		} else {
+			v = lo/2 + hi/2 + (hi/2-lo/2)*(2*p-1)
+		}
+		v = math.Min(hi, math.Max(lo, v))
+	}
+	s.logged(func() string { return fmt.Sprintf("f64(%g, %g)", lo, hi) }, v, false)
+	return v
+}
+
+// F32Range returns a finite float32 in [lo, hi].
+func (s *Source) F32Range(lo, hi float32) float32 {
+	if !(lo <= hi) {
+		lo, hi = hi, lo
+	}
+	bits := uint32(le(s.draw(4, func() []byte {
+		u := s.unit()
+		x := float32(float64(lo) + (float64(hi)-float64(lo))*s.unit())
+		if u < 0.08 {
+			x = lo
+		} else if u < 0.16 {
+			x = hi
+		}
+		if !(x >= lo && x <= hi) {
+			x = lo
+		}
+		return toLE(uint64(math.Float32bits(x)), 4)
+	})))
+	v := math.Float32frombits(bits)
+	if !(!math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0) && v >= lo && v <= hi) {
+		p := float64(bits>>8) / 16777216.0
+		v = float32(math.Min(float64(hi), math.Max(float64(lo), float64(lo)+(float64(hi)-float64(lo))*p)))
+	}
+	s.logged(func() string { return fmt.Sprintf("f32(%g, %g)", lo, hi) }, v, false)
+	return v
+}
+
+// Fixed returns exactly n bytes (zeros past the end of the input).
+func (s *Source) Fixed(n int) []byte {
+	if n <= 0 {
+		return []byte{}
+	}
+	v := s.draw(n, func() []byte {
+		pr := s.unit() < 0.5
+		b := make([]byte, n)
+		for i := range b {
+			if pr {
+				b[i] = byte(32 + s.rnd()%95)
+			} else {
+				b[i] = byte(s.rnd())
+			}
+		}
+		return b
+	})
+	s.logged(func() string { return fmt.Sprintf("fixed(%d)", n) }, v, true)
+	return v
+}
+
+// Rest returns every byte that is left.
+func (s *Source) Rest() []byte {
+	p0 := s.pos
+	if s.gen && s.pos >= len(s.buf) && len(s.buf) < s.cap {
+		room := s.cap - len(s.buf)
+		l := s.synthLen(room)
+		if l > room {
+			l = room
+		}
+		pr := s.unit() < 0.7
+		s.buf = s.buf[:s.pos]
+		for i := 0; i < l; i++ {
+			if pr {
+				s.buf = append(s.buf, byte(32+s.rnd()%95))
+			} else {
+				s.buf = append(s.buf, byte(s.rnd()))
+			}
+		}
+	}
+	start := s.pos
+	if start > len(s.buf) {
+		start = len(s.buf)
+	}
+	v := append([]byte(nil), s.buf[start:]...)
+	s.pos = len(s.buf)
+	if s.spans != nil {
+		*s.spans = append(*s.spans, uint32(p0), 0, uint32(len(v))) // no length prefix
+	}
+	s.logged(label("rest()"), v, true)
+	return v
+}
+
+// Draw returns a value of data type `name`, drawn from s by its decoder: decoders build on each other.
+func Draw[T any](s *Source, name string) T {
+	d := reg.datatype(name)
+	if d.value == nil {
+		panic(fmt.Sprintf("stitch.Draw: data type %q has no decoder", name))
+	}
+	return d.value(s).(T)
 }
 
 func (s *Source) Bytes(max int) []byte {

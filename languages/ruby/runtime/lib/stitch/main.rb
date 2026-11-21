@@ -93,6 +93,16 @@ module Stitch
           spans = []
           RT.run_decoder(d, Source.new(payload.byteslice(4..), cap: payload.bytesize - 4, spans: spans)) if d&.decoder
           send.call("R", spans.pack("L<*"))
+        when "I"
+          dt = payload.unpack1("L<")
+          d = dts[dt]
+          items = []
+          if d&.decoder
+            src = Source.new(payload.byteslice(4..), cap: payload.bytesize - 4, items: items)
+            RT.run_decoder(d, src)
+            src.finish_items
+          end
+          send.call("R", items.map { |x| x & 0xFFFFFFFF }.pack("L<*"))
         when "T"
           dt = payload.unpack1("L<")
           tok = payload.byteslice(4..)

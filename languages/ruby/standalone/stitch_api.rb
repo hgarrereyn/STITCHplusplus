@@ -32,12 +32,13 @@ module Stitch
   end
 
   module DSL
-    Borrow = Take = New = Str = Bytes = FilePath = Int = OneOf = Flags = Src = AnySpec
+    Borrow = Take = New = Str = Bytes = FilePath = Int = OneOf = Flags = Src = Val = AnySpec
     U8 = U16 = U32 = U64 = I8 = I16 = I32 = I64 = F32 = F64 = Bool = AnySpec
   end
 
-  Named = Struct.new(:name)
+  Named = Struct.new(:name, :decoder)
   STUBS = {}
+  DATATYPES = {}
   BAILS_ON = {}
   ATTRS = {}.compare_by_identity
   GLOBALS = {}
@@ -47,8 +48,14 @@ module Stitch
 
   class << self
     def object(name, **) = Named.new(name.to_s)
-    def datatype(name) = Named.new(name.to_s)
-    def decoder(_dt) = nil
+    def datatype(name) = (DATATYPES[name.to_s] ||= Named.new(name.to_s))
+
+    def decoder(dt, &fn)
+      dt.decoder = fn
+    end
+
+    # A Val[...] parameter: the recorded choices decoded again by the data type's decoder.
+    def value(name, data) = DATATYPES.fetch(name.to_s).decoder.call(Source.new(data))
     def init = yield
 
     def endpoint(name, _specs = {}, _returns = nil, bails_on: [], &fn)

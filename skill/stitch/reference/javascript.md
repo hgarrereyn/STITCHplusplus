@@ -54,9 +54,16 @@ stitch.endpoint("set", { doc: Borrow(Doc), key: Str(16), value: I32 }, null, ({ 
 | `F32`, `F64`, `Bool` | number, boolean |
 | `Range(lo, hi)`, `OneOf(...values)`, `Flags(...)` | constrained values (`OneOf` takes any values) |
 | `Str(max, Tag)`, `Bytes(max, Tag)`, `File(max, Tag)` | string, Buffer, temp file path |
+| `Val(Tag, max = 1024)` | the value `Tag`'s decoder returns (any JS value) |
 | `Src(max)` | `stitch.Source` |
 
 Stubs may be `async`; the runtime awaits them.
+
+Decoders: `stitch.decoder(Tag, (s) => ...)` returns a string or Buffer (values for `Str`/`Bytes`
+of that type) or any other value (for `Val(Tag)`); `s.draw(Tag)` builds on another decoder.
+`stitch.Source`: `u8()`..`u64()`, `i8()`..`i64()`, `f32()`, `f64()`, `f64(lo, hi)` (finite, in
+range), `range(lo, hi)`, `choice(n)`, `pick(arr)`, `coin(p)`, `more()`, `str(max)`, `bytes(max)`,
+`fixed(n)`, `rest()`, `token()`, `draw(Tag)`.
 
 ## Bugs
 

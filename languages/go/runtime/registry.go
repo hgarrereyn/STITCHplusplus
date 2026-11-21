@@ -22,7 +22,8 @@ type objType struct {
 
 type datatype struct {
 	name    string
-	decoder func(*Source) []byte
+	decoder func(*Source) []byte // bytes for Str/Bytes params, or the value as text
+	value   func(*Source) any    // the decoder's value (Val params, Draw)
 	dict    [][]byte
 }
 
@@ -102,9 +103,26 @@ func (r *registry) datatype(name string) *datatype {
 	return d
 }
 
-// Decoder registers a decoder for a data type. fn returns string or []byte.
-func Decoder[R string | []byte](name string, fn func(*Source) R) {
-	reg.datatype(name).decoder = func(s *Source) []byte { return []byte(fn(s)) }
+// Decoder registers a decoder for a data type. A string or []byte result: values for string /
+// []byte parameters of that type. Any other result: values for parameters with `val=<name>`.
+func Decoder[R any](name string, fn func(*Source) R) {
+	d := reg.datatype(name)
+	d.value = func(s *Source) any { return fn(s) }
+	d.decoder = func(s *Source) []byte {
+		switch v := any(fn(s)).(type) {
+		case string:
+			return []byte(v)
+		case []byte:
+			return v
+		default:
+			return []byte(fmt.Sprintf("%+v", v))
+		}
+	}
+}
+
+// Value decodes a recorded Val parameter again (standalone reproducers).
+func Value(name string, choices []byte) any {
+	return reg.datatype(name).value(NewSource(choices))
 }
 
 // Init runs fn once per worker process, after the harness is loaded.
@@ -218,6 +236,10 @@ func newParam(name string, t reflect.Type, o map[string]string) (*param, error) 
 		return def
 	}
 	p.datatype = o["type"]
+	if v, ok := o["val"]; ok {
+		p.kind, p.ctype, p.size, p.datatype = "value", "Val", atoi("max", 1024), v
+		return p, nil
+	}
 	switch {
 	case t == tSource:
 		p.kind, p.ctype, p.size = "source", "Source", atoi("max", 64)

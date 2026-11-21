@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..project import STITCH_HOME
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.py"
 SHIM = "stitch.py"
@@ -29,7 +30,9 @@ def _literal(a, draws):
     if k == "source":
         lines = "; ".join(f"{d['op']} -> {d.get('v', bytes.fromhex(d.get('hex', '')).decode('utf-8', 'replace'))!s}"
                           for d in draws)
-        return f"stitch.Source(bytes.fromhex({a['hex']!r}))", (f"draws: {lines[:300]}" if lines else None)
+        return f"stitch.Source(bytes.fromhex({a['hex']!r}))", (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return f"stitch.value({a.get('datatype')!r}, bytes.fromhex({a['hex']!r}))", f"{a.get('name', '?')} = {a.get('py')}"[:300]
     py = a.get("py")
     if k == "float":
         return {"nan": 'float("nan")', "inf": 'float("inf")', "-inf": 'float("-inf")'}.get(py, py), None
@@ -44,7 +47,7 @@ def _harness_code(p):
     """All harness files, in load order, without imports of each other."""
     parts = []
     for f in sorted((p.root / "harness").rglob("*.py")):
-        if "data" in f.relative_to(p.root / "harness").parts[:1]:
+        if "seeds" in f.relative_to(p.root / "harness").parts:
             continue
         text = f.read_text()
         text = re.sub(r"^(from\s+harness(\.[\w.]+)?\s+import[^\n]*|import\s+harness(\.[\w.]+)?[^\n]*|from\s+\.[\w.]*\s+import[^\n]*)$",

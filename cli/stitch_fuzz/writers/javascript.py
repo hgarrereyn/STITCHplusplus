@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..project import STITCH_HOME
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.js"
 SHIM = "stitch.js"
@@ -28,7 +29,10 @@ def _literal(a, draws):
         return (buf if k == "bytes" else f"stitch.file({buf})"), None
     if k == "source":
         lines = "; ".join(f"{d['op']} -> {d.get('v', bytes.fromhex(d.get('hex', '')).decode('utf-8', 'replace'))}" for d in draws)
-        return f'new stitch.Source(Buffer.from("{a["hex"]}", "hex"))', (f"draws: {lines[:300]}" if lines else None)
+        return f'new stitch.Source(Buffer.from("{a["hex"]}", "hex"))', (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return (f'stitch.value({json.dumps(a.get("datatype"))}, Buffer.from("{a["hex"]}", "hex"))',
+                comment_safe(f"{a.get('name', '?')} = {a.get('v')}")[:300])
     js = a.get("js")
     if js is not None:
         return js, None
@@ -38,7 +42,7 @@ def _literal(a, draws):
 def _harness_code(p):
     parts = []
     files = [f for f in sorted((p.root / "harness").rglob("*")) if f.suffix in (".js", ".cjs")
-             and "data" not in f.relative_to(p.root / "harness").parts[:1]]
+             and "seeds" not in f.relative_to(p.root / "harness").parts]
     for f in files:
         text = f.read_text()
         text = re.sub(r"""require\((["'])stitch\1\)""", 'require("./stitch")', text)

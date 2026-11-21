@@ -39,3 +39,23 @@ let roundtrip = endpoint("roundtrip") { (st: Borrow<Store>) throws in
     try check(Dictionary(again.items(), uniquingKeysWith: { a, _ in a }) == Dictionary(st.value.items(), uniquingKeysWith: { a, _ in a }),
               "dump/load roundtrip")
 }
+
+// A typed data type: Pairs decodes to [(key, value)], drawing each with Pair's decoder.
+enum Pair: Decoded {
+    static func decode(_ s: Source) -> (String, String) {
+        let key = s.coin(0.3) ? s.token() : s.str(8)
+        return (key, s.coin() ? s.str(12) : String(Int(s.f64(0, 100) * 100) / 100))
+    }
+}
+
+enum Pairs: Decoded {
+    static func decode(_ s: Source) -> [(String, String)] {
+        var out: [(String, String)] = []
+        while s.more() { out.append(s.draw(Pair.self)) }
+        return out
+    }
+}
+
+let putAll = endpoint("put_all") { (st: Borrow<Store>, kvs: Val<Pairs, 256>) throws in
+    for (k, v) in kvs.value { try st.value.put(k, v) }
+}

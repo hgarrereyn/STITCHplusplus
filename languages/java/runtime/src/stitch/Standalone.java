@@ -72,6 +72,11 @@ public final class Standalone {
         if (TRACE) System.err.println("[repro] #" + n + " " + name + " -> bail");
     }
 
+    /** A @Val parameter: the recorded choices decoded again by the data type's decoder. */
+    public static <T> T value(String type, byte[] choices) {
+        return new Source(choices).draw(type);
+    }
+
     public static byte[] hex(String h) {
         byte[] b = new byte[h.length() / 2];
         for (int i = 0; i < b.length; i++) b[i] = (byte) Integer.parseInt(h.substring(2 * i, 2 * i + 2), 16);

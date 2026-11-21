@@ -6,6 +6,7 @@ import shlex
 from pathlib import Path
 
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.swift"
 SHIM = "the Stitch package"  # the harness package's own dependency (call / reproMain)
@@ -47,7 +48,9 @@ def _literal(a, draws):
     if k == "source":
         lines = "; ".join(f"{d.get('op')} -> {d.get('v', d.get('hex', ''))}" for d in draws)
         return f"Choices(Source(bytes: {_bytes(bytes.fromhex(a.get('hex', '')))}, cap: {a.get('size', 0)}))", \
-            (f"draws: {lines[:300]}" if lines else None)
+            (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return f"Val(replay: {_bytes(bytes.fromhex(a.get('hex', '')))})", comment_safe(f"{a.get('name', '?')} = {a.get('v')}")[:300]
     v = a.get("v", "0")
     if k == "range":
         return f"Between({v})", None

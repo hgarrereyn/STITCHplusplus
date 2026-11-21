@@ -43,7 +43,13 @@ final class Param {
         Range r = p.getAnnotation(Range.class);
         OneOf o = p.getAnnotation(OneOf.class);
         Flags f = p.getAnnotation(Flags.class);
-        if (r != null) {
+        stitch.Val val = p.getAnnotation(stitch.Val.class);
+        if (val != null) {
+            q.kind = "value";
+            q.ctype = "Val";
+            q.size = val.max();
+            q.datatype = val.value();
+        } else if (r != null) {
             q.kind = "range";
             q.ctype = "Range";
             q.size = 8;
@@ -163,6 +169,8 @@ final class Param {
             }
             case "source":
                 return rt.newSource(java.util.Arrays.copyOf(raw, Math.min(raw.length, size)), size);
+            case "value":
+                return rt.decodeValue(datatype, java.util.Arrays.copyOf(raw, Math.min(raw.length, size)), size);
             default:
                 return box(rawInt(raw));
         }

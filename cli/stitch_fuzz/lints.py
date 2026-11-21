@@ -97,7 +97,7 @@ def datatype_lints(project, m):
         if not d["decoder"] and not has_seeds:
             out.append({"level": "warning", "check": "datatype-empty", "datatype": d["name"],
                         "message": f"datatype {d['name']} has no decoder and no seeds in harness/data/{d['name']}/seeds/: values are random bytes"})
-        if d["name"] not in used:
+        if d["name"] not in used and not d["decoder"]:  # a decoder may be used by other decoders (draw)
             out.append({"level": "info", "check": "datatype-unused", "datatype": d["name"],
                         "message": f"datatype {d['name']} is declared but no parameter uses it"})
     return out

@@ -34,3 +34,22 @@ Stitch.endpoint :roundtrip, { st: Borrow[Store] } do |st|
   again = Kvrb.load(st.dump)
   Stitch.check(again.items.to_h == st.items.to_h, "dump/load roundtrip")
 end
+
+# A typed data type: Pairs decodes to an Array of [key, value], drawing each with Pair's decoder.
+Pair = Stitch.datatype("Pair")
+Pairs = Stitch.datatype("Pairs")
+
+Stitch.decoder(Pair) do |s|
+  key = s.coin(0.3) ? s.token : s.str(8)
+  [key, s.coin ? s.str(12) : format("%.2f", s.f64(0, 100))]
+end
+
+Stitch.decoder(Pairs) do |s|
+  out = []
+  out << s.draw(Pair) while s.more
+  out
+end
+
+Stitch.endpoint :put_all, { st: Borrow[Store], kvs: Val[Pairs, 256] }, bails_on: [ArgumentError] do |st, kvs|
+  kvs.each { |k, v| st.put(k, v) }
+end

@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 
 from ..standalone import read_plan
+from . import comment_safe
 
 FILENAME = "repro.go"
 SHIM = "stitch"  # the stitch module in the image (stitch.Run / stitch.Call)
@@ -38,7 +39,10 @@ def _literal(a, draws):
         return (f"[]byte({_gostr(b)})" if k == "bytes" else f"stitch.TempFile([]byte({_gostr(b)}))"), None
     if k == "source":
         lines = "; ".join(f"{d['op']} -> {d.get('v', bytes.fromhex(d.get('hex', '')).decode('utf-8', 'replace'))}" for d in draws)
-        return f"stitch.NewSource([]byte({_gostr(bytes.fromhex(a['hex']))}))", (f"draws: {lines[:300]}" if lines else None)
+        return f"stitch.NewSource([]byte({_gostr(bytes.fromhex(a['hex']))}))", (f"draws: {comment_safe(lines)[:300]}" if lines else None)
+    if k == "value":
+        return (f"stitch.Value({json.dumps(a.get('datatype') or '')}, []byte({_gostr(bytes.fromhex(a['hex']))}))",
+                comment_safe(f"{a.get('name', '?')} = {a.get('v')}")[:300])
     if a.get("go") is not None:
         return a["go"], None
     return "nil", f"{a.get('name', '?')} was {a.get('v')}: not a literal, fill it in"

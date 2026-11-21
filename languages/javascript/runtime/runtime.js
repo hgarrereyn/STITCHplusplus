@@ -332,6 +332,11 @@ class Runtime {
     if (form === 1 && dt && dt.decoder) return this.runDecoder(dt, new Source(raw, { cap: Math.max(raw.length, max) }), max);
     return Buffer.from(raw).subarray(0, max);
   }
+  decodeValue(dtname, raw, max) {
+    const dt = this.reg.datatypes.get(dtname);
+    if (!dt || !dt.decoder) throw new TypeError(`Val(${dtname}): the data type has no decoder`);
+    return dt.decoder(new Source(raw, { cap: max }));
+  }
   runDecoder(dt, src, max) {
     let v;
     try {
@@ -340,7 +345,7 @@ class Runtime {
       v = Buffer.alloc(0);
     }
     if (typeof v === "string") v = Buffer.from(v, "utf8");
-    else if (!Buffer.isBuffer(v)) v = v instanceof Uint8Array ? Buffer.from(v) : Buffer.from(String(v));
+    else if (!Buffer.isBuffer(v)) v = v instanceof Uint8Array ? Buffer.from(v) : Buffer.from(util.inspect(v, { depth: 6, breakLength: Infinity }));
     return max === undefined ? v : v.subarray(0, max);
   }
   describe(p, raw, form) {
@@ -349,6 +354,7 @@ class Runtime {
       return `${p.ctype}[${v.length}${form === 1 ? ",decoded" : ""}]${preview(v)}`;
     }
     if (p instanceof S.SrcParam) return `Src[${raw.length}]${Buffer.from(raw).subarray(0, 48).toString("hex")}${raw.length > 48 ? "..." : ""}`;
+    if (p instanceof S.ValParam) return `Val<${p.datatype}>[${raw.length} choices] ${util.inspect(p.decode(raw, form, this), { depth: 4, breakLength: Infinity }).slice(0, 300)}`;
     const v = p.decode(raw, form, this);
     return jsLiteral(v) ?? util.inspect(v);
   }
@@ -371,8 +377,9 @@ class Runtime {
     if (p instanceof S.BufParam) {
       d.decoded = form === 1;
       d.hex = p.rawValue(raw, form, this).toString("hex");
-    } else if (p instanceof S.SrcParam) {
+    } else if (p instanceof S.SrcParam || p instanceof S.ValParam) {
       d.hex = Buffer.from(raw).subarray(0, p.size).toString("hex");
+      if (p instanceof S.ValParam) d.v = util.inspect(p.decode(raw, form, this), { depth: 4, breakLength: Infinity }).slice(0, 300);
     } else {
       const v = p.decode(raw, form, this);
       d.signed = p.signed;

@@ -66,9 +66,12 @@ public class Stubs {
 | `@Range(lo, hi)`, `@OneOf(ints = {...})`, `@OneOf(strings = {...})`, `@Flags({...})` | constrained values |
 | an enum | one of its constants |
 | `String` (`@Str(max, type)`), `byte[]` (`@Bytes`), `Path`/`File` (`@FileParam`) | buffers |
+| `@Val("Type")` (`max = 1024`) on any type | the value of the `Type` decoder |
 | `stitch.Source` (`@Max(n)`) | choices inside the stub |
 
-Also: `@Decoder("Type") static String f(Source s)`, `@Init static void setup()`,
+Also: `@Decoder("Type") static T f(Source s)` (`String`/`byte[]` for buffers of that type, any
+other `T` for `@Val("Type")`; `s.draw("Type")` builds on another decoder; `Source` also has
+`f64(lo, hi)`, `f32(lo, hi)`, `fixed(n)`, `rest()`), `@Init static void setup()`,
 `@Drop static void close(T obj)`, and `Stitch.bail/require/check/log/consume/set/get/getObj`.
 
 ## Bugs
