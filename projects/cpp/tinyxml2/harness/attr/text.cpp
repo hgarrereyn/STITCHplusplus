@@ -57,7 +57,7 @@ void set_text_float(Borrow<Doc> d, Borrow<Node> n, F32 v) {
     e->SetText((float)v);
     float got = 0;
     stitch::check(e->QueryFloatText(&got) == XML_SUCCESS, "float text queries");
-    stitch::check(got == (float)v, "float text round-trips exactly");
+    stitch::check(std::fabs(got - (float)v) <= std::fabs((float)v) * 2e-6f, "float text round-trips approximately");
 }
 STITCH_ENDPOINT(set_text_float);
 

@@ -8,8 +8,8 @@ git = "https://github.com/BurntSushi/toml"
 rev = "v1.0.0"   # branch, tag or commit; `stitch build --rev X` overrides it
 
 [go]
-module = "example.com/toml"    # import path of the library (its source is at /src)
-# instrument = ["example.com/toml/..."]   # packages to instrument (default: all but std)
+module = "github.com/BurntSushi/toml"    # import path of the library (its source is at /src)
+instrument = ["github.com/BurntSushi/toml"]
 # race = true                       # build with the race detector
 
 [fuzz]

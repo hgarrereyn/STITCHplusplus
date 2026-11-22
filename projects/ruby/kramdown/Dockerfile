@@ -2,5 +2,5 @@
 ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
-RUN gem install rexml
+RUN gem install rexml stringex rouge coderay
 ENV RUBYLIB=/src/lib

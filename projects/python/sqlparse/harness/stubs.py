@@ -104,6 +104,7 @@ def fmt_reindent_idem(text: Str[512, SqlText]):
 
 @stitch.endpoint
 def fmt_case_idem(text: Str[512, SqlText], kc: OneOf["upper", "lower"]):
+    text = text.replace(";", " ")   # statement splitting re-strips whitespace between statements
     o1 = sqlparse.format(text, keyword_case=kc)
     o2 = sqlparse.format(o1, keyword_case=kc)
     stitch.check(o1 == o2, "keyword_case idempotent")

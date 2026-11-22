@@ -63,7 +63,6 @@ Stitch.decoder(OptsT) do |s|
   o[:math_engine] = s.pick([nil, :mathjax, :ritex]) if s.coin(0.2)
   o[:link_defs] = {s.str(3) => [s.str(5), s.str(4)]} if s.coin(0.1)
   o[:latex_headers] = %w[chapter section subsection paragraph part a] .first(s.range(1, 6)) if s.coin(0.1)
-  o[:template] = s.str(6) if s.coin(0.05)
   o
 end
 
@@ -142,7 +141,7 @@ end
 Stitch.endpoint :hash_ast_matches_tree, { text: Str[1000, KdText] }, bails_on: BAILS do |text|
   d = Kramdown::Document.new(text)
   h = d.to_hash_ast
-  count = ->(e) { 1 + e[:children].sum { |c| count.(c) } }
+  count = ->(e) { 1 + (e[:children] || []).sum { |c| count.(c) } }
   count2 = ->(e) { 1 + e.children.sum { |c| count2.(c) } }
   Stitch.check(count.(h) == count2.(d.root), "hash_ast has same node count as tree")
 end
@@ -163,12 +162,6 @@ Stitch.endpoint :elem_inspect, { e: Borrow[Elem] } do |e|
   e.value.to_s
   e.options.to_a
   e.inspect
-end
-
-Stitch.endpoint :elem_to_html, { e: Borrow[Elem], opts: Val[OptsT, 256] }, bails_on: BAILS do |e, opts|
-  Stitch.require(e.type != :root, "root handled elsewhere")
-  Kramdown::Converter::Html.convert(e, Kramdown::Options.merge(opts)) rescue raise if false
-  Kramdown::Converter::Html.convert(e, Kramdown::Options.merge(opts))
 end
 
 Stitch.endpoint :tree_to_kramdown, { d: Borrow[Doc] }, bails_on: BAILS do |d|

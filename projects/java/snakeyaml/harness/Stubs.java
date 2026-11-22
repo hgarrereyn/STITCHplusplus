@@ -36,21 +36,33 @@ public class Stubs {
         return b.toString();
     }
 
+    /** Mostly printable text: a control character makes the whole stream a ReaderException. */
+    static String str(Source s, int max) {
+        String t = s.str(max);
+        if (s.coin(0.03)) return t;
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            b.append(c == '\n' || c == '\t' || StreamReader.isPrintable(c) && !Character.isSurrogate(c) ? c : '?');
+        }
+        return b.toString();
+    }
+
     static String scalar(Source s) {
         switch (s.choice(14)) {
             case 0: return String.valueOf(s.i64());
             case 1: return s.pick("true", "false", "yes", "No", "on", "null", "~", "", "Null", "NULL");
             case 2: return s.pick("1.5", "-.inf", ".nan", "1e3", "0x1F", "0o17", "017", "1_000", "0b101", "+12", "190:20:30", "1:30.5");
             case 3: return s.pick("2001-12-14", "2001-12-14t21:59:43.10-05:00", "2002-12-14 1:2:3 +5", "1999-01-01");
-            case 4: return "\"" + s.str(8).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
-            case 5: return "'" + s.str(8).replace("'", "''") + "'";
+            case 4: return "\"" + str(s, 8).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+            case 5: return "'" + str(s, 8).replace("'", "''") + "'";
             case 6: return "\"" + s.pick("\\x41", "\\u00e9", "\\U0001F600", "\\N", "\\_", "\\L", "\\e", "\\0", "\\\n", "\\ud800") + "\"";
             case 7: return s.token();
             case 8: return "*" + s.pick("a", "b", "c");
-            case 9: return "&" + s.pick("a", "b", "c") + " " + s.str(4);
-            case 10: return s.pick("!!str", "!!int", "!!float", "!!binary", "!!timestamp", "!!null", "!!bool", "!foo", "!<tag:x>", "!e!x", "!!merge", "!!value") + " " + s.str(5);
+            case 9: return "&" + s.pick("a", "b", "c") + " " + str(s, 4);
+            case 10: return s.pick("!!str", "!!int", "!!float", "!!binary", "!!timestamp", "!!null", "!!bool", "!foo", "!<tag:x>", "!e!x", "!!merge", "!!value") + " " + str(s, 5);
             case 11: return s.pick("<<", "=", "?", "-", ":", "[", "]", "{", "}", ",", "#", "|", ">", "%", "@", "`");
-            default: return s.str(8);
+            default: return str(s, 8);
         }
     }
 
@@ -76,7 +88,7 @@ public class Stubs {
                 for (int i = 0; i < n; i++) {
                     if (i > 0 || !top) b.append('\n').append(indent(ind));
                     if (s.coin(0.1)) { b.append("? "); node(s, b, ind + 2, depth + 1, false); b.append('\n').append(indent(ind)); }
-                    else b.append(s.coin(0.6) ? s.str(4).replace('\n', ' ') : scalar(s));
+                    else b.append(s.coin(0.6) ? str(s, 4).replace('\n', ' ') : scalar(s));
                     b.append(s.coin(0.9) ? ": " : ":");
                     node(s, b, ind + 2, depth + 1, false);
                 }
@@ -97,7 +109,7 @@ public class Stubs {
             default: { // block scalar
                 b.append(s.pick("|", ">", "|-", ">+", "|2", ">-")).append(s.pick("", " #c"));
                 int n = (int) s.range(1, 3);
-                for (int i = 0; i < n; i++) b.append('\n').append(indent(ind + 2)).append(s.str(10).replace('\n', ' '));
+                for (int i = 0; i < n; i++) b.append('\n').append(indent(ind + 2)).append(str(s, 10).replace('\n', ' '));
             }
         }
     }
@@ -337,6 +349,78 @@ public class Stubs {
         set.add(item);
     }
 
+
+    // ---------------------------------------------------------------- deep / amplifying inputs
+    /** Deeply nested collections: StackOverflowError is a bug (CVE-2022-25857 class). */
+    @Endpoint(bailsOn = {YAMLException.class})
+    public static void load_deep(Yaml y, @Range(lo = 1, hi = 4000) int depth, @Range(lo = 0, hi = 4) int kind) {
+        StringBuilder b = new StringBuilder();
+        switch (kind) {
+            case 0: b.append("[".repeat(depth)); break;
+            case 1: b.append("{a: ".repeat(depth)); break;
+            case 2: for (int i = 0; i < depth; i++) b.append(" ".repeat(i % 40)).append("- \n"); break;
+            case 3: b.append("[".repeat(depth)).append("x").append("]".repeat(depth)); break;
+            default: for (int i = 0; i < depth; i++) b.append("? ".repeat(1)).append("[");
+        }
+        Stitch.require(b.length() <= 20000, "too long");
+        Object o = tolerantLoad(y, b.toString());
+        if (o != null) y.dump(o);
+    }
+
+    /** Alias amplification ("billion laughs"): OutOfMemoryError / timeout is a bug (CVE-2022-38751/52 class). */
+    @Endpoint(bailsOn = {YAMLException.class})
+    public static void load_alias_bomb(Yaml y, @Range(lo = 1, hi = 12) int levels, @Range(lo = 2, hi = 12) int fan,
+                                       boolean seq, boolean dump) {
+        StringBuilder b = new StringBuilder();
+        b.append("a0: &a0 [x]\n");
+        for (int i = 1; i <= levels; i++) {
+            b.append("a").append(i).append(": &a").append(i).append(" [");
+            for (int j = 0; j < fan; j++) b.append(j > 0 ? "," : "").append("*a").append(i - 1);
+            b.append("]\n");
+        }
+        Object o = tolerantLoad(y, b.toString());
+        if (dump && o != null) y.dump(o);
+        Stitch.check(seq || o != null, "loaded");
+    }
+
+    @Endpoint(bailsOn = {YAMLException.class})
+    public static void load_bytes(Yaml y, @Bytes(max = 256, type = "YamlText") byte[] data) {
+        Object o;
+        try { o = y.load(new java.io.ByteArrayInputStream(data)); }
+        catch (YAMLException e) { throw e; }
+        catch (RuntimeException e) {
+            for (StackTraceElement f : e.getStackTrace()) if (f.getClassName().contains("Constructor")) throw Stitch.bail("constructor leak");
+            throw e;
+        }
+        Stitch.check(o == null || o != null, "loaded");
+    }
+
+    @Endpoint
+    @Obj("Data")
+    public static Object data_bigint(@Str(max = 40) String digits) {
+        Stitch.require(digits.matches("-?[0-9]{1,40}"), "not digits");
+        return new java.math.BigInteger(digits);
+    }
+
+    @Endpoint
+    @Obj("Data")
+    public static Object data_int_array(@Range(lo = 0, hi = 6) int n, int v) {
+        int[] a = new int[n]; Arrays.fill(a, v);
+        return a;
+    }
+
+    @Endpoint
+    @Obj("Data")
+    public static Object data_calendar(@Range(lo = -12219292800000L, hi = 253402300799000L) long ms) {
+        Calendar c = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+        c.setTimeInMillis(ms);
+        return c;
+    }
+
+    @Endpoint
+    @Obj("Data")
+    public static Object data_float(float f) { return f; }
+
     // ---------------------------------------------------------------- dumping
     @Endpoint
     public static void dump(Yaml y, @Obj("Data") Object data) {
@@ -410,7 +494,12 @@ public class Stubs {
     @Endpoint
     @Obj("Node")
     public static Node represent(Yaml y, @Obj("Data") Object data) {
-        return y.represent(data);
+        try {
+            return y.represent(data);
+        } catch (YAMLException e) {
+            if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate");
+            throw e;
+        }
     }
 
     @Endpoint
@@ -522,7 +611,15 @@ public class Stubs {
     }
 
     // ---------------------------------------------------------------- equality helpers
+    static Object norm(Object o) {
+        if (o instanceof int[]) { List<Object> l = new ArrayList<>(); for (int x : (int[]) o) l.add(x); return l; }
+        if (o instanceof Calendar) return ((Calendar) o).getTime();
+        if (o instanceof Float) return Double.valueOf(o.toString());
+        return o;
+    }
+
     static boolean eq(Object a, Object b, IdentityHashMap<Object, Object> seen) {
+        a = norm(a); b = norm(b);
         if (a == b) return true;
         if (a == null || b == null) return false;
         if (a instanceof Number && b instanceof Number) {

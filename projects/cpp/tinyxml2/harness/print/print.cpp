@@ -5,10 +5,20 @@
 
 // A document we expect to print to something re-parsable: an element at the top and no stray
 // top-level text (tinyxml2 accepts such input but printing it back does not parse).
+static void need_no_decl_below(const XMLNode* n) {
+    for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) {
+        stitch::require(!c->ToDeclaration() && !c->ToUnknown(), "declaration/doctype inside element");
+        need_no_decl_below(c);
+    }
+}
 static void need_wellformed_top(const XMLDocument* d) {
     stitch::require(d->FirstChildElement() != nullptr, "no top-level element");
-    for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling())
+    bool seen_elem = false;
+    for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling()) {
         stitch::require(!c->ToText(), "top-level text");
+        if (c->ToElement()) { seen_elem = true; need_no_decl_below(c); }
+        else if (c->ToDeclaration() || c->ToUnknown()) stitch::require(!seen_elem, "declaration after root");
+    }
 }
 // Pretty printing indents next to text: mixed content changes on every round trip (known limitation).
 static bool has_mixed(const XMLNode* n) {
@@ -40,6 +50,7 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
     stitch::require(live(d, n), "stale node");
     XMLNode* node = n;
     stitch::require(node->ToElement(), "not an element");
+    need_no_decl_below(node);
     std::string s1 = print_node(node, true);
     std::unique_ptr<XMLDocument> d2(same_settings(d));
     stitch::check(d2->Parse(s1.c_str()) == XML_SUCCESS, "printed element parses");
@@ -168,3 +179,44 @@ void printer_finish(Borrow<Printer> p) {
     stitch::check(d.Parse(out.c_str()) == XML_SUCCESS, "printer output parses");
 }
 STITCH_ENDPOINT(printer_finish);
+
+// A whole well-formed printing session driven by one Src: balanced elements, attributes, text.
+static void script(stitch::Source& s, XMLPrinter& p, int depth, std::deque<std::string>& names) {
+    static const char* nm[] = {"a", "b", "item", "x:y", "_k"};
+    std::string n = nm[s.choice(5)];
+    names.push_back(n);
+    p.OpenElement(names.back().c_str(), s.coin(0.2));
+    int used = 0;
+    while (used < 5 && s.more() && s.coin(0.5)) {
+        std::string an = nm[used++];   // distinct names: duplicate attributes are not well-formed
+        switch (s.choice(5)) {
+            case 0: p.PushAttribute(an.c_str(), s.str(8).c_str()); break;
+            case 1: p.PushAttribute(an.c_str(), (int)s.i32()); break;
+            case 2: p.PushAttribute(an.c_str(), s.coin()); break;
+            case 3: p.PushAttribute(an.c_str(), s.f64(-1e6, 1e6)); break;
+            default: p.PushAttribute(an.c_str(), (int64_t)s.i64()); break;
+        }
+    }
+    while (depth < 4 && s.more()) {
+        switch (s.choice(6)) {
+            case 0: p.PushText(s.str(8).c_str(), s.coin()); break;
+            case 1: p.PushText((int)s.i32()); break;
+            case 2: p.PushText(s.f64(-1e6, 1e6)); break;
+            case 3: p.PushComment("c"); break;
+            default: script(s, p, depth + 1, names); break;
+        }
+    }
+    p.CloseElement(s.coin());
+}
+void printer_script(Src<64> s, Bool compact, Bool header) {
+    XMLPrinter p(0, compact);
+    if (header) p.PushHeader(s->coin(), true);
+    std::deque<std::string> names;
+    script(*s, p, 0, names);
+    std::string out = p.CStr();
+    XMLDocument d;
+    XMLError e = d.Parse(out.c_str());
+    if (e != XML_SUCCESS) stitch::log("%s", out.c_str());
+    stitch::check(e == XML_SUCCESS, "printed session parses");
+}
+STITCH_ENDPOINT(printer_script);

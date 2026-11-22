@@ -1,6 +1,8 @@
 const stitch = require("stitch");
 const { Borrow, New, Str, Flags, OneOf, Bool } = stitch;
-const marked = require("marked");
+// marked >= v5 is ESM-only through "exports"; Node 22.11 cannot require() it; the Dockerfile copies the UMD build to lib/marked.cjs.
+let marked;
+try { marked = require("marked"); } catch (e) { marked = require("/opt/node_modules/marked/lib/marked.cjs"); }
 
 const MarkdownText = stitch.datatype("MarkdownText");
 const Tokens = stitch.object("Tokens");       // block tokens: result of lexer (array with .links)

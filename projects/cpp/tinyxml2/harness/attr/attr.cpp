@@ -74,7 +74,8 @@ void set_attr_float(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, F32 v)
     e->SetAttribute(name.c_str(), (float)v);
     float got = 0;
     stitch::check(e->QueryFloatAttribute(name.c_str(), &got) == XML_SUCCESS, "float attribute queries");
-    stitch::check(got == (float)v, "float attribute round-trips exactly");
+    // 7.0.0 stores floats with 6 significant digits: only check a relative error (see notes.md).
+    stitch::check(std::fabs(got - (float)v) <= std::fabs((float)v) * 2e-6f, "float attribute round-trips approximately");
 }
 STITCH_ENDPOINT(set_attr_float);
 
@@ -114,7 +115,7 @@ void query_existing_attr(Borrow<Doc> d, Borrow<Node> n, Src<8> s) {
     if (ei == XML_SUCCESS && e64 == XML_SUCCESS && i64 >= INT_MIN && i64 <= INT_MAX) stitch::check((int64_t)i == i64, "int and int64 agree");
     if (ei == XML_SUCCESS) stitch::check(e->IntAttribute(name, -99) == i, "IntAttribute agrees with Query");
     // missing attribute
-    stitch::check(e->QueryIntAttribute("no:such:attr", &i) == XML_NO_ATTRIBUTE, "missing attribute");
+    stitch::check(e->QueryIntAttribute("!no such attr!", &i) == XML_NO_ATTRIBUTE, "missing attribute");
 }
 STITCH_ENDPOINT(query_existing_attr);
 

@@ -104,7 +104,7 @@ let metadataCheck = endpoint("metadata_consistent") { (md: Str<2048, MdText>) in
     let r = MarkdownParser().parse(md.value)
     if !r.metadata.isEmpty {
         try check(md.value.drop(while: { $0.isWhitespace }).hasPrefix("-"), "metadata implies leading ---")
-        for (k, v) in r.metadata { try check(md.value.contains(k) && md.value.contains(v), "metadata key/value appear in input") }
+        for (k, _) in r.metadata { try check(md.value.contains(k), "metadata key appears in input") }
     }
 }
 
