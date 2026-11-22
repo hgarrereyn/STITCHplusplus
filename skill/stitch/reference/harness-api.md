@@ -58,6 +58,9 @@ STITCH_DROP(Name, [](Handle h) { free_it(h); });  // optional: frees objects lef
 | `Borrow<T> x` | uses an object; it stays available. `*x` is the handle by reference (assign to it for realloc-style APIs); `x` converts to the handle; `x->field` |
 | `x.consume()` | on a `Borrow`: the library took ownership in this call |
 | `Take<T> x` | always consumes the object |
+
+An object input is never optional: there is no `std::optional<Borrow<T>>`. Write two stubs, one
+with the input and one without.
 | return `New<T>` | produces an object: `return handle;` |
 | return `std::tuple<New<A>, std::optional<New<B>>>` | several outputs; return `std::nullopt` for an absent optional one |
 
