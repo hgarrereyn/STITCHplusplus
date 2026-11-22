@@ -39,15 +39,41 @@ def _literal(a, draws):
     return "undefined", f"{a.get('name', '?')} was {a.get('v')}: not a literal, fill it in"
 
 
+# Each harness file becomes a module function, so files keep their own scope and `require` each
+# other with relative paths, as they do in the fuzzer. Files load in sorted order, like the runtime.
+_LOADER = """const harnessFiles = {};
+const harnessCache = {};
+function harnessLoad(name) {
+  if (!harnessCache[name]) {
+    const module = { exports: {} };
+    harnessCache[name] = module;
+    harnessFiles[name](module, module.exports, (spec) => harnessRequire(name, spec));
+  }
+  return harnessCache[name].exports;
+}
+function harnessRequire(from, spec) {
+  if (spec === "stitch") return stitch;
+  if (spec.startsWith("./") || spec.startsWith("../")) {
+    const p = require("path").posix.join(require("path").posix.dirname(from), spec);
+    for (const c of [p, p + ".js", p + ".cjs", p + "/index.js"]) if (harnessFiles[c]) return harnessLoad(c);
+  }
+  return require(spec);
+}
+"""
+
+
 def _harness_code(p):
-    parts = []
-    files = [f for f in sorted((p.root / "harness").rglob("*")) if f.suffix in (".js", ".cjs")
-             and "seeds" not in f.relative_to(p.root / "harness").parts]
+    hdir = p.root / "harness"
+    parts = [_LOADER]
+    files = [f for f in sorted(hdir.rglob("*")) if f.suffix in (".js", ".cjs")
+             and not {"data", "node_modules"} & set(f.relative_to(hdir).parts[:-1])]
+    names = []
     for f in files:
-        text = f.read_text()
-        text = re.sub(r"""require\((["'])stitch\1\)""", 'require("./stitch")', text)
-        text = re.sub(r"""^(\s*(?:const|let|var)\s+[^=]+=\s*require\((["'])\.{1,2}/[^)]*\2\);?)$""", r"// \1  (pasted above)", text, flags=re.M)
-        parts.append(f"// {'=' * 94}\n// {p.rel(f)}\n// {'=' * 94}\n{{\n{text.rstrip()}\n}}\n")
+        name = "harness/" + f.relative_to(hdir).as_posix()
+        names.append(name)
+        parts.append(f"// {'=' * 94}\n// {p.rel(f)}\n// {'=' * 94}\n"
+                     f"harnessFiles[{json.dumps(name)}] = (module, exports, require) => {{\n{f.read_text().rstrip()}\n}};\n")
+    parts.append(f"for (const f of {json.dumps(names)}) harnessLoad(f);\n")
     return "\n".join(parts)
 
 

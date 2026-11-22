@@ -124,6 +124,9 @@ const Conn = stitch.object("Conn", (c) => c.close());   // drop: runs on objects
 | returns `[New(A), New(B).optional()]` | several outputs: return an array |
 | returns `null` | the stub produces nothing |
 
+Objects are told apart by identity (`===`). A primitive works as an object (a string produced by
+`stringify`), but equal primitives are the same object.
+
 ```js
 const Arr = stitch.object("Arr");
 
@@ -275,7 +278,8 @@ stitch.endpoint("from_pairs", { kvs: stitch.Val(Pairs, 256) }, New(Obj), ({ kvs 
 
 | Method | Returns |
 |---|---|
-| `u8()` .. `u64()`, `i8()` .. `i64()`, `f32()`, `f64()` | a number |
+| `u8()` .. `u32()`, `i8()` .. `i32()`, `f32()`, `f64()` | a number |
+| `u64()`, `i64()` | a BigInt |
 | `range(lo, hi)` | integer in [lo, hi] |
 | `choice(n)` | index in [0, n) |
 | `pick(array)` | one element |
@@ -299,8 +303,49 @@ cp .stitch/standalone/c1/repro.js .stitch/standalone/c1/min.js
 stitch try .stitch/standalone/c1/min.js
 ```
 
-End with `throw new Error("X")` for a failed check. `stitch try` compares Node's uncaught error
-with the original crash. Details: `stitch guide reproducers`.
+End with `throw new Error("X")` for a failed check:
+
+```js
+const qs = require("qs");
+
+// depth 5: "[g]" is kept as one key; stringify writes it back unescaped as "[[g]]"
+const s1 = qs.stringify(qs.parse("a[b][c][d][e][f][g]=x"));
+const s2 = qs.stringify(qs.parse(s1));                       // the key grows to "[g]]"
+if (s1 !== s2) throw new Error("stringify(parse(stringify(q))) == stringify(q)");
+```
+
+```
+SAME CRASH: .stitch/standalone/c1/min.js -> check failed: stringify(parse(stringify(q))) == stringify(q)
+  4 code lines, plain library code
+```
+
+Prototype pollution is detected by the runtime, so its reproducer keeps `stitch.js` and one stub:
+
+```js
+const stitch = require("./stitch");
+const qs = require("qs");
+
+function deepMerge(dst, src) {
+  for (const k of Object.keys(src)) {
+    const v = src[k];
+    if (v !== null && typeof v === "object") {
+      if (dst[k] === undefined || dst[k] === null || typeof dst[k] !== "object") dst[k] = {};
+      deepMerge(dst[k], v);
+    } else {
+      dst[k] = v;
+    }
+  }
+}
+
+stitch.endpoint("merge", {}, null, () => {
+  const q = qs.parse("[__proto__][]", { allowPrototypes: true, plainObjects: true });   // { __proto__: [""] } as an own key
+  deepMerge({}, q);   // the application's naive deep merge: dst["__proto__"] is Object.prototype
+});
+stitch.run(async () => { await stitch.call(0, "merge", {}); });
+```
+
+`stitch try` compares Node's uncaught error with the original crash. Details:
+`stitch guide reproducers`.
 
 ## Coverage
 

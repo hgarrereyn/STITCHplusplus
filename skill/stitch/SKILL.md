@@ -208,6 +208,10 @@ known edge cases (NaN, duplicate keys) with an `if` before the check.
 **Do not add guards the library does not need.** Each guard hides behavior the fuzzer could
 have tested. Add one only when the report or a crash shows that the stub breaks the API contract.
 
+**Keep program state in objects, attributes or locals.** One worker process runs many programs,
+so module-level variables carry over from one program to the next. Use them only for setup that
+never changes (what an init function builds).
+
 **Keep stubs compiling across library versions**, so `stitch exec --rev` and `stitch bisect`
 work.
 
@@ -244,7 +248,8 @@ For structured input, add seeds or a decoder. `stitch check` warns about data ty
 
 Decoder tips:
 
-- Draw literal text with `s.str(max)` and dictionary tokens with `s.token()`.
+- Draw literal text with `s.str(max)` and dictionary tokens with `s.token()`. `s.token()` draws
+  from the `.dict` files of the data type being decoded; without one it returns random text.
 - Compute lengths, counts and checksums from the data; do not draw them.
 - Loop with `while (s.more())` so the fuzzer can add and remove elements.
 - A decoder can return a structured value (a struct, a list of records) instead of text. Take it
@@ -257,7 +262,7 @@ Decoder tips:
 stitch build            # prints compile errors with file and line
 stitch check            # static checks: unreachable stubs, attributes read but never set
 stitch probe --secs 60  # short run (one worker) and a report of stubs with problems
-stitch probe 'parse,tree/*' --secs 30   # only some stubs
+stitch probe 'parse,tree/*' --secs 30   # only these stubs and the stubs that produce their inputs
 stitch fuzz --jobs 4    # campaign 'main' in the background; resumes its corpus
 stitch fuzz --fresh     # start the corpus over
 stitch fuzz --secs 900 --foreground     # wait, then print the final stats
@@ -337,7 +342,9 @@ stitch exec c1 --rev HEAD  # does it still crash on the newest library code?
 ```
 
 Crashes are grouped by kind and innermost library frames. The stub named in the list comes from
-one example program; other programs in the group may crash in another stub.
+one example program; other programs in the group may crash in another stub. One bug can show as
+several groups (a stack overflow ends in different frames): fix or explain the first, then run
+`stitch crashes` again.
 
 Crash ids: `c1` is in the latest campaign that is not `probe` (or in `probe` if there is no
 other). Use `probe:c1` or `--campaign probe` for another campaign. Ids stay the same while a
