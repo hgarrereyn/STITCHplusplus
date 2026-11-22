@@ -217,8 +217,9 @@ payloads.
 ```sh
 stitch build            # compile errors point to harness file:line
 stitch check            # static checks: unreachable stubs, attributes read but never set
-stitch probe --secs 60  # short run and a report of what fails
-stitch fuzz --jobs 4    # campaign in the background; resumes its corpus
+stitch probe --secs 60  # short run and a report of what fails (only stubs with a problem are listed)
+stitch fuzz --jobs 4    # campaign in the background; resumes its corpus (--fresh starts over)
+stitch fuzz --secs 900 --foreground   # the same, waits and prints the final stats
 stitch status           # progress and the same report
 stitch stop
 ```
@@ -265,11 +266,17 @@ ASan to crash run to completion there.
 ## 6. Triage
 
 ```sh
-stitch crashes             # unique crashes: c1, c2, ...
+stitch crashes             # unique crashes: c1, c2, ... (latest campaign)
 stitch exec c1 --trace     # every call with its arguments, then the sanitizer report
-stitch minimize c1         # fewer calls, smaller inputs
+stitch exec c1 --args      # the same with long arguments in full
+stitch minimize c1         # fewer calls, smaller inputs; c1 then refers to the minimized program
 stitch exec c1 --rev HEAD  # does it still crash upstream?
 ```
+
+A crash id is `c3` (latest campaign), `probe:c3` or `probe/c3` (another campaign; or `--campaign
+probe`). Ids stay the same while a campaign runs and across `stitch crashes` calls. When the
+harness changed since a campaign ran, `stitch crashes` reruns its crashes with the current build,
+so buckets the fixed stubs no longer produce disappear.
 
 Decide for each crash:
 
@@ -337,12 +344,12 @@ Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
 | `stitch status`, `stitch stop` | campaign progress, stop it |
 | `stitch cov [CAMPAIGN\|FILES] [--crashes] [--rev REV]` | line, function and branch coverage of a corpus: lcov + HTML |
 | `stitch crashes` | unique crashes |
-| `stitch exec ID [--trace] [--rev REV]` | run a crash or `.stp` program |
+| `stitch exec ID [--trace\|--args] [--rev REV]` | run a crash or `.stp` program (`ID`: `c3`, `probe:c3`, a file) |
 | `stitch minimize ID` | shrink a crashing program |
 | `stitch repro ID` | Docker reproducer folder |
 | `stitch bisect ID [--good REV] [--fixed]` | find the commit that introduced (or fixed) a crash |
 | `stitch write ID` | standalone source file of a crash (every language) |
-| `stitch try FILE` | build and run a standalone file, compare the crash |
+| `stitch try FILE [ID]` | build and run a standalone file, compare with `expected.json` or crash `ID` |
 | `stitch sample TYPE -n N` | values a decoder produces |
 | `stitch shell` | shell in the project image (project at `/project`) |
 | `stitch guide [TOPIC]` | this guide; topics: `api`, `reproducers`, `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift` |

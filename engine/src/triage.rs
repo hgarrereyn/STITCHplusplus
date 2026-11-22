@@ -435,19 +435,37 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration, hang: Option<Duration>) -
         .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| is_program_file(p)).collect())
         .unwrap_or_default();
     files.sort();
+    // rerun the programs not in the cache, several at a time (each run is its own process);
+    // STITCH_TRIAGE_JOBS overrides the default of min(cores, 8)
+    let todo: Vec<&PathBuf> =
+        files.iter().filter(|f| !cache.contains_key(&*f.file_name().unwrap().to_string_lossy())).collect();
+    if !todo.is_empty() {
+        let h = hang.map(|h| (h, *startup.get_or_insert_with(startup_time)));
+        let jobs = std::env::var("STITCH_TRIAGE_JOBS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(8))
+            .max(1);
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let results = std::sync::Mutex::new(Vec::new());
+        std::thread::scope(|sc| {
+            for _ in 0..jobs.min(todo.len()) {
+                sc.spawn(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(f) = todo.get(i) else { break };
+                    let r = run_file_hang(f, timeout, h);
+                    results.lock().unwrap().push((f.file_name().unwrap().to_string_lossy().into_owned(), serde_json::to_value(&r).unwrap()));
+                });
+            }
+        });
+        for (k, v) in results.into_inner().unwrap() {
+            cache.insert(k, v);
+        }
+    }
     let mut buckets: BTreeMap<String, Bucket> = BTreeMap::new();
     for f in files {
         let key = f.file_name().unwrap().to_string_lossy().into_owned();
-        let rep: serde_json::Value = match cache.get(&key) {
-            Some(v) => v.clone(),
-            None => {
-                let h = hang.map(|h| (h, *startup.get_or_insert_with(startup_time)));
-                let r = run_file_hang(&f, timeout, h);
-                let v = serde_json::to_value(&r).unwrap();
-                cache.insert(key.clone(), v.clone());
-                v
-            }
-        };
+        let rep: serde_json::Value = cache.get(&key).cloned().unwrap_or(serde_json::Value::Null);
         if !rep["crashed"].as_bool().unwrap_or(false) {
             continue; // does not reproduce (flaky / timeout-only in fork mode)
         }
@@ -548,13 +566,38 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
                     tries.push(b[len / 2..].to_vec());
                     tries.push(b[..len - 1].to_vec());
                 }
+                let mut shrunk = false;
                 for t in tries {
                     let mut cand = cur.clone();
                     cand.nodes[n].params[k].bytes = t;
                     if same(&test(&cand)) {
                         cur = cand;
                         changed = true;
+                        shrunk = true;
                         break;
+                    }
+                }
+                // 3. delta debugging on a variable-length buffer: remove chunks of len/2, len/4,
+                // ..., 1 bytes anywhere (a long string whose crash needs something in the middle)
+                if !fixed && !shrunk {
+                    let mut chunk = cur.nodes[n].params[k].bytes.len() / 2;
+                    while chunk >= 1 && start.elapsed() < budget {
+                        let mut at = 0;
+                        while at < cur.nodes[n].params[k].bytes.len() && start.elapsed() < budget {
+                            let b = &cur.nodes[n].params[k].bytes;
+                            let end = (at + chunk).min(b.len());
+                            let mut t = b[..at].to_vec();
+                            t.extend_from_slice(&b[end..]);
+                            let mut cand = cur.clone();
+                            cand.nodes[n].params[k].bytes = t;
+                            if same(&test(&cand)) {
+                                cur = cand; // retry the same position: the next chunk moved here
+                                changed = true;
+                            } else {
+                                at += chunk;
+                            }
+                        }
+                        chunk /= 2;
                     }
                 }
             }
