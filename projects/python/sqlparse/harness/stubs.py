@@ -280,10 +280,10 @@ def tok_methods(t: Borrow[Tok]):
 
 
 @stitch.endpoint
-def tok_edit(st: Borrow[Stmt], s: Src[8], text: Str[16], pos: OneOf["before", "after"]):
+def tok_edit(st: Borrow[Stmt], s: Src[8], text: OneOf[" ", "  ", "\n"], pos: OneOf["before", "after"]):
     stitch.require(len(st.tokens) > 0, "empty")
     t = s.pick(st.tokens)
-    new = sql.Token(T.Keyword, text)
+    new = sql.Token(T.Whitespace, text)   # whitespace only: arbitrary text would invalidate the str()-based oracles
     if pos == "before":
         st.insert_before(t, new)
     else:

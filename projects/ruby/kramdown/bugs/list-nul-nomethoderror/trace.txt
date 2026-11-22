@@ -1,0 +1,20 @@
+[stitch] running .stitch/campaigns/main/w0/crashes/fea8ba5861cce262.min.stp
+[stitch] #0 parse(text=Str[11,decoded]"* \x00\n    * \n", input="markdown", opts=Val<KdOpts>[0 choices] {})
+
+[stitch] EXCEPTION in parse: NoMethodError: undefined method 'value' for nil
+    #0 0x0 in block in Kramdown::Parser::Kramdown#parse_list /src/lib/kramdown/parser/kramdown/list.rb:136
+    #1 0x0 in Array#each /src/lib/kramdown/parser/kramdown/list.rb:109
+    #2 0x0 in Kramdown::Parser::Kramdown#parse_list /src/lib/kramdown/parser/kramdown/list.rb:109
+    #3 0x0 in block (2 levels) in Kramdown::Parser::Kramdown#parse_blocks /src/lib/kramdown/parser/kramdown.rb:149
+    #4 0x0 in Array#any? /src/lib/kramdown/parser/kramdown.rb:147
+    #5 0x0 in block in Kramdown::Parser::Kramdown#parse_blocks /src/lib/kramdown/parser/kramdown.rb:147
+    #6 0x0 in Kernel#catch /src/lib/kramdown/parser/kramdown.rb:145
+    #7 0x0 in Kramdown::Parser::Kramdown#parse_blocks /src/lib/kramdown/parser/kramdown.rb:145
+    #8 0x0 in Kramdown::Parser::Kramdown#parse /src/lib/kramdown/parser/kramdown.rb:90
+    #9 0x0 in Kramdown::Parser::Base.parse /src/lib/kramdown/parser/base.rb:69
+    #10 0x0 in Kramdown::Document#initialize /src/lib/kramdown/document.rb:102
+    #11 0x0 in Class#new /project/.stitch/build/app/harness/kd.rb:36
+    #12 0x0 in Object#mkdoc /project/.stitch/build/app/harness/kd.rb:36
+    #13 0x0 in block in <top (required)> /project/.stitch/build/app/harness/kd.rb:73
+    #14 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+
