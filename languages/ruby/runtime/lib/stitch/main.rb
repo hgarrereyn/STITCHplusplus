@@ -121,7 +121,7 @@ module Stitch
     # ---------------------------------------------------------------- coverage (stitch cov)
     def coverage_start
       require "coverage"
-      Coverage.start(lines: true, branches: true)
+      Coverage.start(lines: true, branches: true, methods: true)
     end
 
     def coverage_write(dir, project)
@@ -137,6 +137,18 @@ module Stitch
           next unless path.start_with?(harness) || (inc.empty? ? Instrument.wanted?(path) : inc.any? { |p| Instrument.matches?(path, p) })
 
           f.puts "TN:", "SF:#{path}"
+          # methods: {[klass, name, start_line, start_col, end_line, end_col] => calls}; one
+          # function per definition site (a method defined in several classes counts once each)
+          fns = {}
+          (data[:methods] || {}).each do |(klass, name, line, _c, _el, _ec), c|
+            kname = klass.is_a?(Module) && klass.name ? klass.name : klass.to_s
+            fn = "#{kname}##{name}"
+            prev = fns[fn]
+            fns[fn] = [line, (prev ? prev[1] : 0) + c]
+          end
+          fns.each { |fn, (line, _)| f.puts "FN:#{line},#{fn}" }
+          fns.each { |fn, (_, c)| f.puts "FNDA:#{c},#{fn}" }
+          f.puts "FNF:#{fns.size}", "FNH:#{fns.count { |_, (_, c)| c.positive? }}"
           lh = lf = 0
           (data[:lines] || []).each_with_index do |c, i|
             next if c.nil?

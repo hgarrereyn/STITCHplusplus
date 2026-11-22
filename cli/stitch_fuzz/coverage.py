@@ -124,9 +124,36 @@ def summarize(p, out: Path, files, dem):
             return path[len("/project/"):]
         return str((out / "sources" / path.lstrip("/")).relative_to(p.root))
 
-    groups = {"library": [], "harness": []}
-    for f in files:
+    include = [str(x) for x in (p.cfg.get(p.language, {}) or {}).get("include") or []]
+
+    def group(path):
+        if path.startswith("/project/"):
+            return "harness"
+        # JavaScript: packages under node_modules are dependencies unless [javascript] include names them
+        m = re.search(r"/node_modules/((?:@[^/]+/)?[^/]+)/", path)
+        if p.language == "javascript" and include and m and m.group(1) not in include:
+            return "dependencies"
+        return "library"
+
+    def functions(f):
+        """(name, line, calls), one per function. llvm-cov lists each instantiation of a generic
+        (and functions it never instantiated) separately: one function per definition line,
+        covered if any instantiation ran."""
         fns = [(n, f["fn"].get(n, 0), f["fnda"].get(n, 0)) for n in f["fn"]]
+        if p.language not in ("rust", "swift", "cpp"):
+            return fns
+        by_line = {}
+        for n, ln, c in fns:
+            if ln in by_line:
+                n0, _, c0 = by_line[ln]
+                by_line[ln] = (n0 if c0 or not c else n, ln, c0 + c)
+            else:
+                by_line[ln] = (n, ln, c)
+        return list(by_line.values())
+
+    groups = {"library": [], "harness": [], "dependencies": []}
+    for f in files:
+        fns = functions(f)
         rec = {
             "file": f["path"],
             "local": host_path(f["path"]),
@@ -136,7 +163,7 @@ def summarize(p, out: Path, files, dem):
             "uncovered_functions": sorted([{"name": _pretty(n, dem), "line": ln, "static": bool(_LOCAL.match(n))}
                                            for n, ln, c in fns if not c], key=lambda x: x["line"]),
         }
-        groups["harness" if f["path"].startswith("/project/") else "library"].append(rec)
+        groups[group(f["path"])].append(rec)
 
     def total(recs, key):
         return [sum(r[key][0] for r in recs), sum(r[key][1] for r in recs)]
@@ -223,6 +250,10 @@ def render(s, limit=20, show_harness=False):
         t = s[g]
         lines += [f"{g}:", "  " + row("lines", t["lines"]), "  " + row("functions", t["functions"]),
                   "  " + row("branches", t["branches"]), ""]
+    dep = s.get("dependencies") or {}
+    if dep.get("files"):
+        lines += [f"dependencies ({len(dep['files'])} files under node_modules, not counted above): "
+                  f"lines {(_pct(*dep['lines']) or 0):.1f}%", ""]
     lib = s["library"]["files"]
     if lib:
         w = min(48, max(len(f["local"].split("/sources/", 1)[-1]) for f in lib))
