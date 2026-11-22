@@ -1,0 +1,2 @@
+SELECT t.a AS foo, count(*) FROM tbl t JOIN u ON t.id = u.id -- comment
+WHERE t.x >= 5 /* c */ GROUP BY 1;

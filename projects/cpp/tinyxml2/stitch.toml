@@ -1,0 +1,19 @@
+# STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
+[project]
+name = "tinyxml2"
+
+[source]
+git = "https://github.com/leethomason/tinyxml2"
+rev = "7.0.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+
+[build]
+# How stubs compile and link. Paths are inside the image; the library source is at /src.
+cflags = ["-I/src"]
+ldflags = ["/src/build/libtinyxml2.a"]
+sanitizers = ["address"]   # add "undefined" for UBSan
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1
+exceptions = "finding"     # "bail": treat uncaught C++ exceptions from the library as failed calls

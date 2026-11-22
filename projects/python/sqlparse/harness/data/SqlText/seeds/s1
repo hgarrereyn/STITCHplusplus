@@ -1,0 +1,1 @@
+select a, b from t where x = 1 and y in (1,2) order by a;
