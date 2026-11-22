@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "stitch-fuzz"
 version = "0.2.0"
-description = "STITCH++: API fuzzing for C/C++, Python, JavaScript, Java, Go and Rust libraries, built for coding agents"
+description = "STITCH++: API fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby and Swift libraries, built for coding agents"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []

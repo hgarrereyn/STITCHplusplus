@@ -1,7 +1,7 @@
 """`stitch init` scaffolding."""
 from pathlib import Path
 
-TOML = """# STITCH++ project. Guide: `stitch guide`. API reference: `stitch guide api`.
+TOML = """# STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
 [project]
 name = "{name}"
 

@@ -21,7 +21,7 @@ jobs:
         run: |
           /tmp/venv/bin/stitch --version
           /tmp/venv/bin/stitch guide > /dev/null
-          /tmp/venv/bin/stitch guide api > /dev/null
+          /tmp/venv/bin/stitch guide cpp > /dev/null
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
       - name: installed sources hash like the checkout
         run: |

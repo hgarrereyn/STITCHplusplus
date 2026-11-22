@@ -410,10 +410,12 @@ def _same_file(a: Path, b: Path):
 
 
 def _tree_print(d: Path):
-    """(path, size, mtime) of every file under d: copies made with copy2/copytree compare equal."""
+    """(path, content hash) of every file under d. Contents, not mtimes: a rebuild rewrites the
+    files even when nothing changed."""
+    import hashlib
     if not d.is_dir():
         return None
-    return sorted((str(f.relative_to(d)), f.stat().st_size, int(f.stat().st_mtime)) for f in d.rglob("*") if f.is_file())
+    return sorted((str(f.relative_to(d)), hashlib.sha1(f.read_bytes()).hexdigest()) for f in d.rglob("*") if f.is_file())
 
 
 def refresh_campaign_bin(p, name, meta):
@@ -713,17 +715,17 @@ def cmd_shell(a):
 
 
 SKILL = STITCH_HOME / "skill" / "stitch"
-GUIDES = {"": "SKILL.md", "api": "reference/harness-api.md", "reproducers": "reference/reproducers.md",
-          **{lang: f"reference/{lang}.md" for lang in ("python", "javascript", "java", "go", "rust", "ruby", "swift")}}
+GUIDES = {"": "SKILL.md", "reproducers": "reference/reproducers.md",
+          **{lang: f"reference/{lang}.md" for lang in ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift")}}
 
 
 def cmd_guide(a):
     from .project import normalize_language
-    topic = "api" if a.spec else (a.topic or "")
+    topic = "cpp" if a.spec else (a.topic or "")
+    if topic == "api":
+        topic = "cpp"
     if topic and topic not in GUIDES:
         topic = normalize_language(topic)   # "js" -> "javascript", "c++" -> "cpp"
-    if topic == "cpp":
-        topic = "api"
     if topic not in GUIDES:
         die(f"unknown topic '{topic}' (one of: {', '.join(t for t in GUIDES if t)})")
     text = (SKILL / GUIDES[topic]).read_text()
@@ -1107,8 +1109,8 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the guide (topics: api, reproducers, python, javascript, java, go, rust)")
-    s.add_argument("topic", nargs="?", help="api: C/C++ harness API; reproducers: stitch write / try; a language: its harness API")
+    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, reproducers)")
+    s.add_argument("topic", nargs="?", help="a language: its harness API (api is cpp); reproducers: stitch write / try")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)
 

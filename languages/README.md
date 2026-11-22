@@ -119,3 +119,5 @@ Bug reports, printed to stderr, are parsed by `engine/src/triage.rs` and `cli/st
    a writer in `cli/stitch_fuzz/writers/`, and (if its runtime prints its own crash format) a parser in
    `cli/stitch_fuzz/reports.py`.
 4. An example in `examples/<lang>-demo` with planted bugs, and a line in `tests/languages.py`.
+5. A page `skill/stitch/reference/<lang>.md` with the same sections as the other language pages,
+   and the language in `GUIDES` in `cli/stitch_fuzz/cli.py`.
