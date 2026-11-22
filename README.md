@@ -97,7 +97,7 @@ let parse = endpoint("parse") { (html: Str<4096, Html>) throws -> New<Doc> in Ne
 |---|---|---|---|
 | C/C++ | SanitizerCoverage (clang 18) | `trace-cmp`, `memcmp`/`strcmp` hooks | ASan, UBSan, uncaught exceptions, `check` |
 | Python 3.12 | `sys.monitoring` lines and branches | `==`, `in`, `<`, ... rewritten on import | undeclared exceptions, `check` |
-| JavaScript (Node 22) | Babel plugin (CommonJS and ESM) | `===`, `switch`, `String`/`Set`/`Map` hooks | undeclared exceptions, prototype pollution, unhandled rejections, `check` |
+| JavaScript (Node 22.21) | Babel plugin (CommonJS and ESM) | `===`, `switch`, `String`/`Set`/`Map` hooks | undeclared exceptions, prototype pollution, unhandled rejections, `check` |
 | Java 21 | Java agent, counters per basic block | `if_icmp`, `lcmp`, `switch`, `String.equals`, `Map.get` | undeclared `Throwable`s, `check` |
 | Go 1.24 | `-d=libfuzzer` (as `go test -fuzz`) | `libfuzzerTraceCmp*`, string compares | panics, fatal errors, races (optional), `check` |
 | Rust (nightly) | SanitizerCoverage, in-process | `trace-compares` | panics (with overflow checks), ASan, `check` |

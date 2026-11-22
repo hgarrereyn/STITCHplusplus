@@ -7,6 +7,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -51,7 +52,7 @@ class Source:
             mirror = CACHE / "git" / key
             if not mirror.exists():
                 mirror.parent.mkdir(parents=True, exist_ok=True)
-                print(f"[stitch] cloning {self.git_url} (once)...", flush=True)
+                print(f"[stitch] cloning {self.git_url} (once)...", file=sys.stderr, flush=True)
                 _git("clone", "--mirror", "--quiet", self.git_url, str(mirror))
             return mirror
         return Path(self.path)

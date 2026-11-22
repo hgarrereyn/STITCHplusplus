@@ -138,7 +138,8 @@ FROM ${{STITCH_BASE}}
 COPY --from=source . /src
 WORKDIR /src
 # TypeScript or bundled packages: RUN npm install --ignore-scripts && npm run build
-RUN npm install --omit=dev --ignore-scripts
+# the library's runtime dependencies (--legacy-peer-deps: devDependency peer conflicts don't block it)
+RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund
 RUN cd /opt && npm install /src
 """
 

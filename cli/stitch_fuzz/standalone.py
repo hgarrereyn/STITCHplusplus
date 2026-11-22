@@ -946,7 +946,25 @@ def shim_name(language):
     return writers.get(language).SHIM
 
 
-def verdict(expected, t):
+# The program failed before it could reproduce anything: the library (or a name in it) did not load.
+# Common at another --rev, where the library changed its module format or API.
+LOAD_FAILURE = re.compile(
+    r"ERR_REQUIRE_ESM|ERR_MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find module|is not a function|"
+    r"is not a constructor|ModuleNotFoundError|ImportError|cannot import name|has no attribute|"
+    r"LoadError|cannot load such file|uninitialized constant|undefined method|NoClassDefFoundError|"
+    r"ClassNotFoundException|NoSuchMethodError|NoSuchFieldError|SyntaxError|ReferenceError: \w+ is not defined|"
+    r"NameError: name")
+
+
+def uses_shim(language, text) -> bool:
+    """Does a standalone file still use the stitch runtime stand-in (not plain library code)?"""
+    shim = shim_name(language)
+    return shim in text or re.search(r"^\s*(import stitch\b|from stitch |.*require(_relative)?\(?\s*[\"'](\./)?stitch[\"'])",
+                                     text, re.M) is not None
+
+
+def verdict(expected, t, plain=False):
+    """`plain`: the file is plain library code (no shim), which may detect a failed check its own way."""
     v = {"status": t["status"]}
     if not expected.get("kind"):  # the original program did not crash
         if t["status"] in ("no_crash", "crash"):
@@ -971,7 +989,9 @@ def verdict(expected, t):
             same = True
         # ... or a failure the reproducer raises in its own code (abort, assert, an exception with no
         # library frame): the plain program detects the same wrong behavior the oracle checked
-        if what and not same and not got["frame"] and t["report"].get("kind") != "timeout":
+        # (not when it failed before reaching the library: a module that does not load, a missing name)
+        if what and plain and not same and not got["frame"] and t["report"].get("kind") != "timeout" \
+                and not LOAD_FAILURE.search(t["output"]):
             same = True
             v["matched"] = "own check"
         v["status"] = "same" if same else "different"

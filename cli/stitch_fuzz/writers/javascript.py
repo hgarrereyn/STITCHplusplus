@@ -55,24 +55,70 @@ function harnessRequire(from, spec) {
   if (spec === "stitch") return stitch;
   if (spec.startsWith("./") || spec.startsWith("../")) {
     const p = require("path").posix.join(require("path").posix.dirname(from), spec);
-    for (const c of [p, p + ".js", p + ".cjs", p + "/index.js"]) if (harnessFiles[c]) return harnessLoad(c);
+    for (const c of [p, p + ".js", p + ".cjs", p + ".mjs", p + "/index.js"]) if (harnessFiles[c]) return harnessLoad(c);
   }
   return require(spec);
 }
+// the default import of a module: an ES module's default export, or a CommonJS module's exports
+function esmDefault(m) {
+  return m && m[Symbol.toStringTag] === "Module" && "default" in m ? m.default : m;
+}
 """
+
+
+_IMPORT = re.compile(r"""^([ \t]*)import\s+(?:([\w$]+)\s*,?\s*)?(?:\*\s+as\s+([\w$]+)|\{([^}]*)\})?\s*(?:from\s+)?(["'][^"']+["'])\s*;?""",
+                     re.M)
+_EXPORT = re.compile(r"^([ \t]*)export\s+(default\s+)?(?!\{)(?:(async\s+function\*?|function\*?|class|const|let|var)\s+([\w$]+))?", re.M)
+
+
+def _esm_to_cjs(text):
+    """An ES module harness file (.mjs) as CommonJS, so it can be pasted like the others:
+    import ... from "m" -> require("m"); export declarations -> exports. (require() loads ES
+    module libraries.) Covers the import/export forms harness files use, not every one."""
+    def imp(m):
+        ind, default, star, names, mod = m.groups()
+        out = []
+        if default:
+            out.append(f"const {default} = esmDefault(require({mod}));")
+        if star:
+            out.append(f"const {star} = require({mod});")
+        if names is not None:
+            fields = ", ".join(x.strip().replace(" as ", ": ") for x in names.split(",") if x.strip())
+            out.append(f"const {{ {fields} }} = require({mod});")
+        return ind + (" ".join(out) if out else f"require({mod});")
+    exported = []
+
+    def exp(m):
+        ind, default, kind, name = m.groups()
+        if default and not name:
+            return ind + "module.exports.default ="
+        if name:
+            exported.append(name)
+        return ind + (f"{kind} {name}" if kind else "")
+    text = _IMPORT.sub(imp, text)
+    text = re.sub(r"^[ \t]*export\s*\{([^}]*)\}\s*;?", lambda m: "Object.assign(module.exports, { " + ", ".join(
+        (f"{b.strip()}: {a.strip()}" if " as " in x else x.strip()) for x in m.group(1).split(",") if x.strip()
+        for a, _, b in [x.partition(" as ")]) + " });", text, flags=re.M)
+    text = _EXPORT.sub(exp, text)
+    if exported:
+        text += "\nObject.assign(module.exports, { " + ", ".join(exported) + " });"
+    return text
 
 
 def _harness_code(p):
     hdir = p.root / "harness"
     parts = [_LOADER]
-    files = [f for f in sorted(hdir.rglob("*")) if f.suffix in (".js", ".cjs")
+    files = [f for f in sorted(hdir.rglob("*")) if f.suffix in (".js", ".cjs", ".mjs")
              and not {"data", "node_modules"} & set(f.relative_to(hdir).parts[:-1])]
     names = []
     for f in files:
         name = "harness/" + f.relative_to(hdir).as_posix()
         names.append(name)
-        parts.append(f"// {'=' * 94}\n// {p.rel(f)}\n// {'=' * 94}\n"
-                     f"harnessFiles[{json.dumps(name)}] = (module, exports, require) => {{\n{f.read_text().rstrip()}\n}};\n")
+        code = f.read_text().rstrip()
+        if f.suffix == ".mjs":
+            code = _esm_to_cjs(code)
+        parts.append(f"// {'=' * 94}\n// {p.rel(f)}{' (an ES module, as CommonJS)' if f.suffix == '.mjs' else ''}\n// {'=' * 94}\n"
+                     f"harnessFiles[{json.dumps(name)}] = (module, exports, require) => {{\n{code}\n}};\n")
     parts.append(f"for (const f of {json.dumps(names)}) harnessLoad(f);\n")
     return "\n".join(parts)
 

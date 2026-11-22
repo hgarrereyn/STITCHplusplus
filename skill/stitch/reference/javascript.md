@@ -1,7 +1,7 @@
 # JavaScript harnesses
 
 Stubs are functions registered with `stitch.endpoint(name, args, returns, fn)`. The `args` object
-is the signature. Node.js 22 runs in the image; the library is installed in `/opt/node_modules`
+is the signature. Node.js 22.21 runs in the image; the library is installed in `/opt/node_modules`
 (on `NODE_PATH`). The fuzzer talks to a Node worker process.
 
 ## Project setup
@@ -18,12 +18,18 @@ ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
 WORKDIR /src
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps
 RUN cd /opt && npm install /src
 ```
 
 A package that needs a build step (TypeScript, a bundler): run
-`RUN npm install --ignore-scripts && npm run build` before installing it into `/opt`.
+`RUN npm install --ignore-scripts && npm run build` before installing it into `/opt`. Versions
+differ: when a later release stopped committing its build output, build only when it is missing,
+so `--rev` keeps working (`RUN if [ ! -f lib/index.js ]; then npm install --ignore-scripts && npm run build; fi`).
+
+ES modules: `require()` loads ESM-only packages (Node 22.12 and later), so a CommonJS harness
+works with them, and they are instrumented like CommonJS. Harness files can also be ES modules
+(`.mjs`) that `import stitch from "stitch"` and `import { x } from "<library>"`.
 
 `stitch.toml`:
 

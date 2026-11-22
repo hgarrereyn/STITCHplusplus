@@ -15,6 +15,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from . import docker, reports
@@ -125,7 +126,7 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     attach_standalone(p, d)
     (d / "README.md").write_text(render_readme(p.name, rid, rep, output, sj, d / "project" / "harness", p.language))
     if run:
-        print(f"[stitch] verifying the reproducer from scratch ({d}/run.sh)...", flush=True)
+        print(f"[stitch] verifying the reproducer from scratch ({d}/run.sh)...", file=sys.stderr, flush=True)
         r = subprocess.run([str(sh)], capture_output=True, text=True, errors="replace", timeout=3600)
         vrep = reports.parse_report(r.stderr, r.returncode)
         ok = vrep["crashed"] and vrep["signature_fn"] == rep["signature_fn"]
@@ -135,10 +136,10 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
         if ok:
             rewrite_readme(p, d)  # adds the "Verified" row
         if not ok:
-            print(f"[stitch] warning: reproducer did not reproduce the same crash: {vrep['signature'] or 'no crash'}")
-            print(r.stderr[-2000:])
+            print(f"[stitch] warning: reproducer did not reproduce the same crash: {vrep['signature'] or 'no crash'}", file=sys.stderr)
+            print(r.stderr[-2000:], file=sys.stderr)
         else:
-            print("[stitch] verified: same crash")
+            print("[stitch] verified: same crash", file=sys.stderr)
     return d
 
 

@@ -311,9 +311,16 @@ def health_report(s, limit=15):
     return lines
 
 
+def _edges(s):
+    # worker languages (all but C/C++, Rust, Swift) number edges as they are first seen: the total
+    # is the size of the coverage map, not the number of edges in the library
+    t = s.get("edges_total") or 0
+    return f"{s['edges_covered']}/{t} edges" if 0 < t < 65536 else f"{s['edges_covered']} edges"
+
+
 def summary_line(s):
     return (f"{s['elapsed_secs']:.0f}s, {reports.human(s['execs'])} execs ({reports.human(s['execs_per_sec'])}/s), "
-            f"{s['edges_covered']}/{s['edges_total']} edges, corpus {s['corpus']}, calls bailing {reports.pct(s.get('call_bail_rate', 0))} "
+            f"{_edges(s)}, corpus {s['corpus']}, calls bailing {reports.pct(s.get('call_bail_rate', 0))} "
             f"(programs with a bail {reports.pct(s['exec_bail_rate'])}), "
             f"{s['crashes_saved']} crash/timeout programs saved")
 
@@ -918,6 +925,9 @@ def _print_verdict(v, expected, name, show=False):
     exp = (expected["kind"] + (f" in {expected['frame']}" if expected.get("frame") else "")) if expected.get("kind") else "no crash"
     if v["status"] == "same":
         print(f"{head}: {name} -> {exp}")
+        if v.get("matched") == "own check":
+            print("  (the file failed in its own code, with no library frame: it is taken as your check of the same"
+                  " property; --show prints its output)")
     elif v["status"] == "different":
         got = v["got"]["kind"] + (f" in {v['got']['frame']}" if v["got"].get("frame") else "")
         print(f"{head}: {name}\n  expected: {exp}\n  got:      {got}")
@@ -986,11 +996,11 @@ def cmd_try(a):
                     print("  " + l.replace("/project/", ""))
         sys.exit(2 if t["status"] == "compile_error" else 0)
     t = standalone.try_file(p, image, str(rel), timeout=a.timeout, leaks="leak" in expected["kind"])
-    v = standalone.verdict(expected, t)
     text = f.read_text(errors="replace")
+    shimmed = standalone.uses_shim(p.language, text)
+    v = standalone.verdict(expected, t, plain=not shimmed)
     v["lines"] = standalone.code_lines(text)
-    shim = standalone.shim_name(p.language)
-    v["uses_shim"] = shim in text or (shim.endswith(".py") and re.search(r"^\s*(import stitch|from stitch )", text, re.M) is not None)
+    v["uses_shim"] = shimmed
     if JSON:
         reports.dump({**v, "expected": expected, "output": v["output"][-8000:]})
     else:

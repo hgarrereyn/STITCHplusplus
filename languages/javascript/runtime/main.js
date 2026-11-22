@@ -17,6 +17,7 @@ async function loadHarness(project, instr) {
   project = path.resolve(project);
   process.env.STITCH_PROJECT = process.env.STITCH_PROJECT || project;
   if (instr) instrument.install(project);
+  else instrument.registerLoader(null);  // module resolution for .mjs harness files only
   const hdir = path.join(project, "harness");
   const files = [];
   const walk = (d) => {

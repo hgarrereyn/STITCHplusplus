@@ -253,6 +253,13 @@ function install(project) {
       }
     };
   }
+  registerLoader(t);
+  hookBuiltins();
+}
+
+// ESM hooks (loader.mjs): NODE_PATH resolution for import, and instrumentation of target modules
+// when `t` (the instrumentation targets) is given.
+function registerLoader(t) {
   try {
     const { register } = require("module");
     const { pathToFileURL } = require("url");
@@ -260,7 +267,6 @@ function install(project) {
   } catch (e) {
     if (process.env.STITCH_DEBUG) process.stderr.write(`[stitch] ESM hooks unavailable: ${e.message}\n`);
   }
-  hookBuiltins();
 }
 
-module.exports = { MAP_SIZE, beginExec, endExec, setNode, setCmplog, setInStub, edgesBytes, cmpsBytes, install, wanted, promisesSince };
+module.exports = { MAP_SIZE, beginExec, endExec, setNode, setCmplog, setInStub, edgesBytes, cmpsBytes, install, registerLoader, wanted, promisesSince };
