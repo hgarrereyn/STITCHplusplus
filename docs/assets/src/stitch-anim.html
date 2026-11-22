@@ -1,0 +1,230 @@
+<!doctype html>
+<!-- Source for docs/assets/stitching.gif. Render with: node docs/assets/src/render-gif.js -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#0d1117}canvas{display:block}</style></head>
+<body><canvas id="c" width="900" height="400"></canvas>
+<script>
+const W = 900, H = 400;
+const cx = document.getElementById('c').getContext('2d');
+const MONO = '"DejaVu Sans Mono", "Menlo", monospace';
+const C = {
+  bg: '#0d1117', panel: '#161b22', border: '#30363d', text: '#e6edf3', dim: '#8b949e',
+  crash: '#f85149', ok: '#3fb950',
+};
+const STUBS = [
+  { name: 'parse',     sig: ['parse', '(text: Str) -> Doc'],               color: '#58a6ff' },
+  { name: 'add_table', sig: ['add_table', '(d: Doc, key: Str) -> Table'],  color: '#3fb950' },
+  { name: 'set_value', sig: ['set_value', '(t: Table, v: Int)'],           color: '#d29922' },
+  { name: 'dumps',     sig: ['dumps', '(d: Doc) -> Str'],                  color: '#bc8cff' },
+];
+const LX = 30, LW = 340, BH = 46, LY0 = 78, LGAP = 62;   // stub column
+const PX = 400, PW = 400, PY0 = 78, PGAP = 58;           // program column
+const stubY = i => LY0 + i * LGAP;
+const slotY = i => PY0 + i * PGAP;
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
+const easeIO = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const lerp = (a, b, t) => a + (b - a) * t;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+
+function rrect(x, y, w, h, r) {
+  cx.beginPath(); cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r);
+  cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath();
+}
+function block(x, y, w, color, parts, alpha = 1, opts = {}) {
+  cx.save(); cx.globalAlpha = alpha;
+  rrect(x, y, w, BH, 8); cx.fillStyle = opts.fill || C.panel; cx.fill();
+  cx.lineWidth = opts.lw || 1.2; cx.strokeStyle = opts.stroke || C.border; cx.stroke();
+  cx.save(); rrect(x, y, w, BH, 8); cx.clip(); cx.fillStyle = color; cx.fillRect(x, y, 6, BH); cx.restore();
+  cx.font = `14px ${MONO}`; cx.textBaseline = 'middle';
+  let tx = x + 18;
+  for (const [s, col] of parts) { cx.fillStyle = col; cx.fillText(s, tx, y + BH / 2 + 1); tx += cx.measureText(s).width; }
+  cx.restore();
+}
+function stitches(x0, x1, y, frac, color, alpha = 1) {   // zig-zag thread across a seam
+  if (frac <= 0) return;
+  cx.save(); cx.globalAlpha = alpha; cx.strokeStyle = color; cx.lineWidth = 2; cx.lineCap = 'round';
+  const n = 9, step = (x1 - x0) / n;
+  for (let i = 0; i < n * frac; i++) {
+    const a = x0 + step * (i + .2), b = x0 + step * (i + .8);
+    cx.beginPath(); cx.moveTo(a, y - 4); cx.lineTo(b, y + 4); cx.stroke();
+  }
+  cx.restore();
+}
+function wire(yA, yB, lane, color, frac, alpha = 1) {   // def -> use edge on the right of the program
+  if (frac <= 0) return;
+  const x = PX + PW, out = 18 + lane * 16;
+  cx.save(); cx.globalAlpha = alpha; cx.strokeStyle = color; cx.lineWidth = 2;
+  cx.setLineDash([]); cx.beginPath();
+  const pts = 40, path = [];
+  for (let i = 0; i <= pts; i++) {
+    const u = i / pts, y = lerp(yA, yB, u), bulge = Math.sin(Math.PI * u);
+    path.push([x + 4 + out * Math.pow(bulge, .5), y]);
+  }
+  const m = Math.max(1, Math.round(pts * frac));
+  cx.moveTo(path[0][0], path[0][1]);
+  for (let i = 1; i <= m; i++) cx.lineTo(path[i][0], path[i][1]);
+  cx.stroke();
+  cx.fillStyle = color; cx.beginPath(); cx.arc(x + 4, yA, 3.5, 0, 7); cx.fill();
+  if (frac >= 1) {   // arrow head into the consumer
+    cx.beginPath(); cx.moveTo(x + 2, yB); cx.lineTo(x + 10, yB - 5); cx.lineTo(x + 10, yB + 5); cx.closePath(); cx.fill();
+  }
+  cx.restore();
+}
+
+// call text as colored parts
+const K = C.text, D = C.dim, S = '#a5d6ff', N = '#79c0ff';
+function call(stub, args, ret) {
+  const p = [];
+  if (ret) p.push([ret, K], [' = ', D]);
+  p.push([stub.name, stub.color], ['(', D]);
+  args.forEach((a, i) => { if (i) p.push([', ', D]); p.push(a); });
+  p.push([')', D]);
+  return p;
+}
+const str = s => [JSON.stringify(s), S], num = n => [String(n), N], v = n => [n, K];
+
+// fuzzing: argument values the "fuzzer" tries
+const PARSE_IN = ['a = 1', 'a = [', '[x]', '"\\u0000"', 'b = 1e9', '[x]'];
+const KEYS = ['x', '', 'x.y', '"', 'x'];
+const VALS = [42, -7, 0, 2147483647, 3, 0];
+
+// program states
+function progA(k) {
+  return [
+    { s: 0, p: call(STUBS[0], [str(PARSE_IN[k % PARSE_IN.length])], 'd') },
+    { s: 1, p: call(STUBS[1], [v('d'), str(KEYS[k % KEYS.length])], 't') },
+    { s: 2, p: call(STUBS[2], [v('t'), num(VALS[k % VALS.length])]) },
+    { s: 3, p: call(STUBS[3], [v('d')]) },
+  ];
+}
+const progB = [
+  { s: 0, p: call(STUBS[0], [str('[x]')], 'd') },
+  { s: 1, p: call(STUBS[1], [v('d'), str('x')], 't') },
+  { s: 1, p: call(STUBS[1], [v('d'), str('x')], 'u') },
+  { s: 2, p: call(STUBS[2], [v('u'), num(0)]) },
+  { s: 3, p: call(STUBS[3], [v('d')]) },
+];
+
+const T_IN = 0.6, FLY = 0.62, T_FUZZ = T_IN + 4 * FLY + 0.2, T_MUT = T_FUZZ + 2.4, T_RUN = T_MUT + 1.2,
+      T_CRASH = T_RUN + 1.0, T_FADE = T_CRASH + 2.0, TOTAL = T_FADE + 0.5;
+
+function render(t) {
+  cx.fillStyle = C.bg; cx.fillRect(0, 0, W, H);
+  const fadeOut = 1 - seg(t, T_FADE, TOTAL);
+  const fadeIn = ease(seg(t, 0, T_IN));
+  cx.save(); cx.globalAlpha = fadeOut;
+
+  // headers
+  cx.font = `bold 13px ${MONO}`; cx.textBaseline = 'alphabetic';
+  cx.fillStyle = C.dim; cx.globalAlpha = fadeOut * fadeIn;
+  cx.fillText('STUBS', LX, 48); cx.fillText('PROGRAM', PX, 48);
+  cx.font = `13px ${MONO}`;
+  cx.fillText('you write', LX + 54, 48); cx.fillText('the fuzzer stitches', PX + 72, 48);
+  cx.globalAlpha = fadeOut;
+
+  // stub palette
+  STUBS.forEach((st, i) => block(LX, stubY(i), LW, st.color, [[st.sig[0], st.color], [st.sig[1], D]], fadeIn * ease(seg(t, i * .1, T_IN + i * .1))));
+
+  // fuzz counter
+  const execs = Math.floor(Math.pow(clamp((t - T_FUZZ) / (T_CRASH - T_FUZZ)), 1.6) * 1284113);
+  if (t > T_FUZZ) {
+    cx.font = `13px ${MONO}`; cx.fillStyle = C.dim; cx.textAlign = 'right';
+    cx.fillText(`execs ${execs.toLocaleString('en-US')}`, W - 30, 48); cx.textAlign = 'left';
+  }
+
+  // which program and where each slot is
+  let slots, n;
+  const mut = easeIO(seg(t, T_MUT, T_MUT + 0.9));
+  if (t < T_MUT) {
+    const k = t < T_FUZZ ? 0 : Math.floor((t - T_FUZZ) / 0.3) + 1;
+    slots = progA(t < T_MUT - 0.3 ? k : 5).map((s, i) => ({ ...s, y: slotY(i) }));
+  } else {
+    slots = progB.map((s, i) => ({ ...s, y: slotY(i) }));
+    slots[3].y = lerp(slotY(2), slotY(3), mut);   // existing calls slide down
+    slots[4].y = lerp(slotY(3), slotY(4), mut);
+  }
+  n = slots.length;
+
+  // fly-in progress per slot
+  const arrive = i => {
+    if (t >= T_MUT) {
+      if (i === 2) return ease(seg(t, T_MUT + 0.25, T_MUT + 0.9));
+      return 1;
+    }
+    return ease(seg(t, T_IN + i * FLY, T_IN + i * FLY + FLY * 0.75));
+  };
+
+  // stitches between landed slots
+  for (let i = 1; i < n; i++) {
+    const a = arrive(i), prevA = arrive(i - 1);
+    if (a < 1 || prevA < 1) continue;
+    const landAt = t >= T_MUT && (i === 2 || i === 3) ? T_MUT + 0.9 : T_IN + i * FLY + FLY * 0.75;
+    const f = seg(t, landAt, landAt + 0.25);
+    const yA = slots[i - 1].y + BH, yB = slots[i].y, ym = (yA + yB) / 2;
+    stitches(PX + 40, PX + PW - 40, ym, f, '#6e7681');
+  }
+
+  // wires (object flow)
+  const crashT = seg(t, T_CRASH, T_CRASH + 0.3);
+  const wireA = [[0, 1, 0, STUBS[0].color], [1, 2, 1, STUBS[1].color], [0, 3, 2, STUBS[0].color]];
+  const wireB = [[0, 1, 0, STUBS[0].color], [0, 2, 1, STUBS[0].color], [2, 3, 2, STUBS[1].color], [0, 4, 3, STUBS[0].color]];
+  if (t < T_MUT) {
+    for (const [a, b, lane, col] of wireA) {
+      const f = seg(t, T_IN + b * FLY + FLY * .7, T_IN + b * FLY + FLY);
+      wire(slots[a].y + BH / 2, slots[b].y + BH / 2, lane, col, f, .9);
+    }
+  } else {
+    const f = seg(t, T_MUT + 0.9, T_MUT + 1.2);
+    for (const [a, b, lane, col] of wireB) wire(slots[a].y + BH / 2, slots[b].y + BH / 2, lane, col, (b === 2 || b === 3) ? f : 1, .9);
+  }
+
+  // execution sweep: which slot is "running"
+  let running = -1;
+  if (t >= T_FUZZ && t < T_MUT) running = Math.floor((t - T_FUZZ) / 0.075) % 4;
+  if (t >= T_RUN && t < T_CRASH) running = Math.min(4, Math.floor((t - T_RUN) / 0.2));
+
+  // slots
+  slots.forEach((sl, i) => {
+    const a = arrive(i);
+    if (a <= 0) return;
+    const st = STUBS[sl.s];
+    const fromY = stubY(sl.s);
+    const x = lerp(LX, PX, a), y = lerp(fromY, sl.y, a), w = lerp(LW, PW, a);
+    const parts = a < 0.55 ? [[st.sig[0], st.color], [st.sig[1], D]] : sl.p;
+    const textA = a < 0.55 ? 1 - a / 0.55 * .7 : (a - 0.55) / 0.45;
+    let opts = {};
+    if (i === running) opts = { stroke: st.color, lw: 2 };
+    const isCrash = t >= T_CRASH && i === n - 1 && n === 5;
+    if (isCrash) opts = { stroke: C.crash, lw: 2, fill: `rgba(248,81,73,${0.18 * crashT})` };
+    cx.save(); cx.globalAlpha = fadeOut;
+    block(x, y, w, st.color, [], 1, opts);
+    cx.globalAlpha = fadeOut * clamp(textA, .25, 1);
+    cx.font = `14px ${MONO}`; cx.textBaseline = 'middle';
+    let tx = x + 18;
+    for (const [s, col] of parts) { cx.fillStyle = col; cx.fillText(s, tx, y + BH / 2 + 1); tx += cx.measureText(s).width; }
+    cx.restore();
+    if (isCrash) {   // crash marker
+      cx.save(); cx.globalAlpha = fadeOut * crashT; cx.fillStyle = C.crash; cx.font = `bold 14px ${MONO}`;
+      cx.textBaseline = 'middle'; cx.textAlign = 'right'; cx.fillText('✗', x + w - 16, y + BH / 2 + 1); cx.restore();
+    }
+  });
+
+  // crash banner
+  if (t >= T_CRASH) {
+    const a = ease(seg(t, T_CRASH + 0.2, T_CRASH + 0.6));
+    const bw = 340, bx = LX, by = 332 + (1 - a) * 10;
+    cx.save(); cx.globalAlpha = fadeOut * a;
+    rrect(bx, by, bw, 54, 8); cx.fillStyle = 'rgba(248,81,73,0.12)'; cx.fill();
+    cx.strokeStyle = C.crash; cx.lineWidth = 1.5; cx.stroke();
+    cx.font = `bold 14px ${MONO}`; cx.fillStyle = C.crash; cx.textBaseline = 'middle';
+    cx.fillText('crash c1', bx + 16, by + 18);
+    cx.font = `13px ${MONO}`; cx.fillStyle = C.text;
+    cx.fillText('check failed: output does not parse', bx + 16, by + 37);
+    cx.restore();
+  }
+  cx.restore();
+}
+window.TOTAL = TOTAL; window.render = render;
+render(0);
+</script></body></html>
