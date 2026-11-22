@@ -397,9 +397,8 @@ public class Stubs {
 
     @Endpoint
     @Obj("Data")
-    public static Object data_bigint(@Str(max = 40) String digits) {
-        Stitch.require(digits.matches("-?[0-9]{1,40}"), "not digits");
-        return new java.math.BigInteger(digits);
+    public static Object data_bigint(long a, long b, @Range(lo = 0, hi = 100) int shift) {
+        return java.math.BigInteger.valueOf(a).multiply(java.math.BigInteger.valueOf(b)).shiftLeft(shift);
     }
 
     @Endpoint
@@ -441,8 +440,7 @@ public class Stubs {
     }
 
     @Endpoint
-    public static void dump_as_map(Yaml y, @Obj("Data") Object data, DumperOptions.FlowStyle fs) {
-        Stitch.require(data instanceof Map, "not a map");
+    public static void dump_as_map(Yaml y, @Obj("Map") Map<Object, Object> data, DumperOptions.FlowStyle fs) {
         String a = y.dumpAsMap(data);
         String b = y.dumpAs(data, Tag.MAP, fs);
         Stitch.check(a != null && b != null, "non-null");
