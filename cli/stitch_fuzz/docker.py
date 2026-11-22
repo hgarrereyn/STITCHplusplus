@@ -125,6 +125,28 @@ def _buildx(args, log: Path, what: str, quiet=False):
         raise DockerError(f"building {what} failed (full log: {log}):\n" + "\n".join(tail))
 
 
+class _build_lock:
+    """One process at a time builds a given image; the others wait and then reuse it (several
+    `stitch` commands started together would otherwise all build the same base image)."""
+
+    def __init__(self, name):
+        self.path = Path(os.environ.get("STITCH_CACHE", Path.home() / ".cache" / "stitch")) / "locks" / f"{name}.lock"
+
+    def __enter__(self):
+        import fcntl
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.f = open(self.path, "w")
+        try:
+            fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print(f"[stitch] waiting for another stitch process to finish building {self.path.stem}", file=sys.stderr, flush=True)
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *a):
+        self.f.close()
+
+
 def _check_lang(lang):
     if lang not in LANGUAGES:
         raise DockerError(f"unknown language '{lang}' (one of: {', '.join(LANGUAGES)})")
@@ -137,8 +159,10 @@ def ensure_engine(rebuild=False) -> str:
     if not rebuild and not image_exists(tag) and registry():
         _try_pull(f"{registry()}/stitch-engine:{h}", tag, quiet=True)
     if rebuild or not image_exists(tag):
-        _buildx(["-f", str(STITCH_HOME / "engine/Dockerfile"), "-t", tag, str(STITCH_HOME / "engine")],
-                build_log("engine"), "the STITCH++ engine (once per version, a few minutes)")
+        with _build_lock(f"engine-{h}"):
+            if rebuild or not image_exists(tag):
+                _buildx(["-f", str(STITCH_HOME / "engine/Dockerfile"), "-t", tag, str(STITCH_HOME / "engine")],
+                        build_log("engine"), "the STITCH++ engine (once per version, a few minutes)")
     return tag
 
 
@@ -161,11 +185,13 @@ def ensure_base(lang="cpp", sanitizers=("address",), rebuild=False) -> str:
         if not _try_pull(f"{registry()}/stitch-{lang}:{h}", tag):
             print(f"[stitch] no prebuilt {lang} image for this version ({h})", file=sys.stderr, flush=True)
     if rebuild or not image_exists(tag):
-        engine = ensure_engine(rebuild=rebuild)
-        ctx = language_context(lang)
-        _buildx(["-f", str(ctx / "Dockerfile"), "--target", "base", "--build-arg",
-                 f"STITCH_ENGINE={engine}", "-t", tag, str(ctx)],
-                build_log(f"base-{lang}"), f"the STITCH++ {lang} image locally (once per version)")
+        with _build_lock(f"{lang}-{h}"):
+            if rebuild or not image_exists(tag):  # another process may have built it while we waited
+                engine = ensure_engine(rebuild=rebuild)
+                ctx = language_context(lang)
+                _buildx(["-f", str(ctx / "Dockerfile"), "--target", "base", "--build-arg",
+                         f"STITCH_ENGINE={engine}", "-t", tag, str(ctx)],
+                        build_log(f"base-{lang}"), f"the STITCH++ {lang} image locally (once per version)")
     vtag = _variant(tag, sanitizers)
     if vtag != tag and not image_exists(vtag):
         san = ",".join(sanitizers) if sanitizers else "none"

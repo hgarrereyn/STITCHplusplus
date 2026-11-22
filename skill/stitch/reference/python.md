@@ -64,7 +64,7 @@ def remove(doc: Borrow[Doc], s: Src[8]):
 | `F32`, `F64`, `float` | float |
 | `Bool`, `bool` | bool |
 | `Range[lo, hi]` | int in [lo, hi] |
-| `OneOf["a", None, 3]` | one of the values (any Python constants) |
+| `OneOf["a", None, 3]` | one of the values (any Python constants); `OneOf[VALUES]` with a list, tuple, range or set is the same |
 | `Flags[1, 2, 4]` | OR of a subset |
 | `Str[max, Tag]`, `str` | str (UTF-8, invalid bytes replaced) |
 | `Bytes[max, Tag]`, `bytes` | bytes |

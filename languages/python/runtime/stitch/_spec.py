@@ -287,18 +287,30 @@ class Range:
         return RangeParam(lo, hi)
 
 
+def _choices(args):
+    """OneOf[a, b, c] or OneOf[seq] with seq a list, tuple, range or set of the values."""
+    if not isinstance(args, tuple):
+        args = (args,)
+    if len(args) == 1 and isinstance(args[0], (list, tuple, range)):
+        return tuple(args[0])
+    if len(args) == 1 and isinstance(args[0], (set, frozenset)):
+        return tuple(sorted(args[0], key=repr))  # fixed order: indices must mean the same values every run
+    return args
+
+
 class OneOf:
-    """OneOf[a, b, c]: one of the listed values (ints, strings, enums, None ...)."""
+    """OneOf[a, b, c]: one of the listed values (ints, strings, enums, None ...). OneOf[VALUES]
+    with a list, tuple, range or set is the same as listing its elements."""
 
     def __class_getitem__(cls, args):
-        return OneOfParam(args if isinstance(args, tuple) else (args,))
+        return OneOfParam(_choices(args))
 
 
 class Flags:
-    """Flags[A, B, C]: bitwise OR of a subset of the flags."""
+    """Flags[A, B, C] (or Flags[list]): bitwise OR of a subset of the flags."""
 
     def __class_getitem__(cls, args):
-        return FlagsParam(args if isinstance(args, tuple) else (args,))
+        return FlagsParam(_choices(args))
 
 
 class Val:

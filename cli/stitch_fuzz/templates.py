@@ -73,7 +73,7 @@ language = "python"
 {source}
 
 [python]
-include = ["{module}"]     # import names of the code under test (coverage and comparison tracing)
+include = []     # import names of the code under test, e.g. ["{module}"] (empty: everything outside the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -122,7 +122,7 @@ language = "javascript"
 {source}
 
 [javascript]
-include = ["{module}"]     # package names of the code under test (instrumented while fuzzing)
+include = []     # package names of the code under test, e.g. ["{module}"] (empty: every package is instrumented)
 
 [fuzz]
 timeout_ms = 2000
@@ -168,7 +168,7 @@ language = "java"
 
 [java]
 classpath = ["/deps/*"]           # the library and its dependencies (jars the Dockerfile puts in /deps)
-include = ["org.example"]         # packages of the code under test (coverage and comparison tracing)
+include = []                      # packages of the code under test, e.g. ["com.example.lib"] (empty: all non-JDK classes)
 # sources = ["/src/src/main/java"]  # source roots for coverage reports (default: /src/**/src/main/java)
 
 [fuzz]
@@ -314,7 +314,7 @@ language = "ruby"
 {source}
 
 [ruby]
-include = ["{module}"]     # gem names (or path prefixes) of the code under test
+include = []     # gem names (or path prefixes) of the code under test, e.g. ["{module}"] (empty: all but the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -403,15 +403,15 @@ LANGS = {
                       "write stubs in harness/, then `stitch build` and `stitch probe`"]},
     "python": {"toml": PY_TOML, "dockerfile": PY_DOCKERFILE, "files": {"harness/stubs.py": PY_EXAMPLE},
                "steps": ["edit Dockerfile until `stitch build --image-only` works (the library must pip install)",
-                         "set [python] include in stitch.toml to the library's import name",
+                         "optional: set [python] include in stitch.toml to the library's import name (narrower instrumentation and coverage)",
                          "write stubs in harness/*.py, then `stitch build` and `stitch probe`"]},
     "javascript": {"toml": JS_TOML, "dockerfile": JS_DOCKERFILE, "files": {"harness/stubs.js": JS_EXAMPLE},
                    "steps": ["edit Dockerfile until `stitch build --image-only` works (the package must load from /opt/node_modules)",
-                             "set [javascript] include in stitch.toml to the package name",
+                             "optional: set [javascript] include in stitch.toml to the library's package name (narrower instrumentation and coverage)",
                              "write stubs in harness/*.js, then `stitch build` and `stitch probe`"]},
     "java": {"toml": JAVA_TOML, "dockerfile": JAVA_DOCKERFILE, "files": {"harness/Stubs.java": JAVA_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works (jars end up in /deps)",
-                       "set [java] include in stitch.toml to the library's packages",
+                       "optional: set [java] include in stitch.toml to the library's packages (narrower instrumentation and coverage)",
                        "write stubs in harness/*.java, then `stitch build` and `stitch probe`"]},
     "go": {"toml": GO_TOML, "dockerfile": GO_DOCKERFILE, "files": {"harness/stubs.go": GO_EXAMPLE},
            "steps": ["edit Dockerfile until `stitch build --image-only` works",
@@ -423,7 +423,7 @@ LANGS = {
                         "write stubs in harness/*.swift, then `stitch build` and `stitch probe`"]},
     "ruby": {"toml": RB_TOML, "dockerfile": RB_DOCKERFILE, "files": {"harness/stubs.rb": RB_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works (the library must gem install)",
-                       "set [ruby] include in stitch.toml to the gem name",
+                       "optional: set [ruby] include in stitch.toml to the library's gem name (narrower instrumentation and coverage)",
                        "write stubs in harness/*.rb, then `stitch build` and `stitch probe`"]},
     "rust": {"toml": RUST_TOML, "dockerfile": RUST_DOCKERFILE, "files": {"harness/stubs.rs": RUST_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works",

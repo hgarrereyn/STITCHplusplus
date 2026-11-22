@@ -77,6 +77,8 @@ let removeChild = endpoint("remove_child") { (doc: Borrow<Doc>, s: Choices<8>) t
 | `Val<T, max>` | the value of `T`'s decoder (`.value`), any type |
 | `Choices<max>` | a `Source` for choices inside the stub (`.source`) |
 
+A stub takes at most 12 arguments; group more values in a struct (or a decoder's `Val`).
+
 A decoder (`enum T: Decoded { static func decode(_ s: Source) -> V }`) returns a String for `Str<max,
 T>` or any `V` for `Val<T, max>`; `s.draw(T.self)` builds on another decoder. `Source` also has
 `f64(lo, hi)`, `f32(lo, hi)`, `fixed(n)`, `rest()`.
