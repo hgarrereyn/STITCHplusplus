@@ -166,6 +166,16 @@ def start_campaign(p, name, secs=None, jobs=1, only=None, fresh=False, detach=Tr
         if kept or crashes:
             print(f"[stitch] resuming campaign '{name}': keeping {kept} corpus programs and {crashes} crash programs "
                   "(`--fresh` starts over)", file=sys.stderr, flush=True)
+    old = cdir / "bin"
+    if old.is_dir() and not (all(_same_file(p.build_dir / t, old / t) for t in ("fuzzer", "repro", "manifest.json"))
+                             and _tree_print(p.build_dir / "app") == _tree_print(old / "app")):
+        # resuming with a changed harness: saved crashes are rerun with it at the next triage, so
+        # buckets the current stubs no longer produce go away
+        for c in cdir.glob("w*/triage-cache.json"):
+            c.unlink()
+        if not fresh and any(cdir.glob("w*/crashes/*.stp")):
+            print("[stitch] the harness changed: saved crashes are rerun with it by `stitch crashes`",
+                  file=sys.stderr, flush=True)
     (cdir / "bin").mkdir(parents=True, exist_ok=True)
     for t in ("fuzzer", "repro", "manifest.json"):
         shutil.copy2(p.build_dir / t, cdir / "bin" / t)
@@ -363,6 +373,14 @@ def cmd_status(a):
     meta = json.loads((cdir / "campaign.json").read_text())
     stc = docker.container_state(meta["container"])
     running = bool(stc and stc.get("Running"))
+    if running and a.wait:
+        if not JSON:
+            print(f"[stitch] waiting for campaign '{name}' to stop" + (f" (--secs {meta['secs']})" if meta.get("secs") else
+                  " (it has no --secs limit: `stitch stop` ends it)"), file=sys.stderr, flush=True)
+        while running:
+            time.sleep(5)
+            stc = docker.container_state(meta["container"])
+            running = bool(stc and stc.get("Running"))
     s = merged_stats(cdir)
     if JSON:
         reports.dump({"campaign": name, "running": running, "meta": meta, "stats": s, "report": health_report(s, 1000) if s else []})
@@ -478,6 +496,14 @@ def triage(p, name):
             log = tmp / f"triage-{name}-{w.name}.log"
             die(f"triage of {rel} failed: {log.read_text(errors='replace')[-2000:] if log.exists() else 'no output'}")
         for b in bs:
+            # <x>.min.stp files are `stitch minimize` outputs next to the crash they reduce: they are
+            # not crashes of their own (resolve_crash runs them in place of <x>.stp)
+            files = b.get("files") or []
+            mins = [f for f in files if f.endswith(".min.stp") and f[:-len(".min.stp")] + ".stp" in files]
+            if mins and len(mins) < len(files):
+                b["count"] -= len(mins)
+            if b["example"].endswith(".min.stp") and (w / "crashes" / (b["example"][:-len(".min.stp")] + ".stp")).exists():
+                b["example"] = b["example"][:-len(".min.stp")] + ".stp"
             b["example"] = f"{rel}/crashes/{b['example']}"
             t = buckets.get(b["signature"])
             if not t:
@@ -555,10 +581,15 @@ def resolve_crash(p, ref, campaign=None, minimized=True):
         if b["id"] == cid:
             f = (p.root / b["example"]).resolve()
             mn = f.with_name(f.stem + ".min.stp")
-            if minimized and mn.exists() and not f.stem.endswith(".min"):
-                if not JSON:
-                    print(f"[stitch] {camp}:{cid}: running the minimized program {p.rel(mn)}", file=sys.stderr)
+            use_min = minimized and mn.exists() and not f.stem.endswith(".min")
+            if use_min:
                 f = mn
+            if not JSON and (use_min or not m.group(1)):
+                # a bare id is ambiguous when there are several campaigns (each numbers its crashes from c1)
+                other = [c for c in p.campaigns() if c != camp] if not m.group(1) and not campaign else []
+                note = f" (latest campaign; also: {', '.join(other)})" if other else ""
+                print(f"[stitch] {camp}:{cid}{note}" + (f": running the minimized program {p.rel(mn)}" if use_min else ""),
+                      file=sys.stderr)
             return f, {**b, "campaign": camp}
     die(f"unknown crash '{cid}' in campaign '{camp}' (see `stitch crashes {camp}`)")
 
@@ -601,7 +632,7 @@ def build_repro_at(p, rev):
     outdir = f".stitch/rev/{ident}"
     r = docker.run(p, image, ["stitch-build", "--json", "--target", "repro", "--out", outdir], capture=True)
     if r.returncode != 0:
-        die(f"the harness does not build against {rev} ({ident}):\n{(r.stderr or '')[-2000:]}")
+        die(f"the harness does not build against {rev} ({ident}):\n{docker.build_errors(r)}")
     return image, f"{outdir}/repro", commit
 
 
@@ -681,7 +712,10 @@ def cmd_minimize(a):
     name = b["campaign"] if b else None
     st = p.load_state()
     binrel = f".stitch/campaigns/{name}/bin/fuzzer" if name else ".stitch/build/fuzzer"
-    dst = Path(a.output) if a.output else f.with_name(f.stem + ".min.stp")
+    if not JSON:
+        print(f"[stitch] minimizing {p.rel(f)} (up to {a.secs}s; --secs to change)", file=sys.stderr, flush=True)
+    # minimizing a minimized program again reduces it in place (not <x>.min.min.stp)
+    dst = Path(a.output) if a.output else (f if f.stem.endswith(".min") else f.with_name(f.stem + ".min.stp"))
     r = docker.run(p, st["image"], [binrel, "minimize", in_project(p, f), "-o", p.rel(dst.resolve()) if str(dst.resolve()).startswith(str(p.root)) else in_project(p, dst), "--secs", str(a.secs), "--hang-ms", str(hang_ms(p, name))], capture=True)
     try:
         res = json.loads(r.stdout.strip().splitlines()[-1])
@@ -1025,6 +1059,7 @@ def main(argv=None):
     s.add_argument("name", nargs="?")
     s.add_argument("--limit", type=int, default=15)
     s.add_argument("--mutations", action="store_true", help="also show which mutation operators find new coverage")
+    s.add_argument("--wait", action="store_true", help="wait until the campaign stops (after --secs), then print the status")
     s.set_defaults(fn=cmd_status)
 
     s = sp.add_parser("stop", help="stop a campaign")

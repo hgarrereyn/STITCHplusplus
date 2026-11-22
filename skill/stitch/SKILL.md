@@ -267,6 +267,7 @@ stitch fuzz --jobs 4    # campaign 'main' in the background; resumes its corpus
 stitch fuzz --fresh     # start the corpus over
 stitch fuzz --secs 900 --foreground     # wait, then print the final stats
 stitch status           # progress and the report
+stitch status --wait    # block until a campaign started with --secs ends, then report
 stitch stop
 ```
 
@@ -412,7 +413,7 @@ Steps and pitfalls: `stitch guide reproducers`.
 | `stitch check` | build + static checks |
 | `stitch probe [STUBS] [--secs N]` | short run + report (`STUBS`: `'parse,tree/*'`) |
 | `stitch fuzz [--jobs N] [--secs N] [--name NAME] [--only STUBS] [--fresh] [--foreground]` | campaign, in the background by default |
-| `stitch status [NAME]`, `stitch stop [NAME]` | campaign progress; stop it |
+| `stitch status [NAME] [--wait]`, `stitch stop [NAME]` | campaign progress (`--wait`: until it ends); stop it |
 | `stitch crashes [NAME]` | unique crashes |
 | `stitch exec ID [--trace\|--args] [--rev REV]` | run a crash or a `.stp` program file |
 | `stitch minimize ID` | shrink a crashing program |
@@ -420,7 +421,7 @@ Steps and pitfalls: `stitch guide reproducers`.
 | `stitch repro ID` | Docker reproducer folder |
 | `stitch write ID` | standalone source file of a crash |
 | `stitch try FILE [ID] [--rev REV] [--show]` | build and run a standalone file, compare with the crash |
-| `stitch bisect ID [--good REV] [--fixed]` | the commit that introduced (or fixed) a crash |
+| `stitch bisect ID [--good REV] [--fixed [--fixed-at REV]]` | the commit that introduced a crash, or (`--fixed`) the one that fixed it |
 | `stitch sample TYPE [-n N]` | values a data type's decoder makes |
 | `stitch shell` | shell in the project image |
 | `stitch guide [TOPIC]` | this guide; topics: a language name, `reproducers` |

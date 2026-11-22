@@ -267,6 +267,21 @@ def run_args(project, image, *, name=None, detach=False, tty=False, extra_mounts
     return args + [image]
 
 
+def build_errors(r, limit=3000) -> str:
+    """Why a captured `stitch-build --json` run failed: the compiler output from its JSON result
+    (stdout), else whatever it printed."""
+    lines = (r.stdout or "").strip().splitlines()
+    try:
+        res = json.loads(lines[-1]) if lines else {}
+    except json.JSONDecodeError:
+        res = {}
+    text = "\n".join(f"--- {e.get('file', 'build')} ---\n{(e.get('output') or '').rstrip()}"
+                     for e in res.get("errors", []) if (e.get("output") or "").strip())
+    if not text:
+        text = ((r.stderr or "") + (r.stdout or "")).strip() or f"stitch-build exited with {r.returncode} and printed nothing"
+    return text[-limit:]
+
+
 def run(project, image, cmd, *, capture=False, check=False, timeout=None, **kw):
     args = run_args(project, image, **kw) + list(cmd)
     r = _run(args, capture_output=capture, timeout=timeout)

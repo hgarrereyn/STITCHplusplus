@@ -32,7 +32,7 @@ def build_cov(p, rev=None, quiet=False):
     outdir = f".stitch/cov/build-{ident}"
     r = docker.run(p, image, ["stitch-build", "--json", "--target", "repro", "--out", outdir], capture=True)
     if r.returncode != 0:
-        raise docker.DockerError(f"the harness does not build with coverage:\n{(r.stderr or r.stdout or '')[-3000:]}")
+        raise docker.DockerError(f"the harness does not build with coverage:\n{docker.build_errors(r)}")
     return image, f"{outdir}/repro", ident, commit
 
 

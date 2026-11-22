@@ -63,7 +63,7 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
         r = docker.run(p, image, ["stitch-build", "--json", "--target", "repro", "--out", outdir], capture=True)
         if r.returncode != 0:
             return {"status": "skip", "note": "harness does not compile against this version", "final": True,
-                    "detail": (r.stderr or "")[-600:]}
+                    "detail": docker.build_errors(r, 600)}
         output, code, to = run_repro(p, image, f"{outdir}/repro", crash_rel)
         rep = reports.parse_report(output, code, to)
         if not rep["crashed"]:
@@ -117,7 +117,8 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
                 break
         if not good_c:
             oldest = cands[idx[-1]][:12] if idx else bad_c[:12]
-            return {"ok": True, "found": False, "message": f"crash present (or unbuildable) in every revision tried back to {oldest}",
+            return {"ok": True, "found": False, "message": (f"crash present (or unbuildable) in every revision tried back to {oldest}"
+                                                     " (an older bug: --good REV; fixed in a later release: --fixed finds the fix)"),
                     "tested": [{"commit": c, "status": s} for c, s in tested]}
 
     # git bisect in a private clone (no checkout needed: we build from exported trees)

@@ -220,8 +220,8 @@ language = "go"
 {source}
 
 [go]
-module = "example.com/{module}"    # import path of the library (its source is at /src)
-# instrument = ["example.com/{module}/..."]   # packages to instrument (default: all but std)
+module = "{gomod}"    # import path of the library: the `module` line of its go.mod (source at /src)
+# instrument = ["{gomod}/..."]   # packages to instrument (default: all but std)
 # race = true                       # build with the race detector
 
 [fuzz]
@@ -270,7 +270,8 @@ language = "rust"
 {source}
 
 [rust.dependencies]                 # the harness crate's dependencies (the library is at /src)
-{module} = {{ path = "/src" }}      # rename to the library's crate name (`name` in /src/Cargo.toml)
+{module} = {{ path = "/src" }}      # rename to the library's crate name (`name` in /src/Cargo.toml);
+                                    # a workspace: path = "/src/<crate>"; default-features = false if needed
 
 [fuzz]
 timeout_ms = 2000
@@ -417,7 +418,7 @@ LANGS = {
                        "write stubs in harness/*.java, then `stitch build` and `stitch probe`"]},
     "go": {"toml": GO_TOML, "dockerfile": GO_DOCKERFILE, "files": {"harness/stubs.go": GO_EXAMPLE},
            "steps": ["edit Dockerfile until `stitch build --image-only` works",
-                     "set [go] module in stitch.toml to the library's module path",
+                     "check [go] module in stitch.toml: the `module` line of the library's go.mod",
                      "write stubs in harness/*.go (package harness), then `stitch build` and `stitch probe`"]},
     "swift": {"toml": SWIFT_TOML, "dockerfile": SWIFT_DOCKERFILE, "files": {"harness/stubs.swift": SWIFT_EXAMPLE},
               "steps": ["edit Dockerfile until `stitch build --image-only` works (the package source in /src)",
@@ -432,6 +433,22 @@ LANGS = {
                        "in stitch.toml [rust.dependencies], name the library dependency after its crate",
                        "write stubs in harness/*.rs, then `stitch build` and `stitch probe`"]},
 }
+
+
+def _go_module(git, path, fallback):
+    """The library's Go module path: from go.mod in a local checkout, else guessed from the git URL
+    (github.com/owner/repo; a major version >= 2 adds /vN, so check go.mod)."""
+    import re
+    if path:
+        gm = Path(path).expanduser() / "go.mod"
+        if gm.is_file():
+            m = re.search(r"^module\s+(\S+)", gm.read_text(errors="replace"), re.M)
+            if m:
+                return m.group(1)
+    m = re.match(r"(?:https?://|git@)([^/:]+)[/:]([^/]+)/([^/]+?)(?:\.git)?/?$", git or "")
+    if m:
+        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    return f"example.com/{fallback}"
 
 
 def init_project(root: Path, name=None, git=None, rev=None, path=None, language="cpp") -> str:
@@ -449,7 +466,8 @@ def init_project(root: Path, name=None, git=None, rev=None, path=None, language=
         source = f'git = "{git}"\nrev = "{rev or "HEAD"}"   # branch, tag or commit; `stitch build --rev X` overrides it'
     else:
         source = f'path = "{path}"   # local checkout, used as-is (uncommitted changes included)'
-    (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module))
+    (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module,
+                                                       gomod=_go_module(git, path, module)))
     (root / "Dockerfile").write_text(t["dockerfile"].format(name=name))
     (root / ".dockerignore").write_text(".stitch\n")
     (root / ".gitignore").write_text(".stitch/\n")
