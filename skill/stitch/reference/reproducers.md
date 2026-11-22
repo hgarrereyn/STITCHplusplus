@@ -53,7 +53,16 @@ stitch try .stitch/standalone/c1/min.c
 | DIVERGED | a pasted `stitch::require` failed where the original run passed |
 | COMPILE ERROR | the compiler errors are printed (exit code 2) |
 
-`--rev REV` builds against another library version. `--show` prints the program output.
+A failed `check` ("check failed: X") is matched by a crash whose output contains X, or by a
+failure raised in the file's own code (`abort()`, `assert`, an exception with no library frame):
+plain code detects the wrong behavior itself.
+
+`stitch try FILE c3` compares with crash `c3` instead of `expected.json` (for a file you wrote
+yourself). With neither, `stitch try FILE` runs the file and reports what it does. `--rev REV`
+builds against another library version. `--show` prints the program output.
+
+`stitch write` warns when the program it starts from no longer crashes (it was saved by an older
+harness); `stitch crashes` lists the buckets that still reproduce.
 
 ## Shrinking
 

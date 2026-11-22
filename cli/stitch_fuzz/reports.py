@@ -59,7 +59,15 @@ def _js_stack(output):
     if not heads:
         return None
     i = heads[-1]
-    m = re.match(r"(?:Uncaught\s+)?([A-Za-z_$][\w$.]*)(?::|$)", lines[i - 1].strip())
+    # the error line is the first of the block before the frames: messages can span several
+    # lines (e.g. "TypeError: x\nPlease report this to ...")
+    m = None
+    for j in range(i - 1, max(-1, i - 40), -1):
+        if not lines[j].strip():
+            break
+        mm = re.match(r"(?:Uncaught\s+)?([A-Za-z_$][\w$.]*)(?::\s|:?$)", lines[j].strip())
+        if mm:
+            m = mm
     if not m:
         return None
     frames = []
@@ -83,6 +91,8 @@ def _java_stack(output):
     i = heads[-1]
     m = re.match(r'(?:Exception in thread "[^"]*" |Caused by: )([\w.$]+)', lines[i])
     kind = m.group(1)
+    if kind == "stitch.CheckFailed":  # Stitch.check in a standalone reproducer
+        kind = "check failed: " + lines[i].split("stitch.CheckFailed", 1)[1].lstrip(": ").strip()
     if kind.startswith("java.lang.") and kind.count(".") == 2:
         kind = kind[len("java.lang."):]
     frames = []
@@ -97,6 +107,40 @@ def _java_stack(output):
             continue
         simple = cls.rsplit(".", 1)[-1]
         frames.append(f"{simple}.{meth} (stub)" if simple in ("Repro", "Min") else f"{simple}.{meth} {file}:{ln or 0}")
+    return kind, frames
+
+
+def _ruby_backtrace(output):
+    """kind, frames of an uncaught Ruby exception as Ruby prints it:
+    `path:line:in 'Klass#meth': message (Kind)` then `\tfrom path:line:in 'func'` lines."""
+    lines = output.splitlines()
+    head_re = re.compile(r"(\S+?):(\d+):in [`'](.+?)': ")
+    heads = [i for i, l in enumerate(lines) if head_re.match(l)]
+    if not heads:
+        return None
+    i = heads[-1]
+    kind = None
+    for l in lines[i:i + 30]:  # the message may span lines; "(Kind)" ends its last line
+        if l.startswith("\tfrom "):
+            break
+        km = re.search(r"\(([A-Z][\w:]*)\)$", l)
+        if km:
+            kind = km.group(1)
+    if not kind:
+        return None
+    frames = []
+    m = head_re.match(lines[i])
+    locs = [(m.group(1), m.group(2), m.group(3))]
+    for l in lines[i + 1:]:
+        fm = re.match(r"\tfrom (\S+?):(\d+):in [`'](.+?)'$", l)
+        if fm:
+            locs.append(fm.groups())
+        elif not l.startswith("\t"):
+            continue
+    for path, ln, fn in locs:
+        frames.append(f"{fn} (stub)" if _stub_loc(path) else f"{fn} {path.rsplit('/', 1)[-1]}:{ln}")
+        if len(frames) >= 8:
+            break
     return kind, frames
 
 
@@ -189,7 +233,7 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     py = None
     if "[stitch] EXCEPTION in " not in output and "[stitch] CHECK FAILED" not in output:
         py = (_python_traceback(output) or _java_stack(output) or _go_panic(output) or _rust_panic(output)
-              or _js_stack(output))
+              or _js_stack(output) or _ruby_backtrace(output))
     if py:
         kind, frames = py
         summary = next((l for l in reversed(output.splitlines()) if l.startswith(kind)), kind)

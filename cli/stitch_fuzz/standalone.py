@@ -732,7 +732,9 @@ def try_cpp(p, image, src_rel: str, timeout=60, leaks=False):
     binary = "/tmp/stitch-standalone"
     script = (compile_cmd(p, src_rel, binary) + " 2>/tmp/cc.log || { cat /tmp/cc.log >&2; exit 201; }\n"
               f"cat /tmp/cc.log >&2; echo '[repro] ---- run ----' >&2\n"
-              f"ASAN_OPTIONS={asan_options(leaks)} UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 timeout {timeout} {binary} >&2\n")
+              f"ASAN_OPTIONS={asan_options(leaks)} UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 timeout {timeout} "
+              # unbuffered: a reproducer that prints its finding and then aborts must not lose the text
+              f"stdbuf -o0 -e0 {binary} >&2\n")
     san = p.cfg["build"].get("sanitizers")
     env = {"STITCH_SANITIZERS": ",".join(san) if isinstance(san, list) else str(san)} if san else {}
     r = docker.run(p, image, ["sh", "-c", script], capture=True, env=env, timeout=timeout + 300)
@@ -826,8 +828,19 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
     (d / "trace.txt").write_text(output)
     title = (f"{rep['kind']} in {rep['frames'][0].split(' ')[0]}" if rep["frames"] else rep["kind"]) if rep["crashed"] else "runs without crashing"
     expected = {**crash_key(rep), "signature": rep["signature"], "from": p.rel(crash), "crash_id": rid}
+    warning = None
+    if not rep["crashed"]:
+        warning = (f"{p.rel(crash)} does not crash with the current harness, so the reproducer expects no crash"
+                   + (f" (bucket {rid} was found with an older harness build, or is flaky; `stitch crashes` lists "
+                      "the buckets that still reproduce)" if bucket else ""))
+    elif bucket and rep["signature"] != bucket.get("signature"):
+        warning = (f"{p.rel(crash)} now crashes differently from bucket {rid} ({rep['kind']} instead of {bucket.get('kind')}); "
+                   "the reproducer expects the new crash")
     if p.language != "cpp":
-        return _write_lang(p, image, d, rel, rid, title, crash, expected, run_check)
+        res = _write_lang(p, image, d, rel, rid, title, crash, expected, run_check)
+        if warning:
+            res["warning"] = warning
+        return res
     # 2. write the C++
     index = HarnessIndex(p.root / "harness")
     cmd = compile_cmd(p, str(rel / "repro.cpp"), "repro")
@@ -845,6 +858,8 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
     (d / "README.md").write_text(README.format(title=title, rel=rel, cmd=cmd))
     res = {"ok": True, "dir": str(d), "cpp": str(d / "repro.cpp"), "expected": expected, **meta,
            "lines": cpp.count("\n")}
+    if warning:
+        res["warning"] = warning
     if run_check:
         t = try_cpp(p, image, str(rel / "repro.cpp"), leaks="leak" in expected["kind"])
         if t["status"] == "compile_error":
@@ -938,10 +953,16 @@ def verdict(expected, t):
         same = compare(expected, {**got, "signature": t["report"]["signature"]}) == "same"
         # an oracle failure ("check failed: X") may be reproduced by plain code that aborts with
         # the same message, e.g. assert(ok && "X")
+        # (assert/abort/exit after printing it, or an exception carrying it): any crash whose output
+        # contains the oracle's message counts as the same failure
         what = expected["kind"][len("check failed: "):] if expected["kind"].startswith("check failed: ") else None
-        if what and not same and what in t["output"] and ("ABRT" in got["kind"] or "Assertion" in t["output"]
-                                                         or "CHECK FAILED" in t["output"] or "exit" in got["kind"]):
+        if what and not same and what in t["output"]:
             same = True
+        # ... or a failure the reproducer raises in its own code (abort, assert, an exception with no
+        # library frame): the plain program detects the same wrong behavior the oracle checked
+        if what and not same and not got["frame"] and t["report"].get("kind") != "timeout":
+            same = True
+            v["matched"] = "own check"
         v["status"] = "same" if same else "different"
         v["got"] = {**got, "signature": t["report"]["signature"]}
     if t["status"] == "compile_error":
