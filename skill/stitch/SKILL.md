@@ -347,9 +347,10 @@ one example program; other programs in the group may crash in another stub. One 
 several groups (a stack overflow ends in different frames): fix or explain the first, then run
 `stitch crashes` again.
 
-Crash ids: `c1` is in the latest campaign that is not `probe` (or in `probe` if there is no
-other). Use `probe:c1` or `--campaign probe` for another campaign. Ids stay the same while a
-campaign runs. After you change the harness, `stitch crashes` reruns the crashes with the new
+Crash ids: each campaign numbers its crashes from `c1`, so `probe:c1` and `main:c1` are
+different crashes. A bare `c1` is in the latest campaign that is not `probe` (or in `probe` if
+there is no other); commands print which one they used. Use `probe:c1` or `--campaign probe` for
+another campaign. Ids stay the same while a campaign runs. After you change the harness, `stitch crashes` reruns the crashes with the new
 build, so crashes caused by fixed stubs disappear.
 
 Decide for each crash:

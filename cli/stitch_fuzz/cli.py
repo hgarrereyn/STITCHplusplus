@@ -276,7 +276,12 @@ def health_report(s, limit=15):
     def reasons(e):
         rs = ", ".join(f'"{r["reason"]}" x{r["count"]}' for r in e["bail_reasons"][:3])
         ms = ", ".join(f"'{m['key']}'" for m in e["missing_attr_reads"][:3])
-        return rs + (f"; read missing attr {ms}" if ms else "")
+        bad = e.get("crashes", 0) + e.get("timeouts", 0)
+        # a stub that crashes on every call is usually a harness bug (a typo, a wrong argument)
+        cr = (f"crashed {e['crashes']}x" if e.get("crashes") else "") + \
+             (f"{', ' if e.get('crashes') else ''}timed out {e['timeouts']}x" if e.get("timeouts") else "")
+        out = rs + (f"; read missing attr {ms}" if ms else "")
+        return (out + "; " if out else "") + cr + " (see `stitch crashes`)" if bad else out
 
     if never:
         lines.append(f"never succeeds ({len(never)}): the fuzzer stops picking these")
@@ -1041,18 +1046,19 @@ def main(argv=None):
     s.add_argument("--full", action="store_true", help="also rebuild the project image")
     s.set_defaults(fn=cmd_check)
 
-    s = sp.add_parser("probe", help="short fuzzing run + report of what blocks progress")
+    s = sp.add_parser("probe", help="short fuzzing run + report of what blocks progress (campaign 'probe', restarted each time)")
     s.add_argument("only", nargs="?", help="endpoint names/globs to focus on, comma separated (e.g. 'tree/*,parse')")
     s.add_argument("--secs", type=int, default=60)
     s.set_defaults(fn=cmd_probe)
 
     s = sp.add_parser("fuzz", help="start a campaign in the background")
-    s.add_argument("--name", default="main")
-    s.add_argument("--secs", type=int)
-    s.add_argument("--jobs", type=int)
-    s.add_argument("--only")
-    s.add_argument("--fresh", action="store_true", help="discard the existing corpus")
-    s.add_argument("--foreground", action="store_true")
+    s.add_argument("--name", default="main", help="campaign name (default: main). Running it again resumes its corpus and "
+                   "crashes; each campaign numbers its crashes from c1 (refer to others as NAME:c3)")
+    s.add_argument("--secs", type=int, help="stop after this many seconds (default: run until `stitch stop`)")
+    s.add_argument("--jobs", type=int, help="parallel workers (default: [fuzz] jobs in stitch.toml)")
+    s.add_argument("--only", help="only these stubs and the stubs that produce their inputs: names/globs, comma separated")
+    s.add_argument("--fresh", action="store_true", help="start the campaign over: discard its corpus and crashes")
+    s.add_argument("--foreground", action="store_true", help="run in this terminal and print the final stats")
     s.set_defaults(fn=cmd_fuzz)
 
     s = sp.add_parser("status", help="campaign progress and health report")
@@ -1169,6 +1175,12 @@ def main(argv=None):
         die(str(e))
     except KeyboardInterrupt:
         die("interrupted", 130)
+    except BrokenPipeError:  # output piped into `head` and the like
+        try:
+            sys.stdout = open(os.devnull, "w")
+        except OSError:
+            pass
+        sys.exit(0)
 
 
 if __name__ == "__main__":

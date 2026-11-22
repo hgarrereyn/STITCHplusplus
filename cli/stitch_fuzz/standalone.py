@@ -768,11 +768,20 @@ def _top_loc(signature: str) -> str:
     return top.rsplit(" ", 1)[-1] if " " in top else ""
 
 
+def _same_function(a: str, b: str) -> bool:
+    """Frame names that differ only in qualification: runtimes name a method `Class.method` but a
+    plain traceback may show `method` (Python's co_name), or a namespace may be dropped."""
+    if a == b:
+        return True
+    short, full = sorted((a, b), key=len)
+    return any(full.endswith(sep + short) for sep in (".", "::", "#", " "))
+
+
 def compare(expected: dict, got: dict) -> str:
     """'same' | 'different'"""
     if expected["kind"] != got["kind"]:
         return "different"
-    if expected["frame"] and got["frame"] and expected["frame"] != got["frame"]:
+    if expected["frame"] and got["frame"] and not _same_function(expected["frame"], got["frame"]):
         # a frame without a name (a function inlined where the backtrace cannot name it) still has
         # its file and line
         if got["frame"] == "<panic>" or expected["frame"] == "<panic>":
@@ -809,6 +818,8 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
     if minimized.exists() and crash.suffix == ".stp" and not crash.stem.endswith(".min"):
         crash = minimized
     rid = (bucket["id"] if bucket else crash.stem[:16]).replace(":", "-")
+    if bucket and bucket.get("campaign") not in (None, "main"):  # ids are per campaign: probe:c3 is not main:c3
+        rid = f"{bucket['campaign']}-{rid}"
     d = (outdir or (p.state_dir / "standalone" / rid)).resolve()
     try:
         rel = d.relative_to(p.root.resolve())

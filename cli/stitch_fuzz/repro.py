@@ -68,6 +68,8 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     if minimized.exists():
         crash = minimized
     rid = (bucket["id"] if bucket else crash.stem[:12]).replace(":", "-")
+    if bucket and bucket.get("campaign") not in (None, "main"):  # ids are per campaign: probe:c3 is not main:c3
+        rid = f"{bucket['campaign']}-{rid}"
     d = (outdir or (p.state_dir / "repros" / f"{p.name}-{rid}")).resolve()
     if d.exists():
         shutil.rmtree(d)
