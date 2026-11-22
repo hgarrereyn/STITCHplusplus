@@ -166,7 +166,7 @@ Line coverage is `stitch cov` on the campaign's corpus; findings were rerun at t
 
 | Project | Stubs | Line coverage | Findings |
 |---|---|---|---|
-| libxml2 v2.11.0 (C) | 27 | 34% (53% in the 30 files reached; schemas, RelaxNG, catalogs are not targeted) | URI save/parse round trips (v2.15.4); fixed since: push parser vs one-shot verdicts, `xmlGetUTF8Char` accepting continuation bytes, regexp compile blowup, serializer output that does not reparse |
+| libxml2 v2.11.0 (C) | 27 (now 253) | 34% (53% in the 30 files reached; schemas, RelaxNG, catalogs are not targeted), measured with the first 27 stubs; `harness/ext/` (reader, writer, XPath axes, ...) came later | URI save/parse round trips (v2.15.4); fixed since: push parser vs one-shot verdicts, `xmlGetUTF8Char` accepting continuation bytes, regexp compile blowup, serializer output that does not reparse |
 | Jinja2 3.0.0 (Python) | 9 | 82% | generated Python that does not compile (`break` outside a loop, repeated keyword arguments, duplicate macro parameters), optimizer `TypeError`, sync/async rendering disagreeing (all in 3.1.6); fixed since: a parser `AttributeError`, an idtracking assertion |
 | handlebars 4.7.6 (JavaScript) | 6 | 90% | `compile()` vs `precompile()`+`template()` differ, `TypeError`s instead of Handlebars errors (4.7.10); fixed since: template text breaking out of the generated JavaScript (CVE-2021-23369's root cause) |
 | Commons Compress 1.20 (Java) | 24 | 66% | 59 buckets, 46 fixed by 1.28.0 (NPEs, OOMs, infinite loop: the 1.21 CVE batch); still: `BlockLZ4CompressorOutputStream` on empty input, cpio `TRAILER!!!` entries, cpio/Z `IllegalArgumentException`s, an `ArithmeticException` new in 1.28.0 |
