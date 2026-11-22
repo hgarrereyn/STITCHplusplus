@@ -126,7 +126,7 @@ public class Stubs {
     @Endpoint
     @Obj("Yaml")
     public static Yaml yaml_default() {
-        return new Yaml(new SafeConstructor());
+        return new Yaml(new SafeConstructor(new LoaderOptions()));
     }
 
     @Endpoint(bailsOn = {YAMLException.class})
@@ -165,6 +165,41 @@ public class Stubs {
     }
 
     // ---------------------------------------------------------------- helpers
+    /** Constructors differ between 1.x and 2.x: reflection keeps `--rev` runs compiling. */
+    static org.yaml.snakeyaml.scanner.Scanner newScanner(String text, boolean comments) {
+        try {
+            try {
+                return (org.yaml.snakeyaml.scanner.Scanner) ScannerImpl.class.getConstructor(StreamReader.class).newInstance(new StreamReader(text));
+            } catch (NoSuchMethodException e) {
+                LoaderOptions lo = new LoaderOptions();
+                lo.setProcessComments(comments);
+                return (org.yaml.snakeyaml.scanner.Scanner) ScannerImpl.class.getConstructor(StreamReader.class, LoaderOptions.class).newInstance(new StreamReader(text), lo);
+            }
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof RuntimeException) throw (RuntimeException) e.getCause();
+            throw new IllegalStateException(e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    static org.yaml.snakeyaml.parser.Parser newParser(String text, boolean comments) {
+        try {
+            try {
+                return (org.yaml.snakeyaml.parser.Parser) ParserImpl.class.getConstructor(StreamReader.class, boolean.class).newInstance(new StreamReader(text), comments);
+            } catch (NoSuchMethodException e) {
+                LoaderOptions lo = new LoaderOptions();
+                lo.setProcessComments(comments);
+                return (org.yaml.snakeyaml.parser.Parser) ParserImpl.class.getConstructor(StreamReader.class, LoaderOptions.class).newInstance(new StreamReader(text), lo);
+            }
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof RuntimeException) throw (RuntimeException) e.getCause();
+            throw new IllegalStateException(e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** load, but constructor-level leaks (NumberFormatException etc. from SafeConstructor) are bails;
      *  `load` itself reports those. */
     static Object tolerantLoad(Yaml y, String text) {
@@ -268,7 +303,7 @@ public class Stubs {
 
     @Endpoint(bailsOn = {YAMLException.class})
     public static void scan_tokens(@Str(max = 1024, type = "YamlText") String text, boolean comments) {
-        ScannerImpl sc = new ScannerImpl(new StreamReader(text)).setParseComments(comments);
+        org.yaml.snakeyaml.scanner.Scanner sc = newScanner(text, comments);
         int n = 0;
         while (sc.checkToken(new Token.ID[0])) {
             Token t = sc.getToken();
@@ -280,7 +315,7 @@ public class Stubs {
 
     @Endpoint(bailsOn = {YAMLException.class})
     public static void parser_comments(@Str(max = 1024, type = "YamlText") String text) {
-        ParserImpl p = new ParserImpl(new StreamReader(text), true);
+        org.yaml.snakeyaml.parser.Parser p = newParser(text, true);
         while (!p.checkEvent(Event.ID.StreamEnd)) p.getEvent();
     }
 
@@ -455,7 +490,7 @@ public class Stubs {
         String out = dumpOrBail(y, data);
         Object back;
         try {
-            back = new Yaml(new SafeConstructor()).load(out);
+            back = new Yaml(new SafeConstructor(new LoaderOptions())).load(out);
         } catch (RuntimeException e) {
             throw new AssertionError("dump output does not load: " + e.getMessage().replace('\n', ' '));
         }
@@ -469,7 +504,7 @@ public class Stubs {
         Stitch.require(StreamReader.isPrintable(v), "non-printable");
         Stitch.require(v.chars().noneMatch(c -> Character.isSurrogate((char) c)), "surrogate");
         String out = y.dump(v);
-        Object back = new Yaml(new SafeConstructor()).load(out);
+        Object back = new Yaml(new SafeConstructor(new LoaderOptions())).load(out);
         Stitch.check(v.equals(back), "load(dump(string)) equals string");
     }
 
@@ -481,7 +516,7 @@ public class Stubs {
         try { out = y.dumpAll(docs.iterator()); } catch (YAMLException e) { if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate"); throw e; }
         List<Object> back = new ArrayList<>();
         try {
-            for (Object o : new Yaml(new SafeConstructor()).loadAll(out)) back.add(o);
+            for (Object o : new Yaml(new SafeConstructor(new LoaderOptions())).loadAll(out)) back.add(o);
         } catch (RuntimeException e) {
             throw new AssertionError("dumpAll output does not load: " + e.getMessage().replace('\n', ' '));
         }
@@ -497,7 +532,7 @@ public class Stubs {
         Stitch.require(a != null, "null doc");
         requirePrintable(a, new IdentityHashMap<>(), Stitch.getLong(y, "esc", 0) == 1);
         String d1 = dumpOrBail(y, a);
-        Object b = new Yaml(new SafeConstructor()).load(d1);
+        Object b = new Yaml(new SafeConstructor(new LoaderOptions())).load(d1);
         Stitch.check(eq(a, b, new IdentityHashMap<>()), "load(dump(load(x))) equals load(x)");
     }
 
@@ -569,7 +604,7 @@ public class Stubs {
         y.serialize(node, w);
         Node back;
         try {
-            back = new Yaml(new SafeConstructor()).compose(new StringReader(w.toString()));
+            back = new Yaml(new SafeConstructor(new LoaderOptions())).compose(new StringReader(w.toString()));
         } catch (YAMLException e) {
             throw new AssertionError("serialize output does not compose: " + e.getMessage().replace('\n', ' '));
         }
@@ -588,18 +623,18 @@ public class Stubs {
     public static void compose_serialize(@Str(max = 512, type = "YamlText") String text, boolean canonical,
                                          DumperOptions.FlowStyle flow, @OneOf(ints = {1, 2, 4, 9}) int indent,
                                          @OneOf(ints = {-1, 1, 20, 80}) int width, boolean unicode, boolean split) {
-        Node n = new Yaml(new SafeConstructor()).compose(new StringReader(text));
+        Node n = new Yaml(new SafeConstructor(new LoaderOptions())).compose(new StringReader(text));
         Stitch.require(n != null, "empty");
         Stitch.require(!(n instanceof ScalarNode && ((ScalarNode) n).getValue().isEmpty()), "empty scalar serializes to nothing");
         DumperOptions d = new DumperOptions();
         d.setCanonical(canonical); d.setDefaultFlowStyle(flow); d.setIndent(indent); d.setWidth(width);
         d.setAllowUnicode(unicode); d.setSplitLines(split);
-        Yaml y = new Yaml(new SafeConstructor(), new Representer(d), d);
+        Yaml y = new Yaml(new SafeConstructor(new LoaderOptions()), new Representer(d), d);
         StringWriter w = new StringWriter();
         y.serialize(n, w);
         Node back;
         try {
-            back = new Yaml(new SafeConstructor()).compose(new StringReader(w.toString()));
+            back = new Yaml(new SafeConstructor(new LoaderOptions())).compose(new StringReader(w.toString()));
         } catch (YAMLException e) {
             throw new AssertionError("serialized tree does not compose: " + e.getMessage().replace('\n', ' '));
         }
@@ -609,14 +644,14 @@ public class Stubs {
     /** Oracle: canonical dump of loaded data loads equal. */
     @Endpoint(bailsOn = {YAMLException.class})
     public static void canonical_dump(@Str(max = 512, type = "YamlText") String text) {
-        Object a = tolerantLoad(new Yaml(new SafeConstructor()), text);
+        Object a = tolerantLoad(new Yaml(new SafeConstructor(new LoaderOptions())), text);
         Stitch.require(a != null, "null doc");
         requirePrintable(a, new IdentityHashMap<>(), false);
         DumperOptions d = new DumperOptions();
         d.setCanonical(true);
-        String out = dumpOrBail(new Yaml(new SafeConstructor(), new Representer(d), d), a);
+        String out = dumpOrBail(new Yaml(new SafeConstructor(new LoaderOptions()), new Representer(d), d), a);
         Object b;
-        try { b = new Yaml(new SafeConstructor()).load(out); }
+        try { b = new Yaml(new SafeConstructor(new LoaderOptions())).load(out); }
         catch (RuntimeException e) { throw new AssertionError("canonical output does not load: " + e.getMessage().replace('\n', ' ')); }
         Stitch.check(eq(a, b, new IdentityHashMap<>()), "canonical dump loads equal");
     }

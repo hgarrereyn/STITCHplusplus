@@ -14,11 +14,15 @@ static void need_no_decl_below(const XMLNode* n) {
 // The parser normalizes CR / CRLF to LF, so text with CR cannot round-trip (XML spec behaviour).
 static void need_no_cr(const XMLNode* n) {
     if (n->Value()) stitch::require(!strchr(n->Value(), '\r'), "CR in text");
+    // An empty text node prints as <f></f> but reparses as <f/> (see notes.md).
+    if (n->ToText()) stitch::require(*n->Value(), "empty text node");
     if (const XMLElement* e = n->ToElement())
         for (const XMLAttribute* a = e->FirstAttribute(); a; a = a->Next()) stitch::require(!strchr(a->Value(), '\r'), "CR in attribute");
     for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) need_no_cr(c);
 }
 static void need_wellformed_top(const XMLDocument* d) {
+    // With processEntities=false values are printed raw, so quotes/angle brackets break the output (documented).
+    stitch::require(d->ProcessEntities(), "processEntities is off");
     need_no_cr(d);
     stitch::require(d->FirstChildElement() != nullptr, "no top-level element");
     bool seen_elem = false;
@@ -58,6 +62,7 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
     stitch::require(live(d, n), "stale node");
     XMLNode* node = n;
     stitch::require(node->ToElement(), "not an element");
+    stitch::require(d->ProcessEntities(), "processEntities is off");
     need_no_decl_below(node);
     need_no_cr(node);
     std::string s1 = print_node(node, true);
@@ -68,13 +73,13 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
 STITCH_ENDPOINT(roundtrip_node);
 
 // Parsing and printing the same text twice must agree.
-void parse_print_stable(Str<4096, XmlText> text, Bool compact, Bool processEntities) {
-    XMLDocument d(processEntities);
+void parse_print_stable(Str<4096, XmlText> text, Bool compact) {
+    XMLDocument d;
     stitch::require(d.Parse(text.c_str()) == XML_SUCCESS, "parse error");
     need_wellformed_top(&d);
     if (!compact) stitch::require(!has_mixed(&d), "mixed content");
     std::string s1 = print_node(&d, compact);
-    XMLDocument d2(processEntities);
+    XMLDocument d2;
     stitch::check(d2.Parse(s1.c_str()) == XML_SUCCESS, "reparse of printed output");
     stitch::check(print_node(&d2, compact) == s1, "print is a fixed point");
 }

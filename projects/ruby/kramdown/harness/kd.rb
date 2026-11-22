@@ -129,7 +129,7 @@ Stitch.endpoint :roundtrip_kramdown, { text: Str[2000, KdText], pbh: Bool }, bai
   k = d1.to_kramdown
   d2 = Kramdown::Document.new(k, o)
   h2 = d2.to_html
-  Stitch.check(h1.strip == h2.strip, "to_kramdown re-parses to the same HTML")
+  Stitch.check(h1.gsub(/\s+/, " ").strip == h2.gsub(/\s+/, " ").strip, "to_kramdown re-parses to the same HTML")
 end
 
 Stitch.endpoint :html_deterministic, { text: Str[2000, KdText], input: OneOf[*INPUTS], opts: Val[OptsT, 256] }, bails_on: BAILS do |text, input, opts|

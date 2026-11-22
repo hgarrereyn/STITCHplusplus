@@ -110,7 +110,7 @@ and HTML, from llvm-cov, coverage.py, c8, JaCoCo, `go tool cover` or Ruby's `Cov
 
 ## Example projects
 
-`projects/<language>/` has harnesses for 34 libraries. Each has `notes.md`: what the harness covers,
+`projects/<language>/` has harnesses for 49 libraries. Those listed below have `notes.md`: what the harness covers,
 the findings (checked against the latest release with `stitch exec --rev`) and the harness fixes
 made during triage. Verified reproducer folders are in `projects/*/*/bugs/`.
 
@@ -122,34 +122,42 @@ made during triage. Verified reproducer folders are in `projects/*/*/bugs/`.
 | libyaml | 33 | `yaml_parser_load` asserts when called again after an error (questionable) |
 | zlib | 45 | none |
 | Lua 5.5-dev | 38 | none |
+| tinyxml2 7.0.0 | 75 | `InsertAfterChild` with the next sibling as anchor writes through a null pointer (`bugs/insert-after-last-child/`); floats print with 8 digits and do not read back; `Query*Attribute` accepts out-of-range numbers; `Parse` accepts a lone end tag; `SetText("")` does not round trip (all in 11.0.0); fixed since: pretty-printing mixed content is not idempotent |
 | **Python** | | |
 | tomlkit 0.13.2 | 16 | unescaped control characters in comments; empty super-tables dropped; duplicate table headers after `add` (all in 0.15.2); fixed since: `OverflowError` on huge years and 6 printer bugs |
 | python-dateutil 2.9.0 | 17 | `tzstr("GMT")` `TypeError`; the parser accepts UTC offsets of 24 h or more; `isoparse` rejects `isoformat()` output with second offsets; `rrule` with `INTERVAL=0` divides by zero (latest release) |
 | intervaltree 3.1.0 | 16 | none (a `slice` check was a harness bug) |
+| sqlparse 0.4.3 | 35 | `format(reindent=True)` and `format(strip_whitespace=True)` are not idempotent (0.6.1); fixed since: `IndexError` in `format(strip_whitespace=True)` on `"(AS)"` (fixing commit found with `bisect --fixed`) |
 | **JavaScript** | | |
 | lodash 4.17.15 | 13 | `set({}, "toString.a", v)` and similar paths write into the shared `Object.prototype` methods (4.18.0); prototype pollution through `set`, `setWith`, `update`, `zipObjectDeep` (CVE-2020-8203 family, fixed in 4.17.21); `unset(o, "__proto__.constructor")` deletes `Object.prototype.constructor` (fixed in 4.17.23); `cloneDeep` throws on arrays with an own `constructor` |
 | semver 7.5.1 | 11 | ReDoS in `Range` (CVE-2022-25883), found as a timeout (fixed in 7.5.2); `minVersion` returns `null` for a satisfiable range; `simplifyRange` returns `*` when no listed version matches (both in 7.7.3) |
 | yaml 2.6.1 | 12 | `stringify` writes block scalars that lose a leading space or don't parse (non-default `indent`); anchors with control characters parse but don't print; 2 more print round-trip bugs (all in 2.9.1) |
+| marked 4.0.9 | 21 | fixed since: `Parser.parse` mutates its tokens (parsing them twice duplicates task-list checkboxes), `lexer` `TypeError` on a table with a control character, superlinear emphasis parsing |
 | **Java** | | |
 | jsoup 1.15.2 | 11 | XSS in `Cleaner` with `preserveRelativeLinks` (CVE-2022-36033); `select` throws `StringIndexOutOfBoundsException` on a malformed attribute selector, `wrap` throws `IndexOutOfBoundsException`, control-character attribute keys break iteration (all in 1.21.1); fixed since: IOOBE after a parent's `empty()`, `clean()` not idempotent |
 | commons-lang 3.12.0 | 14 | `createNumber` and `isCreatable` disagree (3.17.0); `createNumber` `StringIndexOutOfBoundsException`, `StrBuilder.contains("")` (fixed) |
 | org.json 20230227 | 12 | `JSONML.toJSONArray` throws `ClassCastException` and `NumberFormatException` (20250517); `XML.toString` output that is not XML |
+| SnakeYAML 1.30 | 54 | `dump` with a large indent/indicator indent writes YAML that does not load; NEL and BOM strings do not round trip; non-`YAMLException`s from the constructor (all in 2.6); fixed since: stack overflows on deeply nested input (commit found with `bisect --fixed`) |
 | **Go** | | |
 | go-yaml v3 (496545a) | 10 | nil dereference in the parser (CVE-2022-28948) and "attempted to parse unknown event" panics (fixed in v3.0.0); `Marshal` writes keys that don't round-trip: a leading tab makes unparseable output, a key of newlines loses one (v3.0.1) |
 | gjson 1.6.4 | 7 | `Valid` accepts a lone `-`; `Parse` drops the closing quote of escaped strings; `Get`/`Parse().Get` disagree (all fixed by 1.20.5) |
 | x/net/html 0.12.0 | 9 | text in svg/math rendered unescaped (CVE-2023-3978) |
+| BurntSushi/toml 1.0.0 | 24 | `Decode` drops the scalars of an array that mixes scalars and tables (1.5.0); fixed since: a lexer slice panic on invalid UTF-8 after a multiline string (fixing commit found with `bisect --fixed`), an encoder panic on mixed arrays |
 | **Rust** | | |
 | smallvec 1.6.0 | 11 | heap buffer overflow in `insert_many` (RUSTSEC-2021-0003) |
 | url 2.2.0 | 7 | assertion and slicing panics in `set_host`/`set_username`/`set_password`, and URLs that don't parse back after setters (2.5.9); 11 more panics and round-trip bugs fixed since |
 | toml_edit 0.19.15 | 6 | `'''\r\n'''` prints differently from its input (fixed by 0.23) |
+| pulldown-cmark 0.8.0 | 14 | fixed since: slice panic in `scan_inline_html` on `"><a\r"`, `into_offset_iter` ranges with start > end in tables |
 | **Ruby** | | |
 | rexml 3.2.5 | 20 | a recursive entity overflows the stack when text is read; out-of-range character references raise `RangeError`; `deep_clone` fails on text added through the API; a malformed DOCTYPE crashes the stream parser; malformed XPath raises internal errors (all in 3.4.4); fixed since: 27 parser crashes, including stack overflows from self-referencing entities (fixed in CVE-2024-41946's release) |
 | addressable 2.7.0 | 16 | template literal text reaches a `Regexp` unescaped (`RegexpError`); `normalize` raises on invalid UTF-8 escapes in a host and is not idempotent (all in 2.9.2); fixed since: `display_uri` IDNA crashes |
 | rack 2.2.3 | 13 | `MediaType.params(";")`, `best_q_match` and multipart parts with an empty `Content-Type` raise `NoMethodError` (all in 3.2.9); unknown multipart charsets and empty forwarded hosts (fixed in 3.x) |
+| kramdown 2.3.0 | 22 | self-referencing IALs and footnotes overflow the stack (or hang `to_kramdown`); `&#9999999;` breaks `to_html`; a NUL in a nested list raises `NoMethodError`; `convert_th` is missing in three converters; small `line_width` raises `RegexpError` (all in 2.6.1); fixed since: `NoMethodError` on `<table markdown>` |
 | **Swift** | | |
 | SwiftSoup 2.3.2 | 19 | `wrap` force-unwraps nil; `select` and `cssSelector` range traps; `remove`/`unwrap` index out of range; `parse` hangs (all fixed by 2.14.4; the same classes as jsoup's) |
 | Yams 4.0.6 | 10 | `Yams.load("{!!: [int, x]}")` force-unwraps nil; Codable and serialize/compose round trips that change the value (6.2.2) |
 | CryptoSwift 1.6.0 | 10 | AES-GCM and AES-CCM decryption of a ciphertext shorter than the tag traps; invalid KDF and ChaCha20 parameters trap instead of throwing (1.10.0) |
+| Ink 0.5.0 | 14 | unterminated front matter traps in `Metadata.read`; `html(from: "<p")` never returns (both in 0.6.0); parse time grows exponentially with nested `[` |
 
 ### Large projects
 

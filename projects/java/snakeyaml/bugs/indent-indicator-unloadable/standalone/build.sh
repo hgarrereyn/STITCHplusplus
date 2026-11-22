@@ -1,0 +1,3 @@
+set -e
+stitch-build >/dev/null
+eval "$(grep '^export ' .stitch/build/repro | sed 's#\$HERE#/project/.stitch/build#g')" && mkdir -p /tmp/repro-src /tmp/repro-classes && cls=$(sed -n 's/^[[:space:]]*public[[:space:]]\+\(final[[:space:]]\+\)\?class[[:space:]]\+\([A-Za-z_][A-Za-z0-9_]*\).*/\2/p' standalone/min.java | head -1) && cls=${cls:-Repro} && cp standalone/min.java /tmp/repro-src/$cls.java && javac -nowarn -encoding UTF-8 -d /tmp/repro-classes -cp "$STITCH_JAVA_CP" /tmp/repro-src/$cls.java 2>/tmp/javac.log || { cat /tmp/javac.log >&2; exit 201; }; echo '[repro] ---- run ----' >&2; timeout 60 java $STITCH_JVM -Dstitch.app=/project/.stitch/build/app -cp "/tmp/repro-classes:$STITCH_JAVA_CP" $cls >&2
