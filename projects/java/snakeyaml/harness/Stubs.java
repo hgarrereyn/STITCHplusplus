@@ -147,7 +147,7 @@ public class Stubs {
         d.setLineBreak(lineBreak);
         d.setMaxSimpleKeyLength(maxSimpleKey);
         d.setNonPrintableStyle(nps);
-        Yaml y = new Yaml(new SafeConstructor(lo), new Representer(), d, lo);
+        Yaml y = new Yaml(new SafeConstructor(lo), new Representer(d), d, lo);
         Stitch.set(y, "esc", nps == DumperOptions.NonPrintableStyle.ESCAPE ? 1L : 0L);
         return y;
     }
@@ -494,7 +494,7 @@ public class Stubs {
         DumperOptions d = new DumperOptions();
         d.setCanonical(canonical); d.setDefaultFlowStyle(flow); d.setIndent(indent); d.setWidth(width);
         d.setAllowUnicode(unicode); d.setSplitLines(split);
-        Yaml y = new Yaml(new SafeConstructor(), new Representer(), d);
+        Yaml y = new Yaml(new SafeConstructor(), new Representer(d), d);
         StringWriter w = new StringWriter();
         y.serialize(n, w);
         Node back;
@@ -514,7 +514,7 @@ public class Stubs {
         requirePrintable(a, new IdentityHashMap<>(), false);
         DumperOptions d = new DumperOptions();
         d.setCanonical(true);
-        String out = dumpOrBail(new Yaml(new SafeConstructor(), new Representer(), d), a);
+        String out = dumpOrBail(new Yaml(new SafeConstructor(), new Representer(d), d), a);
         Object b;
         try { b = new Yaml(new SafeConstructor()).load(out); }
         catch (RuntimeException e) { throw new AssertionError("canonical output does not load: " + e.getMessage().replace('\n', ' ')); }

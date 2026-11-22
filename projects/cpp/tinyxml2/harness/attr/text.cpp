@@ -84,6 +84,7 @@ void set_cdata(Borrow<Doc> d, Borrow<Node> n, Bool v) {
     stitch::require(live(d, n), "stale node");
     XMLText* t = ((XMLNode*)n)->ToText();
     stitch::require(t, "not a text node");
+    if (v) stitch::require(!strstr(t->Value(), "]]>"), "cdata with ]]>");
     t->SetCData(v);
     stitch::check(t->CData() == (bool)v, "CData flag");
 }

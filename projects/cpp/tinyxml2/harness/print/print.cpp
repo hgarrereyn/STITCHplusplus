@@ -10,11 +10,22 @@ static void need_wellformed_top(const XMLDocument* d) {
     for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling())
         stitch::require(!c->ToText(), "top-level text");
 }
+// Pretty printing indents next to text: mixed content changes on every round trip (known limitation).
+static bool has_mixed(const XMLNode* n) {
+    bool text = false, elem = false;
+    for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) {
+        if (c->ToText()) text = true;
+        if (c->ToElement()) elem = true;
+        if (has_mixed(c)) return true;
+    }
+    return text && elem;
+}
 static XMLDocument* same_settings(const XMLDocument* d) { return new XMLDocument(d->ProcessEntities(), d->WhitespaceMode()); }
 
 // print -> parse -> print must reach a fixed point.
 void roundtrip_doc(Borrow<Doc> d, Bool compact) {
     need_wellformed_top(d);
+    if (!compact) stitch::require(!has_mixed(d), "mixed content");
     std::string s1 = print_node(d, compact);
     std::unique_ptr<XMLDocument> d2(same_settings(d));
     XMLError e = d2->Parse(s1.c_str());
@@ -41,6 +52,7 @@ void parse_print_stable(Str<4096, XmlText> text, Bool compact, Bool processEntit
     XMLDocument d(processEntities);
     stitch::require(d.Parse(text.c_str()) == XML_SUCCESS, "parse error");
     need_wellformed_top(&d);
+    if (!compact) stitch::require(!has_mixed(&d), "mixed content");
     std::string s1 = print_node(&d, compact);
     XMLDocument d2(processEntities);
     stitch::check(d2.Parse(s1.c_str()) == XML_SUCCESS, "reparse of printed output");
@@ -58,6 +70,7 @@ STITCH_ENDPOINT(clone_doc);
 
 void save_load(Borrow<Doc> d, Bool compact) {
     need_wellformed_top(d);
+    if (!compact) stitch::require(!has_mixed(d), "mixed content");
     std::string path = "/tmp/stitch_tx2_" + std::to_string(getpid()) + ".xml";
     XMLError e = d->SaveFile(path.c_str(), compact);
     stitch::require(e == XML_SUCCESS, "save failed");

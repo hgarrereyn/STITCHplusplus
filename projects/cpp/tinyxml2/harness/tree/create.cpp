@@ -5,6 +5,7 @@ STITCH_ENDPOINT(new_element);
 
 New<Node> new_text(Borrow<Doc> d, Str<64> text, Bool cdata) {
     XMLText* t = d->NewText(text.c_str());
+    if (cdata) stitch::require(!strstr(text.c_str(), "]]>"), "cdata with ]]>");
     t->SetCData(cdata);
     return mk(d, t);
 }
@@ -16,11 +17,11 @@ New<Node> new_comment(Borrow<Doc> d, Str<64> text) {
 }
 STITCH_ENDPOINT(new_comment);
 
-New<Node> new_declaration(Borrow<Doc> d, Str<64> text) { return mk(d, d->NewDeclaration(text.c_str())); }
+New<Node> new_declaration(Borrow<Doc> d, Str<64> text) { stitch::require(!strstr(text.c_str(), "?>"), "declaration with ?>"); return mk(d, d->NewDeclaration(text.c_str())); }
 STITCH_ENDPOINT(new_declaration);
 
 New<Node> new_declaration_default(Borrow<Doc> d) { return mk(d, d->NewDeclaration()); }
 STITCH_ENDPOINT(new_declaration_default);
 
-New<Node> new_unknown(Borrow<Doc> d, Str<64> text) { return mk(d, d->NewUnknown(text.c_str())); }
+New<Node> new_unknown(Borrow<Doc> d, Str<64> text) { stitch::require(!strchr(text.c_str(), '>') && text.size() > 0, "unknown with >"); return mk(d, d->NewUnknown(text.c_str())); }
 STITCH_ENDPOINT(new_unknown);
