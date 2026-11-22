@@ -144,7 +144,9 @@ def stmt_get_type(st: Borrow[Stmt]):
 @stitch.endpoint
 def stmt_roundtrip(st: Borrow[Stmt]):
     stitch.check("".join(t.value for t in st.flatten()) == str(st), "flatten == str")
-    stitch.check(str(sqlparse.parse(str(st))[0]) == str(st), "reparse stable")
+    r = sqlparse.parse(str(st))
+    stitch.require(r, "whitespace only")
+    stitch.check(str(r[0]) == str(st).strip(), "reparse stable")   # leading/trailing whitespace is dropped
 
 
 @stitch.endpoint

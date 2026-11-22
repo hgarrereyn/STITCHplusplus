@@ -89,3 +89,35 @@ void set_cdata(Borrow<Doc> d, Borrow<Node> n, Bool v) {
     stitch::check(t->CData() == (bool)v, "CData flag");
 }
 STITCH_ENDPOINT(set_cdata);
+
+void set_text_uint(Borrow<Doc> d, Borrow<Node> n, U32 v) {
+    XMLElement* e = elem(d, n);
+    e->SetText((unsigned)v);
+    unsigned got = 0;
+    stitch::check(e->QueryUnsignedText(&got) == XML_SUCCESS && got == v, "unsigned text round-trips");
+    stitch::check(e->UnsignedText(1) == v, "UnsignedText");
+}
+STITCH_ENDPOINT(set_text_uint);
+
+// The default-value getters must agree with the Query* variants.
+void typed_defaults(Borrow<Doc> d, Borrow<Node> n, Src<8> s) {
+    XMLElement* e = elem(d, n);
+    int64_t i64 = 0; bool b = false; double dd = 0; float f = 0; unsigned u = 0;
+    const char* t = e->GetText();
+    stitch::require(t, "no text");
+    stitch::check((e->QueryInt64Text(&i64) == XML_SUCCESS ? i64 : 77) == e->Int64Text(77), "Int64Text default");
+    stitch::check((e->QueryBoolText(&b) == XML_SUCCESS ? b : true) == e->BoolText(true), "BoolText default");
+    stitch::check((e->QueryUnsignedText(&u) == XML_SUCCESS ? u : 7u) == e->UnsignedText(7), "UnsignedText default");
+    if (e->QueryDoubleText(&dd) == XMLError::XML_SUCCESS) stitch::check(dd == e->DoubleText(1.5) || std::isnan(dd), "DoubleText default");
+    if (e->QueryFloatText(&f) == XMLError::XML_SUCCESS) stitch::check(f == e->FloatText(1.5f) || std::isnan(f), "FloatText default");
+    // attribute variants on the first attribute, if any
+    const XMLAttribute* a = e->FirstAttribute();
+    stitch::require(a, "no attributes");
+    const char* nm = a->Name();
+    stitch::check((e->QueryInt64Attribute(nm, &i64) == XML_SUCCESS ? i64 : 5) == e->Int64Attribute(nm, 5), "Int64Attribute default");
+    stitch::check((e->QueryBoolAttribute(nm, &b) == XML_SUCCESS ? b : true) == e->BoolAttribute(nm, true), "BoolAttribute default");
+    stitch::check((e->QueryUnsignedAttribute(nm, &u) == XML_SUCCESS ? u : 9u) == e->UnsignedAttribute(nm, 9), "UnsignedAttribute default");
+    if (e->QueryDoubleAttribute(nm, &dd) == XML_SUCCESS) stitch::check(dd == e->DoubleAttribute(nm, 2.5) || std::isnan(dd), "DoubleAttribute default");
+    if (e->QueryFloatAttribute(nm, &f) == XML_SUCCESS) stitch::check(f == e->FloatAttribute(nm, 2.5f) || std::isnan(f), "FloatAttribute default");
+}
+STITCH_ENDPOINT(typed_defaults);

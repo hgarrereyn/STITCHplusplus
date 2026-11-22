@@ -194,6 +194,8 @@ public class Stubs {
         if (o == null || seen.put(o, true) != null) return;
         if (o instanceof String) {
             Stitch.require(escape || StreamReader.isPrintable((String) o), "non-printable string dumps as !!binary");
+            // known: strings with NEL (U+0085) come back as "\n", a lone BOM string as null (see dump_string_roundtrip)
+            Stitch.require(((String) o).indexOf('\u0085') < 0 && ((String) o).indexOf('\ufeff') < 0, "NEL/BOM string");
         } else if (o instanceof Map) {
             for (Map.Entry<?, ?> e : ((Map<?, ?>) o).entrySet()) { requirePrintable(e.getKey(), seen, escape); requirePrintable(e.getValue(), seen, escape); }
         } else if (o instanceof Collection) {
@@ -353,7 +355,7 @@ public class Stubs {
     // ---------------------------------------------------------------- deep / amplifying inputs
     /** Deeply nested collections: StackOverflowError is a bug (CVE-2022-25857 class). */
     @Endpoint(bailsOn = {YAMLException.class})
-    public static void load_deep(Yaml y, @Range(lo = 1, hi = 4000) int depth, @Range(lo = 0, hi = 4) int kind) {
+    public static void load_deep(Yaml y, @Range(lo = 1, hi = 12000) int depth, @Range(lo = 0, hi = 4) int kind) {
         StringBuilder b = new StringBuilder();
         switch (kind) {
             case 0: b.append("[".repeat(depth)); break;
@@ -362,7 +364,7 @@ public class Stubs {
             case 3: b.append("[".repeat(depth)).append("x").append("]".repeat(depth)); break;
             default: for (int i = 0; i < depth; i++) b.append("? ".repeat(1)).append("[");
         }
-        Stitch.require(b.length() <= 20000, "too long");
+        Stitch.require(b.length() <= 50000, "too long");
         Object o = tolerantLoad(y, b.toString());
         if (o != null) y.dump(o);
     }
@@ -458,6 +460,17 @@ public class Stubs {
             throw new AssertionError("dump output does not load: " + e.getMessage().replace('\n', ' '));
         }
         Stitch.check(eq(data, back, new IdentityHashMap<>()), "load(dump(x)) equals x");
+    }
+
+    /** Dedicated, unfiltered check on a single string (NEL and BOM strings are known to fail). */
+    @Endpoint
+    public static void dump_string_roundtrip(Yaml y, @OneOf(strings = {"", "", "\u0085", "x\u0085", "\ufeff", "\u2028", "\u00a0", "# ", "- ", "? ", "!", "&a", "*a", ": "}) String pre, @Str(max = 24) String v0) {
+        String v = pre + v0;
+        Stitch.require(StreamReader.isPrintable(v), "non-printable");
+        Stitch.require(v.chars().noneMatch(c -> Character.isSurrogate((char) c)), "surrogate");
+        String out = y.dump(v);
+        Object back = new Yaml(new SafeConstructor()).load(out);
+        Stitch.check(v.equals(back), "load(dump(string)) equals string");
     }
 
     @Endpoint

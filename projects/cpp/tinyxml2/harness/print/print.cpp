@@ -11,7 +11,15 @@ static void need_no_decl_below(const XMLNode* n) {
         need_no_decl_below(c);
     }
 }
+// The parser normalizes CR / CRLF to LF, so text with CR cannot round-trip (XML spec behaviour).
+static void need_no_cr(const XMLNode* n) {
+    if (n->Value()) stitch::require(!strchr(n->Value(), '\r'), "CR in text");
+    if (const XMLElement* e = n->ToElement())
+        for (const XMLAttribute* a = e->FirstAttribute(); a; a = a->Next()) stitch::require(!strchr(a->Value(), '\r'), "CR in attribute");
+    for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) need_no_cr(c);
+}
 static void need_wellformed_top(const XMLDocument* d) {
+    need_no_cr(d);
     stitch::require(d->FirstChildElement() != nullptr, "no top-level element");
     bool seen_elem = false;
     for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling()) {
@@ -51,6 +59,7 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
     XMLNode* node = n;
     stitch::require(node->ToElement(), "not an element");
     need_no_decl_below(node);
+    need_no_cr(node);
     std::string s1 = print_node(node, true);
     std::unique_ptr<XMLDocument> d2(same_settings(d));
     stitch::check(d2->Parse(s1.c_str()) == XML_SUCCESS, "printed element parses");

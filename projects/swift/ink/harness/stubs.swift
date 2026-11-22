@@ -1,4 +1,5 @@
 import Stitch
+import Foundation
 import Ink
 
 enum Parser: StitchObject { typealias Handle = MarkdownParser }
@@ -57,7 +58,15 @@ enum Tgt: CaseIterable {
 }
 enum Kind: CaseIterable { case identity, wrap, upper, markdownEcho, empty }
 
+// Known library bugs (see notes.md): guard them so the campaign digs deeper.
+func guardKnown(_ md: String) throws {
+    try require(!md.contains("<") || md.contains(">"), "known: unterminated html hangs")
+    let t = md.drop(while: { $0.isWhitespace })
+    if t.hasPrefix("-") { try require(md.components(separatedBy: "---").count >= 3 || false, "known: unterminated metadata traps") }
+}
+
 func makeModifier(_ t: Tgt, _ k: Kind) -> Modifier {
+    if t == .metadataKeys && (k == .empty || k == .markdownEcho) { return makeModifier(t, .wrap) }  // key collisions: nondeterministic
     switch k {
     case .identity: return Modifier(target: t.target) { $0.html }
     case .wrap: return Modifier(target: t.target) { "<span>\($0.html)</span>" }
@@ -80,31 +89,36 @@ let addModifier = endpoint("add_modifier") { (p: Borrow<Parser>, t: Pick<Tgt>, k
     p.set("mods", (p.int("mods") ?? 0) + 1)
 }
 
-let parseMd = endpoint("parse") { (p: Borrow<Parser>, md: Str<4096, MdText>) -> New<Doc> in
-    New(p.value.parse(md.value))
+let parseMd = endpoint("parse") { (p: Borrow<Parser>, md: Str<4096, MdText>) throws -> New<Doc> in
+    try guardKnown(md.value)
+    return New(p.value.parse(md.value))
 }
 
-let htmlFrom = endpoint("html_from") { (p: Borrow<Parser>, md: Str<4096, MdText>) in
+let htmlFrom = endpoint("html_from") { (p: Borrow<Parser>, md: Str<4096, MdText>) throws in
+    try guardKnown(md.value)
     let a = p.value.html(from: md.value)
     let b = p.value.parse(md.value).html
     try check(a == b, "html(from:) == parse().html")
 }
 
-let deterministic = endpoint("deterministic") { (p: Borrow<Parser>, md: Str<4096, MdText>) in
+let deterministic = endpoint("deterministic") { (p: Borrow<Parser>, md: Str<4096, MdText>) throws in
+    try guardKnown(md.value)
     let a = p.value.parse(md.value), b = p.value.parse(md.value)
     try check(a.html == b.html && a.metadata == b.metadata && a.title == b.title, "parse is deterministic")
 }
 
-let titleCheck = endpoint("title_consistent") { (md: Str<2048, MdText>) in
+let titleCheck = endpoint("title_consistent") { (md: Str<2048, MdText>) throws in
+    try guardKnown(md.value)
     let r = MarkdownParser().parse(md.value)
     if let t = r.title { try check(r.html.contains("<h1"), "title implies an <h1> in html (\(t.count))") }
 }
 
-let metadataCheck = endpoint("metadata_consistent") { (md: Str<2048, MdText>) in
+let metadataCheck = endpoint("metadata_consistent") { (md: Str<2048, MdText>) throws in
+    try guardKnown(md.value)
     let r = MarkdownParser().parse(md.value)
     if !r.metadata.isEmpty {
         try check(md.value.drop(while: { $0.isWhitespace }).hasPrefix("-"), "metadata implies leading ---")
-        for (k, _) in r.metadata { try check(md.value.contains(k), "metadata key appears in input") }
+        for (k, _) in r.metadata where !k.isEmpty { try check(md.value.contains(k), "metadata key appears in input") }
     }
 }
 
@@ -127,12 +141,14 @@ let setMeta = endpoint("set_metadata") { (d: Borrow<Doc>, k: Str<8, Plain>, v: S
     try check(d.value.metadata[k.value] == v.value, "metadata set")
 }
 
-let reparseHtml = endpoint("reparse_html") { (md: Str<2048, MdText>) in
+let reparseHtml = endpoint("reparse_html") { (md: Str<2048, MdText>) throws in
+    try guardKnown(md.value)
     // parsing is idempotent on its own output only roughly; just must not trap
     let p = MarkdownParser()
     _ = p.parse(p.html(from: md.value))
 }
 
-let rawParse = endpoint("parse_plain") { (md: Str<4096, Plain>) -> New<Doc> in
-    New(MarkdownParser().parse(md.value))
+let rawParse = endpoint("parse_plain") { (md: Str<4096, Plain>) throws -> New<Doc> in
+    try guardKnown(md.value)
+    return New(MarkdownParser().parse(md.value))
 }

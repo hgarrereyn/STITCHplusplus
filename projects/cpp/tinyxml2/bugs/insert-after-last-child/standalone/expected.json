@@ -1,0 +1,7 @@
+{
+ "kind": "SEGV",
+ "frame": "tinyxml2::XMLNode::InsertAfterChild",
+ "signature": "SEGV | tinyxml2::XMLNode::InsertAfterChild tinyxml2.cpp:931 | insert_after insert.cpp | insert_after (stub)",
+ "from": ".stitch/campaigns/main/w0/crashes/342ab7f1f4fe2129.min.stp",
+ "crash_id": "c1"
+}

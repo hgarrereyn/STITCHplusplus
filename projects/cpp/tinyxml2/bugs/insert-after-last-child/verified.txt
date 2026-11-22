@@ -1,0 +1,2 @@
+verified: same crash
+SEGV | tinyxml2::XMLNode::InsertAfterChild tinyxml2.cpp:931 | insert_after insert.cpp | insert_after (stub)
