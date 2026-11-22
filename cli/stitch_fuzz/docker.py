@@ -121,7 +121,9 @@ def _buildx(args, log: Path, what: str, quiet=False):
     with open(log, "w") as f:
         r = _run(["docker", "buildx", "build", "--progress=plain", "--load", *args], stdout=f, stderr=subprocess.STDOUT)
     if r.returncode != 0:
-        tail = log.read_text(errors="replace").splitlines()[-60:]
+        # STITCH_BASE has no default (the CLI always passes it): Docker's warning about that is noise
+        tail = [l for l in log.read_text(errors="replace").splitlines()
+                if "InvalidDefaultArgInFrom" not in l and "warning found (use docker --debug" not in l][-60:]
         raise DockerError(f"building {what} failed (full log: {log}):\n" + "\n".join(tail))
 
 

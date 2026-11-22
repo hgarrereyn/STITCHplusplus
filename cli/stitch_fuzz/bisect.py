@@ -6,6 +6,7 @@ the harness does not build are skipped.
 """
 import hashlib
 import json
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -50,7 +51,11 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
         if r["status"] in ("bad", "good", "skip") and r.get("signature") and target["sig"] and r["status"] == "bad":
             if r["signature"] != target["sig"]:
                 r = dict(r, status="skip" if strict else "bad", note="different crash: " + r["signature"])
-        log(f"{commit[:12]}  {r['status']:5s} {r.get('note') or r.get('signature') or ''}")
+        why = ""
+        if r["status"] == "skip" and r.get("detail"):  # the last line that says something
+            lines = [l.strip() for l in r["detail"].splitlines() if l.strip() and not l.strip().startswith("---")]
+            why = f": {lines[-1][:160]}" if lines else ""
+        log(f"{commit[:12]}  {r['status']:5s} {r.get('note') or r.get('signature') or ''}{why}")
         return r
 
     def _test_uncached(commit):
@@ -66,6 +71,11 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
                     "detail": docker.build_errors(r, 600)}
         output, code, to = run_repro(p, image, f"{outdir}/repro", crash_rel)
         rep = reports.parse_report(output, code, to)
+        if rep["crashed"] and not to and not re.search(r"^\[stitch\] #\d+ ", output, re.M):
+            # failed before the first call: the harness does not load against this version (an import
+            # or a module format the library changed), which says nothing about the bug
+            return {"status": "skip", "note": "harness does not load against this version", "final": True,
+                    "detail": output[-600:]}
         if not rep["crashed"]:
             return {"status": "good", "final": True}
         return {"status": "bad", "signature": rep["signature_fn"], "final": True}

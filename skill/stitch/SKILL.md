@@ -275,7 +275,7 @@ A probe report:
 
 ```
 probe: 20s, 42.8k execs (2.1k/s), 733/3298 edges, corpus 461, calls bailing 13% (programs with a bail 66%), 0 crash/timeout programs saved
-never succeeds (1): the fuzzer stops picking these
+never succeeds (1, 20+ calls and none ok so far): the fuzzer picks these less and less
   item_string  [600 calls] "root is gone" x600; read missing attr 'root'
 outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):
   add_item.obj: ok 2% after parse vs 100% after new_object
@@ -343,9 +343,9 @@ stitch exec c1 --rev HEAD  # does it still crash on the newest library code?
 ```
 
 Crashes are grouped by kind and innermost library frames. The stub named in the list comes from
-one example program; other programs in the group may crash in another stub. One bug can show as
-several groups (a stack overflow ends in different frames): fix or explain the first, then run
-`stitch crashes` again.
+one example program; other programs in the group may crash in another stub. A stack overflow
+is grouped by its stub instead of its frames (it ends wherever the stack runs out). One bug can
+still show as several groups: fix or explain the first, then run `stitch crashes` again.
 
 Crash ids: each campaign numbers its crashes from `c1`, so `probe:c1` and `main:c1` are
 different crashes. A bare `c1` is in the latest campaign that is not `probe` (or in `probe` if

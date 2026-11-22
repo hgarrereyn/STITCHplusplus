@@ -27,6 +27,13 @@ RUN mvn -q -B -DskipTests -Drat.skip=true -Dmaven.javadoc.skip=true package \
 - Copy only the main jar, not `-sources.jar` or `-tests.jar`.
 - Apache projects run license checks during `package`: `-Drat.skip=true` turns them off.
 - Gradle: `RUN ./gradlew jar && cp build/libs/*.jar /deps/`.
+- The image has JDK 21, which rejects `<source>`/`<target>` 7 and older. Pass a newer one
+  (`-Dmaven.compiler.source=8 -Dmaven.compiler.target=8`), or for a library without dependencies
+  compile the sources directly:
+  ```dockerfile
+  RUN mkdir -p /tmp/lib && javac -nowarn --release 8 -encoding UTF-8 -d /tmp/lib $(find src/main/java -name '*.java') \
+   && jar cf /deps/lib.jar -C /tmp/lib .
+  ```
 
 `stitch.toml`:
 
@@ -114,7 +121,7 @@ public class Stubs {
 | `@Obj("Name")` on a parameter or the method | names the object type (for the parameter, or for the returned object) |
 | `@Take` on a parameter | the call consumes the object |
 | `Stitch.consume(x)` | on a borrowed input: the library took ownership in this call |
-| a non-void return | a new object; `null` is a bail |
+| a non-void return | a new object; `null` is a bail. Not a `String`, number or `boolean` (those are rejected at build): check results inside the stub, or wrap them in an object |
 | `@Endpoint(optional = true)` | the returned object may be `null`: no object, not a bail |
 
 A stub returns at most one object. When the kind of result depends on the input, write one stub
@@ -284,7 +291,7 @@ public static void print_row(CSVPrinter p, @Val(value = "Row", max = 256) List<S
 | `str(max)`, `bytes(max)` | text or bytes of at most `max` bytes |
 | `fixed(n)` | exactly n bytes |
 | `rest()` | every byte that is left |
-| `token()` | a token from the data type's `.dict` files |
+| `token()` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw("Name")` | a value from data type `Name`'s decoder |
 
 ## Reproducers

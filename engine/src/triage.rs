@@ -138,6 +138,13 @@ fn demangle_swift(frames: &mut [String]) {
     }
 }
 
+/// Stack exhaustion, as each language reports it.
+pub fn is_stack_overflow(kind: &str, summary: &str) -> bool {
+    const KINDS: [&str; 7] = ["stack-overflow", "StackOverflowError", "RecursionError", "SystemStackError", "stack overflow",
+        "overflowed its stack", "stack exceeds"];
+    KINDS.iter().any(|k| kind.contains(k)) || summary.contains("Maximum call stack size exceeded")
+}
+
 pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Report {
     let mut kind = String::new();
     let mut summary = String::new();
@@ -277,17 +284,22 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
     if timed_out {
         kind = "timeout".into();
     } else if crashed && kind.is_empty() {
-        kind = "crash (no sanitizer report)".into();
+        // a process that died without a report (a signal, an exit, a killed worker)
+        kind = "crash (no error report)".into();
     }
     // bucket signature: kind + top frame with its line + next two frames (function + file);
-    // `signature_fn` drops the line (stable across library versions, used by bisect)
+    // `signature_fn` drops the line (stable across library versions, used by bisect).
+    // A stack overflow ends wherever the stack runs out, so its frames would split one bug into
+    // many buckets: it is bucketed by the stub instead (keep in sync with the CLI's reports.py).
+    let overflow = is_stack_overflow(&kind, &summary);
     let mut signature_fn = kind.clone();
-    if kind.starts_with("check failed") || kind.starts_with("uncaught") || kind == "timeout" || frames.is_empty() {
+    if kind.starts_with("check failed") || kind.starts_with("uncaught") || kind == "timeout" || frames.is_empty() || overflow {
         if let Some(e) = &endpoint {
             signature_fn.push_str(&format!(" | in {e}"));
         }
     }
     let mut signature = signature_fn.clone();
+    let sig_frames: &[String] = if overflow { &[] } else { &frames };
     // frames are "func location": drop ":col" (first frame) or ":line:col" from the location only,
     // since function names may contain "::"
     fn strip_pos(f: &str, keep_line: bool) -> String {
@@ -299,7 +311,7 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
         }
         format!("{func} {}", parts.join(":"))
     }
-    for (i, f) in frames.iter().take(3).enumerate() {
+    for (i, f) in sig_frames.iter().take(3).enumerate() {
         signature.push_str(" | ");
         signature.push_str(&if i == 0 { strip_pos(f, true) } else { strip_pos(f, false) });
         signature_fn.push_str(" | ");

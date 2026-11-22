@@ -318,7 +318,7 @@ language = "ruby"
 {source}
 
 [ruby]
-include = []     # gem names (or path prefixes) of the code under test, e.g. ["rexml"] (empty: all but the standard library)
+include = ["/src/lib"]   # code under test: path prefixes, or gem names of installed gems (empty: all but the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -326,13 +326,15 @@ max_nodes = 24
 jobs = 1
 """
 
-RB_DOCKERFILE = """# Installs the library under test as a gem into the image's Ruby 3.4.
+RB_DOCKERFILE = """# The library under test from its source tree (/src/lib on the load path), on the image's Ruby 3.4.
 #   STITCH_BASE  Ruby + the STITCH++ runtime
 #   source       build context with the library source at the requested version
 ARG STITCH_BASE
 FROM ${{STITCH_BASE}}
 COPY --from=source . /src
-RUN cd /src && gem build *.gemspec && gem install --local ./*.gem
+# its dependencies: from the gemspec when the repository has one (else: RUN gem install dep1 dep2)
+RUN cd /src && if ls *.gemspec >/dev/null 2>&1; then gem build *.gemspec && gem install ./*.gem; fi
+ENV RUBYLIB=/src/lib
 """
 
 RB_EXAMPLE = """# Stubs: one Stitch.endpoint per API call. The specs hash is the signature.
@@ -365,7 +367,7 @@ language = "swift"
 
 [swift]
 dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness
-products = ['.product(name: "{name}", package: "src")']             # the library products it imports
+products = ['.product(name: "{swift_product}", package: "src")']    # library products it imports: `.library(name:` in /src/Package.swift (case matters)
 
 [fuzz]
 timeout_ms = 2000
@@ -427,7 +429,7 @@ LANGS = {
                         "write stubs in harness/*.swift, then `stitch build` and `stitch probe`"]},
     "ruby": {"toml": RB_TOML, "dockerfile": RB_DOCKERFILE, "files": {"harness/stubs.rb": RB_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works (the library must gem install)",
-                       "optional: set [ruby] include in stitch.toml to the library's gem name (narrower instrumentation and coverage)",
+                       "if the library's code is not under /src/lib, change RUBYLIB in the Dockerfile and [ruby] include in stitch.toml",
                        "write stubs in harness/*.rb, then `stitch build` and `stitch probe`"]},
     "rust": {"toml": RUST_TOML, "dockerfile": RUST_DOCKERFILE, "files": {"harness/stubs.rs": RUST_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works",
@@ -452,6 +454,20 @@ def _go_module(git, path, fallback):
     return f"example.com/{fallback}"
 
 
+def _swift_product(git, path, fallback):
+    """The package's first library product: from Package.swift of a local checkout, else the
+    repository's name (SwiftPM names are case-sensitive: Ink, not ink)."""
+    import re
+    if path:
+        ps = Path(path).expanduser() / "Package.swift"
+        if ps.is_file():
+            m = re.search(r'\.library\(\s*name:\s*"([^"]+)"', ps.read_text(errors="replace"))
+            if m:
+                return m.group(1)
+    m = re.search(r"/([^/]+?)(?:\.git)?/?$", git or "")
+    return m.group(1) if m else fallback
+
+
 def init_project(root: Path, name=None, git=None, rev=None, path=None, language="cpp") -> str:
     from .project import normalize_language
     language = normalize_language(language)
@@ -468,7 +484,8 @@ def init_project(root: Path, name=None, git=None, rev=None, path=None, language=
     else:
         source = f'path = "{path}"   # local checkout, used as-is (uncommitted changes included)'
     (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module,
-                                                       gomod=_go_module(git, path, module)))
+                                                       gomod=_go_module(git, path, module),
+                                                       swift_product=_swift_product(git, path, name)))
     (root / "Dockerfile").write_text(t["dockerfile"].format(name=name))
     (root / ".dockerignore").write_text(".stitch\n")
     (root / ".gitignore").write_text(".stitch/\n")

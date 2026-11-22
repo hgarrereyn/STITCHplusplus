@@ -347,7 +347,7 @@ endpoint! {
 | `str(max) -> String`, `bytes(max) -> Vec<u8>` | text or bytes of at most `max` bytes |
 | `fixed(n) -> Vec<u8>` | exactly n bytes |
 | `rest() -> Vec<u8>` | every byte that is left |
-| `token() -> String` | a token from the data type's `.dict` files |
+| `token() -> String` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw::<Tag>()` | a value from data type `Tag`'s decoder |
 
 ## Reproducers

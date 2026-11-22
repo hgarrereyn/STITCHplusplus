@@ -845,7 +845,14 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
                    + (f" (bucket {rid} was found with an older harness build, or is flaky; `stitch crashes` lists "
                       "the buckets that still reproduce)" if bucket else ""))
     elif bucket and rep["signature"] != bucket.get("signature"):
-        warning = (f"{p.rel(crash)} now crashes differently from bucket {rid} ({rep['kind']} instead of {bucket.get('kind')}); "
+        if rep["kind"] != bucket.get("kind"):
+            diff = f"{rep['kind']} instead of {bucket.get('kind')}"
+        else:  # same kind: say where they differ (the location, or the stub)
+            a, b = rep["signature"].split(" | "), (bucket.get("signature") or "").split(" | ")
+            i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+            diff = (f"{rep['kind']} at {a[i] if i < len(a) else '(no frame)'} instead of "
+                    f"{b[i] if i < len(b) else '(no frame)'}")
+        warning = (f"{p.rel(crash)} now crashes differently from bucket {rid} ({diff}); "
                    "the reproducer expects the new crash")
     if p.language != "cpp":
         res = _write_lang(p, image, d, rel, rid, title, crash, expected, run_check)

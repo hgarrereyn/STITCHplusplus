@@ -248,7 +248,7 @@ let putAll = endpoint("put_all") { (st: Borrow<Store>, kvs: Val<Pairs, 256>) thr
 | `str(max)`, `bytes(max)` | text or bytes of at most `max` bytes |
 | `fixed(n)` | exactly n bytes |
 | `rest()` | every byte that is left |
-| `token()` | a token from the data type's `.dict` files |
+| `token()` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw(T.self)` | a value from `T`'s decoder |
 
 ## Reproducers

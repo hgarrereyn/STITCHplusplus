@@ -11,16 +11,20 @@ stitch init rexml --lang ruby --git https://github.com/ruby/rexml --rev v3.2.5
 cd rexml
 ```
 
-`Dockerfile`: install the library as a gem.
+`Dockerfile`: run the library from its source tree, with its dependencies installed.
 
 ```dockerfile
 ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
-RUN cd /src && gem build *.gemspec && gem install --local ./*.gem
+RUN cd /src && if ls *.gemspec >/dev/null 2>&1; then gem build *.gemspec && gem install ./*.gem; fi
+ENV RUBYLIB=/src/lib
 ```
 
-If the gem has dependencies, drop `--local` so `gem install` fetches them.
+`RUBYLIB` puts `/src/lib` ahead of installed gems, so the code under test is the source at the
+requested revision even when the gem (or a default gem of the same name) is installed. Some
+repositories generate the gemspec (with `rake`) and have none in git: install the dependencies
+by name instead (`RUN gem install rexml rouge`).
 
 `stitch.toml`:
 
@@ -34,15 +38,15 @@ git = "https://github.com/ruby/rexml"
 rev = "v3.2.5"
 
 [ruby]
-include = ["rexml"]       # gem names (or path prefixes) of the code under test; empty: all but the standard library
-# exclude = ["rexml/xpath_parser"]
+include = ["/src/lib"]    # path prefixes (or names of installed gems) of the code under test; empty: all but the standard library
+# exclude = ["/src/lib/rexml/xpath_parser"]
 
 [fuzz]
 timeout_ms = 2000
 ```
 
-`include` decides which code gets coverage and comparison tracing. Set it to the library's gem
-name.
+`include` decides which code gets coverage and comparison tracing: `/src/lib` with the
+`Dockerfile` above; a gem name (`"rexml"`) matches an installed gem.
 
 ## Files
 
@@ -261,7 +265,7 @@ end
 | `str(max)`, `bytes(max)` | text or bytes of at most `max` bytes |
 | `fixed(n)` | exactly n bytes |
 | `rest` | every byte that is left |
-| `token` | a token from the data type's `.dict` files |
+| `token` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw(Tag)` | a value from data type `Tag`'s decoder |
 
 ## Reproducers

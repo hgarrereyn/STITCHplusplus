@@ -226,6 +226,15 @@ def _rust_panic(output):
 TIMEOUT_LINE = "[stitch] TIMEOUT"  # printed by reproducer scripts that stop a slow program
 
 
+_OVERFLOW = ("stack-overflow", "StackOverflowError", "RecursionError", "SystemStackError", "stack overflow",
+             "overflowed its stack", "stack exceeds")
+
+
+def is_stack_overflow(kind: str, summary: str) -> bool:
+    """Stack exhaustion, as each language reports it (engine/src/triage.rs has the same list)."""
+    return any(k in kind for k in _OVERFLOW) or "Maximum call stack size exceeded" in summary
+
+
 def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     timed_out = timed_out or TIMEOUT_LINE in output
     kind, summary, frames, endpoint, node = "", "", [], None, None
@@ -325,13 +334,15 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     if timed_out:
         kind = "timeout"
     elif crashed and not kind:
-        kind = f"crash (exit {exit_code}, no sanitizer report)"
+        kind = f"crash (exit {exit_code}, no error report)"
+    # a stack overflow is bucketed by the stub, not by where the stack ran out (as in the engine)
+    overflow = is_stack_overflow(kind, summary)
     sig_fn = kind
-    if kind.startswith(("check failed", "uncaught")) or kind == "timeout" or not frames:
+    if kind.startswith(("check failed", "uncaught")) or kind == "timeout" or not frames or overflow:
         if endpoint:
             sig_fn += f" | in {endpoint}"
     sig = sig_fn
-    for i, f in enumerate(frames[:3]):
+    for i, f in enumerate([] if overflow else frames[:3]):
         nopos = re.sub(r"(?<!:):\d+(:\d+)?$", "", f)  # function names may contain "::"
         if i == 0:
             m = re.match(r"(.*[^:]):(\d+):\d+$", f)
