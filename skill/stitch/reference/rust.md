@@ -19,7 +19,8 @@ FROM ${STITCH_BASE}
 COPY --from=source . /src
 ```
 
-`stitch.toml` (`stitch init` already fills in the dependency on `/src`):
+`stitch.toml`: `stitch init` adds a dependency on `/src` named after the project. Rename it to
+the library's crate name (`name` in the library's `Cargo.toml`):
 
 ```toml
 [project]
