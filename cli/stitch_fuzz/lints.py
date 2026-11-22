@@ -5,17 +5,17 @@ from pathlib import Path
 
 LIVENESS_KEYS = {"alive", "freed", "dead", "destroyed", "valid", "live", "deleted", "closed_flag", "is_freed", "is_alive"}
 
-# stitch::set (C++, Rust), stitch.set (Python, JS), Stitch.set (Java), stitch.Set (Go)
+# stitch::set (C++), stitch.set (Python, JS), Stitch.set (Java, Ruby), stitch.Set (Go)
 _API = r"\b[Ss]titch(?:::|\.)"
-_ATTR_RE = re.compile(_API + r"(set|get|get_str|getStr|get_obj|getObj|has|del|delete|Set|Get|GetStr|GetObj|Has|Del)"
+_ATTR_RE = re.compile(_API + r"(set|get|get_str|getStr|get_obj|getObj|getLong|getString|has|del|delete|Set|Get|GetStr|GetObj|GetInt|GetString|Has|Del)"
                       r"(?:\s*<[^>]*>|\[[^\]]*\])?\s*\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*[\"']([^\"']+)[\"']")
 _GLOBAL_RE = re.compile(_API + r"(global_set|global_set_str|global_get|global_get_str|global_has|globalSet|globalGet"
                         r"|globalHas|GlobalSet|GlobalGet|GlobalHas)\s*\(\s*[\"']([^\"']+)[\"']")
-_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".h", ".c", ".py", ".js", ".mjs", ".cjs", ".ts", ".java", ".go", ".rs"}
+_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".h", ".c", ".py", ".js", ".mjs", ".cjs", ".ts", ".java", ".go", ".rs", ".rb"}
 
 
 def strip_comments(src, suffix=".cpp"):
-    if suffix == ".py":
+    if suffix in (".py", ".rb"):
         return re.sub(r"#[^\n]*", "", src)
     src = re.sub(r"//[^\n]*", "", src)
     return re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)

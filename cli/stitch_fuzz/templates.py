@@ -1,7 +1,7 @@
 """`stitch init` scaffolding."""
 from pathlib import Path
 
-TOML = """# STITCH++ project. Guide: `stitch guide`. API reference: `stitch guide api`.
+TOML = """# STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
 [project]
 name = "{name}"
 
@@ -73,7 +73,7 @@ language = "python"
 {source}
 
 [python]
-include = []     # import names of the code under test, e.g. ["{module}"] (empty: everything outside the standard library)
+include = []     # import names of the code under test, e.g. ["yaml"] for PyYAML (empty: everything outside the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -122,7 +122,7 @@ language = "javascript"
 {source}
 
 [javascript]
-include = []     # package names of the code under test, e.g. ["{module}"] (empty: every package is instrumented)
+include = []     # npm package names of the code under test, e.g. ["js-yaml"] (empty: every package is instrumented)
 
 [fuzz]
 timeout_ms = 2000
@@ -184,8 +184,10 @@ ARG STITCH_BASE
 FROM ${{STITCH_BASE}}
 COPY --from=source . /src
 WORKDIR /src
-RUN mvn -q -B -DskipTests -Dmaven.javadoc.skip=true package dependency:copy-dependencies -DoutputDirectory=/deps \\
-    && cp target/*.jar /deps/
+# includeScope=runtime keeps test dependencies out of /deps; copy the main jar, not -sources/-tests jars.
+RUN mvn -q -B -DskipTests -Dmaven.javadoc.skip=true -Drat.skip=true package \\
+      dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/deps \\
+    && cp $(ls target/*.jar | grep -vE -- '-(sources|tests|test-sources|javadoc)\\.jar$') /deps/
 # Gradle: RUN ./gradlew jar && cp build/libs/*.jar /deps/
 """
 
@@ -268,7 +270,7 @@ language = "rust"
 {source}
 
 [rust.dependencies]                 # the harness crate's dependencies (the library is at /src)
-{module} = {{ path = "/src" }}
+{module} = {{ path = "/src" }}      # rename to the library's crate name (`name` in /src/Cargo.toml)
 
 [fuzz]
 timeout_ms = 2000
@@ -314,7 +316,7 @@ language = "ruby"
 {source}
 
 [ruby]
-include = []     # gem names (or path prefixes) of the code under test, e.g. ["{module}"] (empty: all but the standard library)
+include = []     # gem names (or path prefixes) of the code under test, e.g. ["rexml"] (empty: all but the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -427,7 +429,7 @@ LANGS = {
                        "write stubs in harness/*.rb, then `stitch build` and `stitch probe`"]},
     "rust": {"toml": RUST_TOML, "dockerfile": RUST_DOCKERFILE, "files": {"harness/stubs.rs": RUST_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works",
-                       "set [rust.dependencies] in stitch.toml (the library, usually { path = \"/src\" })",
+                       "in stitch.toml [rust.dependencies], name the library dependency after its crate",
                        "write stubs in harness/*.rs, then `stitch build` and `stitch probe`"]},
 }
 

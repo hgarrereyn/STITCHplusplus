@@ -5,243 +5,304 @@ description: Fuzz the API of a C, C++, Python, JavaScript, Java, Go, Rust, Ruby 
 
 # STITCH++
 
-STITCH++ fuzzes a library through its API. You write small functions (stubs) that call the library.
-The fuzzer chains stubs into programs, mutates their arguments, and reports crashes. Everything
-builds and runs in Docker.
+STITCH++ fuzzes a library through its API. You write **stubs**: small functions that each make
+one API call. The fuzzer chains stubs into **programs** (sequences of calls), generates their
+arguments, and reports crashes, uncaught exceptions and failed checks. Everything builds and runs
+in Docker.
 
-Harness languages: C/C++ (this page), Python, JavaScript, Java, Go, Rust, Ruby, Swift. The workflow and commands
-are the same; only the stub syntax and the Dockerfile differ. For another language, read its page:
-`stitch guide python` (or `javascript`, `java`, `go`, `rust`, `ruby`, `swift`).
-
-## Setup
+Supported languages: C/C++, Python, JavaScript, Java, Go, Rust, Ruby and Swift. The commands and
+the workflow are the same for all of them. The stub syntax, the `Dockerfile` and `stitch.toml`
+differ: **read your language's page before writing stubs**:
 
 ```sh
-pip install stitch-fuzz
-stitch setup --lang cpp        # or python, javascript, java, go, rust, ruby, swift (repeat for several)
+stitch guide cpp          # or python, javascript, java, go, rust, ruby, swift
+stitch guide reproducers  # turning a crash into a short standalone file
 ```
 
-`stitch setup` checks Docker and downloads the language image (or builds it once if no prebuilt
-image exists for this version). Needs Docker with buildx. Every command accepts `--json`.
+The examples on this page are C++. Every language page shows the same features in its own syntax.
+
+## Concepts
+
+A stub's signature tells the fuzzer what the stub needs and what it produces:
+
+```cpp
+New<Json> new_object() { ... }                                          // produces a Json object
+New<Json> parse(Str<4096, JsonText> text) { ... }                       // produces one from a string
+void add_item(Borrow<Json> obj, Str<64> key, Take<Json> item) { ... }   // uses one, consumes another
+void roundtrip(Borrow<Json> j) { ... }                                  // uses one
+```
+
+- **Object**: a value one stub produces and later stubs use: a parsed document, a handle, a
+  connection. A stub can **borrow** an object (use it; it stays available), **take** it (consume
+  it), or return a **new** one.
+- **Fuzzed parameter**: every other parameter. Numbers, ranges, choices from a list, strings and
+  byte buffers. The fuzzer picks the values.
+- **Program**: a list of calls, where object inputs refer to the outputs of earlier calls.
+  `stitch exec --trace` prints programs like this:
+  ```
+  [stitch] #0 new_object()
+  [stitch]     -> ok produced o0.0
+  [stitch] #1 parse(text=Str[4,decoded]"null")
+  [stitch]     -> ok produced o1.0
+  [stitch] #2 add_item(obj=o0.0, key=Str[3]"2/l", item=take o1.0)
+  [stitch]     -> ok
+  [stitch] #3 roundtrip(j=o0.0)
+  [stitch]     -> ok
+  ```
+- **Bail**: the call failed in an expected way (invalid input, unmet precondition). It is not a
+  bug. The call's outputs are not created; the rest of the program runs.
+- **Bug**: a crash, a sanitizer report, an exception the stub did not declare as expected, a
+  failed `check` (a property you assert), or a program slower than the timeout.
+- **Data type**: a tag on a string or byte parameter that gives it sample inputs, dictionary
+  tokens, or a decoder that generates well-formed values.
+- **Attribute**: state the harness stores on an object, for facts the library cannot tell you.
 
 ## Workflow
 
-1. `stitch init`: create the project.
-2. Edit `Dockerfile` until the library builds.
-3. Write stubs in `harness/`.
-4. `stitch probe`: fix stubs that fail.
-5. `stitch fuzz`: run a campaign.
-6. `stitch crashes`: triage each crash.
+```sh
+stitch setup --lang cpp                  # once: check Docker, get the language image
+stitch init cjson --git https://github.com/DaveGamble/cJSON --rev v1.7.18
+cd cjson                                 # edit Dockerfile, stitch.toml, harness/
+stitch build                             # build the library and the stubs
+stitch probe --secs 60                   # short run + report of stubs that fail
+stitch fuzz --jobs 4                     # campaign in the background
+stitch status                            # progress and the same report
+stitch crashes                           # unique crashes: c1, c2, ...
+stitch exec c1 --trace                   # the calls, their arguments, the report
+stitch write c1                          # the crash as one standalone source file
+```
+
+Every command accepts `--json`. `stitch setup` needs Docker with buildx.
 
 ## 1. Create a project
 
 ```sh
-stitch init cjson --git https://github.com/DaveGamble/cJSON --rev v1.7.18
-cd cjson
+stitch init cjson --git https://github.com/DaveGamble/cJSON --rev v1.7.18          # C/C++
+stitch init tomlkit --lang python --git https://github.com/python-poetry/tomlkit --rev 0.13.2
+stitch init mylib --lang rust --path ../mylib                                       # local checkout
 ```
 
-Other languages: `stitch init tomlkit --lang python --git https://github.com/python-poetry/tomlkit --rev 0.13.2`.
-For a local checkout use `--path ../cJSON` instead of `--git`. This creates:
+This creates:
 
-- `stitch.toml`: source, compile flags, fuzzing options
-- `Dockerfile`: builds the library
-- `harness/`: your stubs
+- `stitch.toml`: the library source, build settings and fuzzing options
+- `Dockerfile`: builds or installs the library
+- `harness/`: your stubs, with a commented example
 
 ## 2. Build the library
 
-The Dockerfile starts from the STITCH++ base image. The library source arrives as the `source` build context.
+The `Dockerfile` starts from the STITCH++ image for your language. The library source arrives as
+the `source` build context and is copied to `/src`:
 
 ```dockerfile
 ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
 WORKDIR /src
-RUN cmake -B build -DBUILD_SHARED_LIBS=OFF -DENABLE_CJSON_UTILS=ON && cmake --build build -j$(nproc)
+RUN cmake -B build -DBUILD_SHARED_LIBS=OFF && cmake --build build -j$(nproc)
 ```
 
-- `CC` and `CXX` already add coverage and AddressSanitizer. Build a static library.
-- Install packages with `RUN apt-get update && apt-get install -y libfoo-dev` (Ubuntu 24.04).
-- Build a tool without instrumentation: `RUN STITCH_NO_INSTR=1 make tool`.
+Your language's page shows what to install and how `stitch.toml` points at it.
 
-Then set how stubs compile and link, with paths inside the image:
-
-```toml
-[build]
-cflags = ["-I/src"]
-ldflags = ["/src/build/libcjson_utils.a", "/src/build/libcjson.a", "-lm"]
+```sh
+stitch build --image-only   # build only the library image
+stitch shell                # shell in the image, to try build commands (project at /project)
 ```
 
-`stitch build --image-only` builds the library. `stitch build` builds the library and the harness.
+When a build fails, the error and the log path are printed. Logs are in `~/.cache/stitch/logs/`.
 
 ## 3. Write stubs
 
-A stub is one API scenario. Its signature tells the fuzzer what it needs and what it produces.
+Start with the calls that create objects (constructors, parsers), then the calls that use and
+change them, then checks of properties that must hold. Read the library's tests to learn the API
+contract: docs often leave out preconditions. Your language's page starts with a complete example
+harness to copy from.
+
+### Bail, require, check
+
+| Call | Meaning |
+|---|---|
+| `bail("reason")` | stop this call; not a bug |
+| `require(cond, "reason")` | bail unless `cond` |
+| `check(cond, "what")` | a bug if `cond` is false: "check failed: what" |
+
+In languages with exceptions, list the exceptions that mean "invalid input" on the stub
+(`bails_on`, `bailsOn`); any other exception is a bug.
+
+Write bail reasons as short fixed strings: `"parse error"`, not `"parse error at line 17"`. The
+report counts bails by reason.
+
+### Rules for good stubs
+
+**One producer per kind of object.** Write `new_number` and `new_string`, not
+`new_value(kind)`. The fuzzer learns which producer each consumer needs.
+
+**Constrain parameters instead of rejecting values.** A stub that bails on most values wastes
+runs:
 
 ```cpp
-// harness/objects.hpp
-#pragma once
-#include <stitch.h>
-#include <cJSON.h>
-
-STITCH_OBJECT(Json, cJSON*);                            // object type and its C handle
-STITCH_DROP(Json, [](cJSON* j) { cJSON_Delete(j); });   // frees objects left at the end
-STITCH_DATATYPE(JsonText);                              // data type, see section 4
+void set_level(Borrow<Enc> e, I32 level) { stitch::require(level >= 0 && level <= 9, "bad level"); ... }  // bad
+void set_level(Borrow<Enc> e, Range<0, 9> level) { ... }                                                // good
+void set_mode(Borrow<Enc> e, OneOf<MODE_FAST, MODE_SMALL> mode) { ... }                                 // good
 ```
 
+Keep a few invalid values reachable when the library must reject them: a separate stub with a
+plain `I32` tests the error path.
+
+**Pick existing keys and indexes.** A random key almost never exists. Take a `Src` parameter and
+choose from what is there. Pick from a stable order (sort map keys first), so a program replays
+the same way:
+
 ```cpp
-// harness/parse/parse.cpp
-#include "../objects.hpp"
-
-New<Json> parse(Str<4096, JsonText> text) {
-    cJSON* j = cJSON_Parse(text.c_str());
-    stitch::require(j, "parse error");
-    return j;
+void delete_member(Borrow<Json> obj, Src<16> s) {
+    int n = cJSON_GetArraySize(obj);
+    stitch::require(cJSON_IsObject(obj) && n > 0, "no members");
+    cJSON_DeleteItemFromArray(obj, (int)s->choice(n));
 }
-STITCH_ENDPOINT(parse);
+```
 
+**Return typed optional outputs when the result type depends on the input.** A parser that can
+return a table or a function returns both as optional outputs, so a stub that needs a table
+takes a table:
+
+```cpp
+std::tuple<New<Value>, std::optional<New<Table>>, std::optional<New<Func>>> eval(Str<256> code);
+```
+
+**Respect ownership.** A `Take<T>` input is yours to free or hand to the library, on every path:
+
+```cpp
 void add_item(Borrow<Json> obj, Str<64> key, Take<Json> item) {
-    if (!cJSON_IsObject(obj) || !cJSON_AddItemToObject(obj, key.c_str(), item)) {
-        cJSON_Delete(item);  // we own `item` until the library takes it
+    if (!cJSON_AddItemToObject(obj, key.c_str(), item)) {
+        cJSON_Delete(item);          // still ours: free it before bailing
         stitch::bail("add failed");
     }
 }
-STITCH_ENDPOINT(add_item);
 ```
 
-Objects:
+If the library takes ownership only on success, borrow the input and mark it consumed after the
+call succeeds (`item.consume()` in C++).
 
-| In the signature | Meaning |
-|---|---|
-| `Borrow<T> x` | uses an object; it stays available |
-| `Take<T> x` | consumes the object: free it or give it to the library, also when you bail |
-| `x.consume()` | on a `Borrow`: the library took ownership in this call |
-| returns `New<T>` | produces an object |
-
-Every other parameter is fuzzed data:
-
-| Type | Value |
-|---|---|
-| `U8`..`U64`, `I8`..`I64`, `F32`, `F64`, `Bool` | numbers |
-| `Range<0, 100>` | integer in the range |
-| `OneOf<A, B, C>` | one of the constants (modes, enum values) |
-| `Flags<A, B, C>` | any OR of the flags |
-| `Str<Max, Tag>`, `Bytes<Max, Tag>` | string or buffer, `Tag` is an optional data type |
-| `File<Max, Tag>` | temporary file holding the data: `f.path()` |
-| `Raw<T>` | the bytes of a plain struct |
-| `Src<Max>` | choices made inside the stub: `s->choice(n)` |
-
-Control:
+**Use attributes for state the library cannot tell you.** Ask the library first
+(`cJSON_IsArray(x)`); store an attribute only when there is no API for it:
 
 ```cpp
-stitch::require(cond, "reason");   // stop this call; not a bug (bad input, unmet precondition)
-stitch::bail("reason");            // same, unconditionally
-stitch::check(cond, "what");       // a bug if false: reported as a crash
-STITCH_INIT { lib_global_init(); } // runs once per process
+void make_reference(Borrow<Json> target) {
+    ...
+    stitch::set(target, "refs", stitch::get(target, "refs", 0) + 1);
+}
+void delete_json(Take<Json> j) {
+    stitch::require(stitch::get(j, "refs", 0) == 0, "still referenced");   // would be a use-after-free
+    cJSON_Delete(j);
+}
 ```
 
-Attributes keep state the library does not expose:
+- A stub that copies an object copies its attributes too.
+- A stub that changes an object (sorts it, reallocates it) updates the attributes that depend on it.
+- `get(obj, "k", 0)` when a missing key is normal; `get(obj, "k")` when it must be set (the report
+  lists missing reads).
 
-```cpp
-stitch::set(obj, "refs", stitch::get(obj, "refs", 0) + 1);
-stitch::require(stitch::get(obj, "refs", 0) == 0, "object is referenced");
-stitch::set(view, "root", root);                      // link two objects
-cJSON** r = stitch::get_obj<Json>(view, "root");      // nullptr once the root is gone
-```
+**Write `check` only for properties that always hold.** Round trips (print then parse),
+idempotence (`normalize(normalize(x)) == normalize(x)`), agreement between two APIs. Exclude
+known edge cases (NaN, duplicate keys) with an `if` before the check.
 
-Ask the library first (`cJSON_IsArray(x)`). Use attributes only for what it cannot tell you.
+**Do not add guards the library does not need.** Each guard hides behavior the fuzzer could
+have tested. Add one only when the report or a crash shows that the stub breaks the API contract.
 
-Full API: [reference/harness-api.md](reference/harness-api.md).
+**Keep program state in objects, attributes or locals.** One worker process runs many programs,
+so module-level variables carry over from one program to the next. Use them only for setup that
+never changes (what an init function builds).
 
-### Rules
+**Keep stubs compiling across library versions**, so `stitch exec --rev` and `stitch bisect`
+work.
 
-- One producer per kind of object: `new_number` and `new_string`, not `new_value(kind)`.
-- If the result type depends on the input (a parsed value, a Lua variable), return typed optional
-  outputs: `std::tuple<New<Ref>, std::optional<New<Table>>, std::optional<New<Func>>>`. Stubs that
-  need a table then take `Borrow<Table>`.
-- Pick existing keys and indexes with a `Src` parameter. Random keys almost always miss.
-- Read the library's tests for the API contract. Docs often leave out preconditions.
-- A stub that copies an object must copy its attributes too.
-- If a call changes its inputs (sorts them, reallocates), update the attributes that depend on them.
-- `stitch::get(obj, "k", 0)` when a missing key is normal. `stitch::get(obj, "k")` when it must be
-  set: misses are reported.
-- Write `check` only for properties that always hold. Exclude edge cases such as NaN or duplicate keys.
-- Keep stubs compiling across library versions so `--rev` and `bisect` work.
-- Put the library's error in bail reasons, without positions or names: `"parse error"`, not
-  `"parse error at 17"`.
-- Group stubs in folders by component (`harness/parse/`, `harness/tree/`). Avoid libc names (`read`, `open`).
+**Organize by component**: `harness/parse/`, `harness/tree/`. Folder names group stubs in
+reports and in `stitch probe 'tree/*'`. In C/C++, avoid libc names for stubs (`read`, `open`).
 
 ## 4. Data types
 
-A data type gives a buffer seeds, tokens and structure. Tag the parameter (`Str<4096, JsonText>`)
-and create `harness/data/JsonText/` with any of:
+Tag a string or byte parameter with a data type, then create `harness/data/<Name>/` with any of:
 
-- `seeds/`: sample inputs. Copy the library's test files.
-- `*.dict`: tokens, one per line: `"true"`, `"\x00\x01"`.
-- a decoder: builds a valid value from fuzzer choices, so mutations stay well formed.
-
-```cpp
-static std::string value(stitch::Source& s, int depth) {
-    switch (s.choice(depth > 4 ? 4 : 6)) {
-        case 0: return "null";
-        case 1: return s.coin() ? "true" : "false";
-        case 2: return std::to_string(s.range(-1000, 1000000));
-        case 3: return "\"" + s.str(16) + "\"";
-        case 4: { std::string a = "["; while (s.more()) a += value(s, depth + 1) + ","; return a + "]"; }
-        default: { std::string o = "{"; while (s.more()) o += "\"" + s.token() + "\":" + value(s, depth + 1) + ","; return o + "}"; }
-    }
-}
-STITCH_DECODER(JsonText, [](stitch::Source& s) { return value(s, 0); });
+```
+harness/data/JsonText/
+  seeds/          sample inputs, one per file (copy the library's test files)
+  json.dict       tokens, one per line: "true"  "null"  "\x00\x01"
 ```
 
-Draw literal text with `s.str()` and `s.token()`. Compute lengths and checksums instead of drawing
-them. Look at the output with `stitch sample JsonText -n 5`.
-
-A decoder can also return a typed value (a struct, a vector of structs, a tree). Take it as
-`stitch::Val<Tag, Max>` and compose decoders with `s.draw<Tag>()`:
+and optionally a **decoder**, written in your harness language, that builds a value from fuzzer
+choices (`s.choice(n)`, `s.str(max)`, `s.token()`, ...). Mutations then change the choices, so
+values stay well formed. A JSON decoder:
 
 ```cpp
-STITCH_DECODER(Polygon, [](stitch::Source& s) {
-    std::vector<Point> v;
-    while (s.more()) v.push_back(s.draw<AnyPoint>());   // AnyPoint: another decoder
-    return v;
+STITCH_DECODER(JsonText, [](stitch::Source& s) {
+    std::string o = "{";
+    while (s.more()) o += "\"" + s.token() + "\":" + std::to_string(s.range(-1000, 1000)) + ",";
+    return o + "}";
 });
-void fill(Borrow<Canvas> c, stitch::Val<Polygon, 512> poly) { ... }
+New<Json> parse(Str<4096, JsonText> text);      // the tagged parameter
 ```
 
-Prefer this over drawing a structure from a `Src` inside the stub when the structure does not
-depend on object state: the fuzzer then generates, splices and resizes it one element at a time.
-`s.f64(lo, hi)`, `s.fixed(n)` and `s.rest()` cover float ranges, fixed-size fields and trailing
-payloads.
+`stitch sample JsonText -n 5` prints values the decoder makes.
 
-## 5. Run
+A data type with only a `.dict` file starts from random bytes, and mutations mix the tokens in.
+For structured input, add seeds or a decoder. `stitch check` warns about data types with neither.
+
+Decoder tips:
+
+- Draw literal text with `s.str(max)` and dictionary tokens with `s.token()`. `s.token()` draws
+  from the `.dict` files of the data type being decoded; without one it returns random text.
+- Compute lengths, counts and checksums from the data; do not draw them.
+- Loop with `while (s.more())` so the fuzzer can add and remove elements.
+- A decoder can return a structured value (a struct, a list of records) instead of text. Take it
+  as a `Val` parameter. When a structure does not depend on object state, prefer this to building
+  it from a `Src` inside the stub: the fuzzer then mutates it element by element.
+
+## 5. Probe and fuzz
 
 ```sh
-stitch build            # compile errors point to harness file:line
+stitch build            # prints compile errors with file and line
 stitch check            # static checks: unreachable stubs, attributes read but never set
-stitch probe --secs 60  # short run and a report of what fails (only stubs with a problem are listed)
-stitch fuzz --jobs 4    # campaign in the background; resumes its corpus (--fresh starts over)
-stitch fuzz --secs 900 --foreground   # the same, waits and prints the final stats
-stitch status           # progress and the same report
+stitch probe --secs 60  # short run (one worker) and a report of stubs with problems
+stitch probe 'parse,tree/*' --secs 30   # only these stubs and the stubs that produce their inputs
+stitch fuzz --jobs 4    # campaign 'main' in the background; resumes its corpus
+stitch fuzz --fresh     # start the corpus over
+stitch fuzz --secs 900 --foreground     # wait, then print the final stats
+stitch status           # progress and the report
 stitch stop
 ```
 
-Read the report:
+A probe report:
 
-| Report says | Do |
+```
+probe: 20s, 42.8k execs (2.1k/s), 733/3298 edges, corpus 461, calls bailing 13% (programs with a bail 66%), 0 crash/timeout programs saved
+never succeeds (1): the fuzzer stops picking these
+  item_string  [600 calls] "root is gone" x600; read missing attr 'root'
+outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):
+  add_item.obj: ok 2% after parse vs 100% after new_object
+  delete_key.obj: ok 0% after parse vs 79% after print_opts
+often skipped because an input object was missing (1): its producer bailed or returned no object
+  item_string  skipped 13797x, ran 600x
+```
+
+Here `item_string` reads an attribute `root` that its producer never managed to set (the
+producer linked to another output of the same call, which does not work). `add_item.obj` only
+succeeds on objects, and `parse` often returns arrays or numbers: that is expected.
+
+| Report line | What to do |
 |---|---|
-| never succeeds | The stub always bails. Read the reasons: a missing producer, an attribute nobody sets (`read missing attr 'x'`), or a missing environment (server, file). Fix the stub or add a producer. |
-| mostly bails | Use `Range` or `OneOf` instead of rejecting raw values. Parse errors on fuzzed input are fine. |
-| often skipped | The producer of an input usually fails. Fix the producer. |
-| depends on previous call | Normal; the fuzzer learns these pairs. Investigate only if it is a stub bug. |
-| exec bail rate > 50% | Most executions are wasted. Find the stubs that bail most. |
+| never succeeds | The stub always bails or always crashes. Read its reasons: a missing producer, an attribute nobody sets (`read missing attr 'x'`), or something missing in the environment (a server, a file). Fix the stub or add a producer. |
+| mostly bails | Use `Range`/`OneOf` instead of rejecting values. Bails from parse errors on fuzzed input are fine. |
+| outcome depends on the previous call | Usually normal: the fuzzer learns these pairs. Investigate only if the stub should accept both. |
+| often skipped | The producer of one of its inputs usually fails. Fix the producer. |
+| never called | No producer makes one of its inputs, or the run was too short. |
+| calls bailing above 50% | Most work is wasted. Fix the stubs that bail most. |
 
-After each change, run `stitch probe` again and compare. Do not add guards the library does not need:
-each guard hides behavior.
+Run `stitch probe` again after each change and compare.
 
-### Coverage
+## 6. Coverage
 
 ```sh
-stitch cov              # corpus of the latest campaign
-stitch cov main --crashes
+stitch cov                   # the latest campaign's corpus
+stitch cov probe --crashes   # another campaign, crashing programs included
 ```
 
 ```
@@ -256,57 +317,67 @@ never called: 3 library functions
   cJSON_IsBool  src/cJSON.c:2989
 ```
 
-A never-called function needs a stub, or a stub that reaches it. Open the HTML report to find
-branches the corpus never takes. Output in `.stitch/cov/<campaign>/`: `lcov.info`, `html/index.html`,
-`summary.json` (per file, with uncovered functions), `report.txt`.
+Languages whose coverage tool has no branch data print `branches -`. A never-called function
+needs a stub. Open `.stitch/cov/<campaign>/html/index.html` to find
+branches the corpus never takes. The same folder has `lcov.info`, `summary.json` (per file, with
+uncovered functions) and `report.txt`.
 
-The coverage build is separate: clang source-based coverage, no sanitizers. Memory bugs that need
-ASan to crash run to completion there.
-
-## 6. Triage
+## 7. Triage
 
 ```sh
-stitch crashes             # unique crashes: c1, c2, ... (latest campaign)
-stitch exec c1 --trace     # every call with its arguments, then the sanitizer report
-stitch exec c1 --args      # the same with long arguments in full
-stitch minimize c1         # fewer calls, smaller inputs; c1 then refers to the minimized program
-stitch exec c1 --rev HEAD  # does it still crash upstream?
+stitch crashes             # unique crashes of the latest `stitch fuzz` campaign
+stitch crashes probe       # of the probe
+stitch exec c1 --trace     # every call with its arguments, then the bug report
+stitch exec c1 --args      # the same, long arguments in full
+stitch minimize c1         # fewer calls, smaller inputs (can take minutes); c1 then refers to the result
+stitch exec c1 --rev HEAD  # does it still crash on the newest library code?
 ```
 
-A crash id is `c3` (latest campaign), `probe:c3` or `probe/c3` (another campaign; or `--campaign
-probe`). Ids stay the same while a campaign runs and across `stitch crashes` calls. When the
-harness changed since a campaign ran, `stitch crashes` reruns its crashes with the current build,
-so buckets the fixed stubs no longer produce disappear.
+```
+1 unique crash in 'probe':
+  c1   x3     heap-use-after-free WRITE  in patch
+         suffix_object cJSON.c:1948:16
+         add_item_to_array cJSON.c:1999:13
+         example (14 calls): .stitch/campaigns/probe/w0/crashes/41f9cd94c7dfe525.stp
+```
+
+Crashes are grouped by kind and innermost library frames. The stub named in the list comes from
+one example program; other programs in the group may crash in another stub. One bug can show as
+several groups (a stack overflow ends in different frames): fix or explain the first, then run
+`stitch crashes` again.
+
+Crash ids: `c1` is in the latest campaign that is not `probe` (or in `probe` if there is no
+other). Use `probe:c1` or `--campaign probe` for another campaign. Ids stay the same while a
+campaign runs. After you change the harness, `stitch crashes` reruns the crashes with the new
+build, so crashes caused by fixed stubs disappear.
 
 Decide for each crash:
 
-- **Harness bug**: the stub broke the API contract (double free, wrong ownership, missing init).
-  Fix the stub, run `stitch build`, and confirm `stitch exec c1` no longer crashes.
-- **Library bug**: the stubs followed the contract. Report it:
-  ```sh
-  stitch repro c1           # Docker reproducer folder, verified from scratch
-  stitch bisect c1          # commit that introduced the bug (--good v1.0 if you know a good version)
-  stitch bisect c1 --fixed  # commit that fixed it, if HEAD no longer crashes
-  stitch write c1           # the crash as one standalone source file
-  ```
-- **Unsure**: read the library source at the top stack frames.
+- **Harness bug**: the stubs broke the API contract (double free, wrong ownership, a missing init
+  call, a precondition the library documents). Fix the stub, `stitch build`, and confirm that
+  `stitch exec c1` no longer crashes.
+- **Library bug**: the stubs followed the contract. Make a reproducer (below), and check whether
+  it is fixed upstream with `stitch exec c1 --rev HEAD`.
+- **Unsure**: read the library source at the top stack frames, and the library's tests and docs
+  for that function.
 
-A `timeout` bucket is a program that runs past the campaign's `timeout_ms`, named by the call that
-was running (`stitch exec` prints how long it took). It is usually a real slowness bug (a regex with
-catastrophic backtracking, a quadratic loop), unless the stub itself loops for long.
+A `timeout` crash is a program that ran longer than `timeout_ms`, named after the call that was
+running. It is usually a real performance bug (a regex with catastrophic backtracking, a quadratic
+loop), unless the stub itself loops for long.
 
-### Minimal reproducer
-
-`stitch write c1` creates `.stitch/standalone/c1/repro.cpp`: each call with its stub code pasted in
-and its arguments filled in. Shrink a copy to plain library calls and check after every edit:
+## 8. Reproducers
 
 ```sh
-cp .stitch/standalone/c1/repro.cpp .stitch/standalone/c1/min.c
-stitch try .stitch/standalone/c1/min.c
+stitch repro c1           # Docker reproducer folder (.stitch/repros/<project>-c1), verified from scratch
+stitch write c1           # the crash as one source file in your harness language
+stitch try min.c          # build and run an edited copy: SAME CRASH, NO CRASH, ...
+stitch bisect c1          # the commit that introduced the bug (--good v1.0 if you know one)
+stitch bisect c1 --fixed  # the commit that fixed it, if HEAD no longer crashes
 ```
 
-`stitch try` prints SAME CRASH (exit code 0), DIFFERENT CRASH, NO CRASH, DIVERGED or COMPILE ERROR.
-A finished `min.c` looks like this:
+`stitch write` turns the crashing program into one file in your harness language, with the
+arguments filled in. Shrink a copy to plain library calls, running `stitch try` after every edit.
+A finished reproducer:
 
 ```c
 #include <cJSON.h>
@@ -318,46 +389,46 @@ int main(void) {
     /* sorts `from`, but the head's prev (the tail pointer) still points to "b" */
     cJSON *patches = cJSONUtils_GeneratePatchesCaseSensitive(from, to);
     /* removing "b" frees it; adding "d" then writes to the freed tail */
-    cJSONUtils_ApplyPatches(from, patches);
+    cJSONUtils_ApplyPatchesCaseSensitive(from, patches);
     return 0;
 }
 ```
 
-Steps and pitfalls: [reference/reproducers.md](reference/reproducers.md).
+Steps and pitfalls: `stitch guide reproducers`.
 
 ## Versions and local code
 
-- `stitch build --rev v1.7.17` builds another version (cached per commit).
-- `[source] path = "../lib"` in `stitch.toml` fuzzes a local checkout, uncommitted changes included.
-  If it is a git checkout, `stitch bisect` walks its history.
+- `stitch build --rev v1.7.17` builds another version of the library (cached per commit).
+- `[source] path = "../lib"` in `stitch.toml` fuzzes a local checkout, uncommitted changes
+  included. If it is a git checkout, `stitch bisect` walks its history.
 
 ## Commands
 
 | Command | Does |
 |---|---|
-| `stitch setup` | check Docker, get the base image |
-| `stitch init DIR --git URL --rev REV [--lang L]` | new project (`--path DIR` for local code) |
+| `stitch setup [--lang L]` | check Docker, get the language image |
+| `stitch init DIR (--git URL --rev REV \| --path DIR) [--lang L]` | new project |
 | `stitch build [--rev REV] [--image-only]` | build the library image and the harness |
 | `stitch check` | build + static checks |
-| `stitch probe [STUBS] --secs N` | short run + report (`STUBS`: `'parse,tree/*'`) |
-| `stitch fuzz [--jobs N] [--secs N]` | start a campaign in the background |
-| `stitch status`, `stitch stop` | campaign progress, stop it |
-| `stitch cov [CAMPAIGN\|FILES] [--crashes] [--rev REV]` | line, function and branch coverage of a corpus: lcov + HTML |
-| `stitch crashes` | unique crashes |
-| `stitch exec ID [--trace\|--args] [--rev REV]` | run a crash or `.stp` program (`ID`: `c3`, `probe:c3`, a file) |
+| `stitch probe [STUBS] [--secs N]` | short run + report (`STUBS`: `'parse,tree/*'`) |
+| `stitch fuzz [--jobs N] [--secs N] [--name NAME] [--only STUBS] [--fresh] [--foreground]` | campaign, in the background by default |
+| `stitch status [NAME]`, `stitch stop [NAME]` | campaign progress; stop it |
+| `stitch crashes [NAME]` | unique crashes |
+| `stitch exec ID [--trace\|--args] [--rev REV]` | run a crash or a `.stp` program file |
 | `stitch minimize ID` | shrink a crashing program |
+| `stitch cov [NAME\|FILES] [--crashes] [--rev REV]` | coverage of a corpus: lcov + HTML |
 | `stitch repro ID` | Docker reproducer folder |
-| `stitch bisect ID [--good REV] [--fixed]` | find the commit that introduced (or fixed) a crash |
-| `stitch write ID` | standalone source file of a crash (every language) |
-| `stitch try FILE [ID]` | build and run a standalone file, compare with `expected.json` or crash `ID` |
-| `stitch sample TYPE -n N` | values a decoder produces |
-| `stitch shell` | shell in the project image (project at `/project`) |
-| `stitch guide [TOPIC]` | this guide; topics: `api`, `reproducers`, `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift` |
+| `stitch write ID` | standalone source file of a crash |
+| `stitch try FILE [ID] [--rev REV] [--show]` | build and run a standalone file, compare with the crash |
+| `stitch bisect ID [--good REV] [--fixed]` | the commit that introduced (or fixed) a crash |
+| `stitch sample TYPE [-n N]` | values a data type's decoder makes |
+| `stitch shell` | shell in the project image |
+| `stitch guide [TOPIC]` | this guide; topics: a language name, `reproducers` |
 
 ## Files
 
-- `.stitch/build/`: `fuzzer`, `repro`, `manifest.json` (the stubs as the fuzzer sees them)
-- `.stitch/campaigns/<name>/`: corpus, crashes, stats, `triage.json`
-- `.stitch/cov/<campaign>/`: `lcov.info`, `html/`, `summary.json`
+- `.stitch/build/manifest.json`: the stubs as the fuzzer sees them (inputs, outputs, parameters)
+- `.stitch/campaigns/<name>/`: corpus, crashes, stats
+- `.stitch/cov/<campaign>/`: `lcov.info`, `html/`, `summary.json`, `report.txt`
 - `.stitch/repros/`, `.stitch/standalone/`, `.stitch/bisect/`: reproducers and bisect results
-- Image build logs: `~/.cache/stitch/logs/`
+- `~/.cache/stitch/logs/`: image build logs

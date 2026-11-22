@@ -134,6 +134,19 @@ def global_get(key, default=None):
     return _globals.get(key, default)
 
 
+class time_limit:
+    """No limit in a standalone reproducer: the block just runs."""
+
+    def __init__(self, seconds):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
 def file(data):
     """Temporary file holding `data` (a File[...] parameter)."""
     fd, path = _tempfile.mkstemp(prefix="stitch-repro-")

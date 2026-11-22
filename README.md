@@ -37,9 +37,10 @@ stitch write c1                  # the crash as one source file, to shrink with 
 ```
 
 The CLI is the same for every language. The guide is an agent skill:
-[`skill/stitch/SKILL.md`](skill/stitch/SKILL.md), with a reference per language in
-[`skill/stitch/reference/`](skill/stitch/reference/). `stitch guide` prints it, and `stitch guide
-python` (or another language) prints a language's reference.
+[`skill/stitch/SKILL.md`](skill/stitch/SKILL.md) covers the workflow, and
+[`skill/stitch/reference/`](skill/stitch/reference/) has one page per language. `stitch guide`
+prints the workflow; `stitch guide python` (or `cpp`, `javascript`, `java`, `go`, `rust`, `ruby`,
+`swift`) prints a language's page.
 
 A stub has the same shape in every language: typed parameters are fuzzed, objects come from
 earlier calls, and results become objects for later calls.
@@ -103,23 +104,9 @@ let parse = endpoint("parse") { (html: Str<4096, Html>) throws -> New<Doc> in Ne
 | Ruby 3.4 (YJIT) | Prism source rewriting (byte counters) | rewritten `==`, `<`, `start_with?`, `case`/`when`, ... | undeclared exceptions, `check` |
 | Swift 6.2 | SanitizerCoverage, in-process (on the C/C++ runtime) | `trace-cmp` | traps (bounds, overflow, nil unwrap), ASan, `check` |
 
-Every language has the full workflow: probe, fuzz, status, crashes (with timeouts),
-minimize, exec (`--rev`), bisect, repro folders, `write`/`try` standalone files, and `cov`
-(lcov + HTML: llvm-cov, coverage.py, c8, JaCoCo, `go tool cover`, Ruby's `Coverage`).
-
-C/C++, Rust and Swift harnesses run in the fuzzer's process (a persistent fork server); the
-others run a worker process in their own runtime. Programs per second on the example projects
-before and after the runtime work of 2026-11 (one worker, 30 s, fixed seed, seven campaigns at a
-time on 16 cores):
-
-| Language | Before → after |
-|---|---|
-| Java | commons-lang 1.8k → 10.3k, org.json 1.6k → 5.8k, jsoup 1.2k → 2.5k |
-| Rust | toml_edit 0.25k → 2.2k, url 0.6k → 2.2k, smallvec 1.6k → 2.7k |
-| Python | intervaltree 1.5k → 3.5k, tomlkit 0.6k → 1.1k, dateutil 61 → 74 |
-| JavaScript | lodash 1.2k → 1.5k; yaml and semver unchanged (the library dominates) |
-| C/C++, Go | unchanged (within noise) |
-| Ruby, Swift (new) | rack 1.6k, Yams 1.1k, SwiftSoup 1.0k, rexml 0.9k, addressable 0.7k, CryptoSwift 0.6k |
+Every language supports every command: probe, fuzz, status, crashes (including timeouts),
+minimize, exec (`--rev`), bisect, repro folders, `write`/`try` standalone files, and `cov` (lcov
+and HTML, from llvm-cov, coverage.py, c8, JaCoCo, `go tool cover` or Ruby's `Coverage`).
 
 ## Example projects
 
@@ -188,13 +175,11 @@ Line coverage is `stitch cov` on the campaign's corpus; findings were rerun at t
   Programs store stub names, so corpora survive harness changes. The format is the same for every
   language.
 - **Execution.** C/C++, Rust and Swift stubs run in the fuzzer's process: a persistent fork
-  server runs many programs in a forked child, with results and coverage in shared memory
-  (replaced after a crash, a timeout, or a bounded number of programs; a Rust panic or a failed
-  check does not end it). Swift stubs run on the C/C++ runtime through a small C bridge. Python,
-  JavaScript, Java, Go and Ruby run a worker process in their own runtime that talks to the engine
-  over a pipe ([protocol](languages/README.md#worker-protocol)). It reports each call's result, the
-  coverage of the code under test and the comparisons it made. It stays alive after an exception,
-  and it is restarted after a timeout or a fatal error.
+  server runs many programs in a forked child, with results and coverage in shared memory.
+  Python, JavaScript, Java, Go and Ruby run a worker process in their own runtime that talks to
+  the engine over a pipe ([protocol](languages/README.md#worker-protocol)) and reports each call's
+  result, coverage and comparisons. A worker survives exceptions and is restarted after a timeout
+  or a fatal error.
 - **Learning.** Stubs that never succeed get picked less. For each input, the fuzzer tracks which
   producers lead to success and prefers them.
 - **Mutations.** Program edits (insert, delete, rewire, splice calls) and byte mutations of single
@@ -219,7 +204,7 @@ Line coverage is `stitch cov` on the campaign's corpus; findings were rerun at t
 | `cli/stitch_fuzz/` | the `stitch` CLI (Python, no dependencies); `writers/` has the standalone writers per language |
 | `engine/` | the fuzzer, in Rust on LibAFL 0.16: in-process for C/C++, `stitch-engine` + worker protocol for the others |
 | `languages/<lang>/` | per language: `Dockerfile`, `runtime/` (the harness API), `bin/stitch-build`, `standalone/` |
-| `skill/stitch/` | agent skill: `SKILL.md` and a reference per language |
+| `skill/stitch/` | agent skill: `SKILL.md` (workflow) and `reference/` (one page per language, reproducers) |
 | `projects/<lang>/` | example harnesses, notes and bug reports |
 | `examples/` | toy libraries with planted bugs: `demolib` (C, history in `examples/demolib-src.bundle`) and `<lang>-demo` |
 | `tests/` | `smoke.sh` (whole C/C++ pipeline on demolib), `languages.py` (build, fuzz, triage, write/try, repro, cov per language), `standalone_fidelity.py` |
