@@ -62,8 +62,13 @@ Run `bin/stitch` from the checkout, or `pip install -e .`. Tests are in [`tests/
 @inproceedings{green2026stitching,
   title     = {Automatic, Expressive, and Scalable Fuzzing with Stitching},
   author    = {Green, Harrison and Brown, Fraser and Le Goues, Claire},
-  booktitle = {Proceedings of the ACM SIGSAC Conference on Computer and Communications Security (CCS)},
-  year      = {2026}
+  booktitle = {Proceedings of the 2026 ACM SIGSAC Conference on Computer and Communications Security},
+  series    = {CCS '26},
+  publisher = {ACM},
+  address   = {The Hague, Netherlands},
+  pages     = {1582--1596},
+  year      = {2026},
+  doi       = {10.1145/3830454.3846663}
 }
 ```
 
