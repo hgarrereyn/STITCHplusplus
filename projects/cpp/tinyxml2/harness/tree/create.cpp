@@ -1,6 +1,6 @@
 #include "../objects.hpp"
 
-New<Node> new_element(Borrow<Doc> d, Str<32, XmlName> name) { return mk(d, d->NewElement(name.c_str())); }
+New<Node> new_element(Borrow<Doc> d, Str<32, XmlName> name) { stitch::require(valid_name(name.c_str()), "bad name"); return mk(d, d->NewElement(name.c_str())); }
 STITCH_ENDPOINT(new_element);
 
 New<Node> new_text(Borrow<Doc> d, Str<64> text, Bool cdata) {

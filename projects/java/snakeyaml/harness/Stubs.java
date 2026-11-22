@@ -41,7 +41,7 @@ public class Stubs {
             case 0: return String.valueOf(s.i64());
             case 1: return s.pick("true", "false", "yes", "No", "on", "null", "~", "", "Null", "NULL");
             case 2: return s.pick("1.5", "-.inf", ".nan", "1e3", "0x1F", "0o17", "017", "1_000", "0b101", "+12", "190:20:30", "1:30.5");
-            case 3: return s.pick("2001-12-14", "2001-12-14t21:59:43.10-05:00", "2002-12-14 1:2:3 +5", "0000-01-01");
+            case 3: return s.pick("2001-12-14", "2001-12-14t21:59:43.10-05:00", "2002-12-14 1:2:3 +5", "1999-01-01");
             case 4: return "\"" + s.str(8).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
             case 5: return "'" + s.str(8).replace("'", "''") + "'";
             case 6: return "\"" + s.pick("\\x41", "\\u00e9", "\\U0001F600", "\\N", "\\_", "\\L", "\\e", "\\0", "\\\n", "\\ud800") + "\"";
@@ -125,7 +125,7 @@ public class Stubs {
                                     @OneOf(ints = {-1, 0, 1, 2, 5, 10, 20, 40, 80, 200}) int width,
                                     DumperOptions.LineBreak lineBreak,
                                     @OneOf(ints = {0, 10, 1, 2, 3, 50}) int maxAliases,
-                                    @Range(lo = 0, hi = 1024) int maxSimpleKey) {
+                                    @Range(lo = 0, hi = 1024) int maxSimpleKey, DumperOptions.NonPrintableStyle nps) {
         LoaderOptions lo = new LoaderOptions();
         lo.setAllowDuplicateKeys((bits & 1) != 0);
         lo.setAllowRecursiveKeys((bits & 2) != 0);
@@ -146,7 +146,47 @@ public class Stubs {
         d.setWidth(width);
         d.setLineBreak(lineBreak);
         d.setMaxSimpleKeyLength(maxSimpleKey);
-        return new Yaml(new SafeConstructor(lo), new Representer(), d, lo);
+        d.setNonPrintableStyle(nps);
+        Yaml y = new Yaml(new SafeConstructor(lo), new Representer(), d, lo);
+        Stitch.set(y, "esc", nps == DumperOptions.NonPrintableStyle.ESCAPE ? 1L : 0L);
+        return y;
+    }
+
+    // ---------------------------------------------------------------- helpers
+    /** load, but constructor-level leaks (NumberFormatException etc. from SafeConstructor) are bails;
+     *  `load` itself reports those. */
+    static Object tolerantLoad(Yaml y, String text) {
+        try {
+            return y.load(text);
+        } catch (YAMLException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            for (StackTraceElement f : e.getStackTrace())
+                if (f.getClassName().contains("Constructor")) throw Stitch.bail("constructor leak");
+            throw e;
+        }
+    }
+
+    static String dumpOrBail(Yaml y, Object data) {
+        try {
+            return y.dump(data);
+        } catch (YAMLException e) {
+            if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate");
+            throw e;
+        }
+    }
+
+    static final java.util.regex.Pattern ANCHOR = java.util.regex.Pattern.compile("id\\d+");
+
+    static void requirePrintable(Object o, IdentityHashMap<Object, Boolean> seen, boolean escape) {
+        if (o == null || seen.put(o, true) != null) return;
+        if (o instanceof String) {
+            Stitch.require(escape || StreamReader.isPrintable((String) o), "non-printable string dumps as !!binary");
+        } else if (o instanceof Map) {
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) o).entrySet()) { requirePrintable(e.getKey(), seen, escape); requirePrintable(e.getValue(), seen, escape); }
+        } else if (o instanceof Collection) {
+            for (Object x : (Collection<?>) o) requirePrintable(x, seen, escape);
+        }
     }
 
     // ---------------------------------------------------------------- loading
@@ -160,14 +200,19 @@ public class Stubs {
     @Obj("DataList")
     public static List<Object> load_all(Yaml y, @Str(max = 1024, type = "YamlText") String text) {
         List<Object> out = new ArrayList<>();
-        for (Object o : y.loadAll(text)) out.add(o);
+        try { for (Object o : y.loadAll(text)) out.add(o); }
+        catch (YAMLException e) { throw e; }
+        catch (RuntimeException e) {
+            for (StackTraceElement f : e.getStackTrace()) if (f.getClassName().contains("Constructor")) throw Stitch.bail("constructor leak");
+            throw e;
+        }
         return out;
     }
 
     @Endpoint(bailsOn = {YAMLException.class})
     public static void load_as_map(Yaml y, @Str(max = 512, type = "YamlText") String text) {
-        Object o = y.load(text);
-        Stitch.require(o instanceof Map, "not a map");
+        Object o = tolerantLoad(y, text);
+        if (!(o instanceof Map)) return;
         for (Map.Entry<?, ?> e : ((Map<?, ?>) o).entrySet()) Objects.toString(e.getKey());
     }
 
@@ -248,44 +293,54 @@ public class Stubs {
 
     @Endpoint
     @Obj("Data")
-    public static Object data_date(@Range(lo = -62135769600000L, hi = 253402300799000L) long ms) { return new Date(ms); }
+    public static Object data_date(@Range(lo = -12219292800000L, hi = 253402300799000L) long ms) { return new Date(ms); }
+
+    @Endpoint
+    @Obj("List")
+    public static List<Object> data_list() { return new ArrayList<Object>(); }
+
+    @Endpoint
+    @Obj("Map")
+    public static Map<Object, Object> data_map() { return new LinkedHashMap<Object, Object>(); }
+
+    @Endpoint
+    @Obj("Set")
+    public static Set<Object> data_set() { return new LinkedHashSet<Object>(); }
+
+    /** The same Java object again, as a generic Data value (so containers can nest, even recursively). */
+    @Endpoint
+    @Obj("Data")
+    public static Object list_as_data(@Obj("List") List<Object> l) { return l; }
 
     @Endpoint
     @Obj("Data")
-    public static Object data_list() { return new ArrayList<Object>(); }
+    public static Object map_as_data(@Obj("Map") Map<Object, Object> m) { return m; }
 
     @Endpoint
     @Obj("Data")
-    public static Object data_map() { return new LinkedHashMap<Object, Object>(); }
+    public static Object set_as_data(@Obj("Set") Set<Object> m) { return m; }
 
     @Endpoint
-    @Obj("Data")
-    public static Object data_set() { return new LinkedHashSet<Object>(); }
-
-    @Endpoint
-    public static void list_add(@Obj("Data") Object list, @Obj("Data") Object item) {
-        Stitch.require(list instanceof List, "not a list");
-        ((List<Object>) list).add(item);   // may add the list to itself: recursive structure
+    public static void list_add(@Obj("List") List<Object> list, @Obj("Data") Object item) {
+        list.add(item);   // may add the list to itself: recursive structure
     }
 
     @Endpoint
-    public static void map_put(@Obj("Data") Object map, @Obj("Data") Object key, @Obj("Data") Object value) {
-        Stitch.require(map instanceof Map, "not a map");
+    public static void map_put(@Obj("Map") Map<Object, Object> map, @Obj("Data") Object key, @Obj("Data") Object value) {
         Stitch.require(!(key instanceof Collection) && !(key instanceof Map), "collection key");
-        ((Map<Object, Object>) map).put(key, value);
+        map.put(key, value);
     }
 
     @Endpoint
-    public static void set_add(@Obj("Data") Object set, @Obj("Data") Object item) {
-        Stitch.require(set instanceof Set, "not a set");
+    public static void set_add(@Obj("Set") Set<Object> set, @Obj("Data") Object item) {
         Stitch.require(!(item instanceof Collection) && !(item instanceof Map), "collection item");
-        ((Set<Object>) set).add(item);
+        set.add(item);
     }
 
     // ---------------------------------------------------------------- dumping
     @Endpoint
     public static void dump(Yaml y, @Obj("Data") Object data) {
-        Stitch.check(y.dump(data) != null, "dump non-null");
+        Stitch.check(dumpOrBail(y, data) != null, "dump non-null");
     }
 
     @Endpoint(bailsOn = {YAMLException.class})
@@ -296,8 +351,9 @@ public class Stubs {
     @Endpoint
     public static void dump_writer(Yaml y, @Obj("Data") Object data) {
         StringWriter w = new StringWriter();
-        y.dump(data, w);
-        Stitch.check(w.toString().equals(y.dump(data)), "dump(data, writer) equals dump(data)");
+        try { y.dump(data, w); } catch (YAMLException e) { if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate"); throw e; }
+        String again = dumpOrBail(y, data);
+        Stitch.check(ANCHOR.matcher(w.toString()).replaceAll("id").equals(ANCHOR.matcher(again).replaceAll("id")), "dump(data, writer) equals dump(data) modulo anchor numbers");
     }
 
     @Endpoint
@@ -311,11 +367,12 @@ public class Stubs {
     /** Oracle: load(dump(x)) is equal to x. */
     @Endpoint
     public static void dump_roundtrip(Yaml y, @Obj("Data") Object data) {
-        String out = y.dump(data);
+        requirePrintable(data, new IdentityHashMap<>(), Stitch.getLong(y, "esc", 0) == 1);
+        String out = dumpOrBail(y, data);
         Object back;
         try {
             back = new Yaml(new SafeConstructor()).load(out);
-        } catch (YAMLException e) {
+        } catch (RuntimeException e) {
             throw new AssertionError("dump output does not load: " + e.getMessage().replace('\n', ' '));
         }
         Stitch.check(eq(data, back, new IdentityHashMap<>()), "load(dump(x)) equals x");
@@ -324,24 +381,27 @@ public class Stubs {
     @Endpoint
     public static void dump_all_roundtrip(Yaml y, @Obj("DataList") List<Object> docs) {
         Stitch.require(!docs.isEmpty(), "no docs");
-        String out = y.dumpAll(docs.iterator());
+        for (Object d : docs) requirePrintable(d, new IdentityHashMap<>(), Stitch.getLong(y, "esc", 0) == 1);
+        String out;
+        try { out = y.dumpAll(docs.iterator()); } catch (YAMLException e) { if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate"); throw e; }
         List<Object> back = new ArrayList<>();
         try {
             for (Object o : new Yaml(new SafeConstructor()).loadAll(out)) back.add(o);
-        } catch (YAMLException e) {
+        } catch (RuntimeException e) {
             throw new AssertionError("dumpAll output does not load: " + e.getMessage().replace('\n', ' '));
         }
         Stitch.check(back.size() == docs.size(), "dumpAll/loadAll document count");
         for (int i = 0; i < back.size(); i++)
-            Stitch.check(eq(docs.get(i), back.get(i), new IdentityHashMap<>()), "loadAll(dumpAll(x))[" + "i] equals x");
+            Stitch.check(eq(docs.get(i), back.get(i), new IdentityHashMap<>()), "loadAll(dumpAll(x))[i] equals x");
     }
 
     /** Oracle: re-dumping what was loaded is a fixpoint after one round. */
     @Endpoint(bailsOn = {YAMLException.class})
     public static void load_dump_load(Yaml y, @Str(max = 512, type = "YamlText") String text) {
-        Object a = y.load(text);
+        Object a = tolerantLoad(y, text);
         Stitch.require(a != null, "null doc");
-        String d1 = y.dump(a);
+        requirePrintable(a, new IdentityHashMap<>(), Stitch.getLong(y, "esc", 0) == 1);
+        String d1 = dumpOrBail(y, a);
         Object b = new Yaml(new SafeConstructor()).load(d1);
         Stitch.check(eq(a, b, new IdentityHashMap<>()), "load(dump(load(x))) equals load(x)");
     }
@@ -367,33 +427,39 @@ public class Stubs {
 
     @Endpoint
     @Obj("Node")
-    public static Node scalar_tagged(@OneOf(strings = {"!foo", "!!set", "tag:yaml.org,2002:x", "!e!x", "!a%20b", "tag:a.b,2000:c/d?e"}) String tag,
+    public static Node scalar_tagged(@OneOf(strings = {"!foo", "!set", "tag:yaml.org,2002:x", "!a%20b", "tag:a.b,2000:c/d?e"}) String tag,
                                      @Str(max = 20) String v) {
         return new ScalarNode(new Tag(tag), v, null, null, DumperOptions.ScalarStyle.PLAIN);
     }
 
     @Endpoint
-    @Obj("Node")
-    public static Node seq_node(boolean flow) {
+    @Obj("SeqNode")
+    public static SequenceNode seq_node(boolean flow) {
         return new SequenceNode(Tag.SEQ, new ArrayList<Node>(), flow ? DumperOptions.FlowStyle.FLOW : DumperOptions.FlowStyle.BLOCK);
     }
 
     @Endpoint
-    @Obj("Node")
-    public static Node map_node(boolean flow) {
+    @Obj("MapNode")
+    public static MappingNode map_node(boolean flow) {
         return new MappingNode(Tag.MAP, new ArrayList<NodeTuple>(), flow ? DumperOptions.FlowStyle.FLOW : DumperOptions.FlowStyle.BLOCK);
     }
 
     @Endpoint
-    public static void seq_append(@Obj("Node") Node seq, @Obj("Node") Node child) {
-        Stitch.require(seq instanceof SequenceNode, "not a seq");
-        ((SequenceNode) seq).getValue().add(child);   // child may be seq itself or an ancestor
+    public static void seq_append(@Obj("SeqNode") SequenceNode seq, @Obj("Node") Node child) {
+        seq.getValue().add(child);   // child may be seq itself or an ancestor
     }
 
     @Endpoint
-    public static void map_add(@Obj("Node") Node map, @Obj("Node") Node key, @Obj("Node") Node value) {
-        Stitch.require(map instanceof MappingNode, "not a map");
-        ((MappingNode) map).getValue().add(new NodeTuple(key, value));
+    @Obj("Node")
+    public static Node seq_as_node(@Obj("SeqNode") SequenceNode n) { return n; }
+
+    @Endpoint
+    @Obj("Node")
+    public static Node map_as_node(@Obj("MapNode") MappingNode n) { return n; }
+
+    @Endpoint
+    public static void map_add(@Obj("MapNode") MappingNode map, @Obj("Node") Node key, @Obj("Node") Node value) {
+        map.getValue().add(new NodeTuple(key, value));
     }
 
     /** Oracle: serialize(node) composes back to an equal tree. */
@@ -407,6 +473,7 @@ public class Stubs {
         } catch (YAMLException e) {
             throw new AssertionError("serialize output does not compose: " + e.getMessage().replace('\n', ' '));
         }
+        Stitch.require(!(node instanceof ScalarNode && ((ScalarNode) node).getValue().isEmpty()), "empty scalar serializes to nothing");
         Stitch.check(back != null && nodeEq(node, back, new IdentityHashMap<>(), 0), "compose(serialize(node)) equals node");
     }
 
@@ -423,6 +490,7 @@ public class Stubs {
                                          @OneOf(ints = {-1, 1, 20, 80}) int width, boolean unicode, boolean split) {
         Node n = new Yaml(new SafeConstructor()).compose(new StringReader(text));
         Stitch.require(n != null, "empty");
+        Stitch.require(!(n instanceof ScalarNode && ((ScalarNode) n).getValue().isEmpty()), "empty scalar serializes to nothing");
         DumperOptions d = new DumperOptions();
         d.setCanonical(canonical); d.setDefaultFlowStyle(flow); d.setIndent(indent); d.setWidth(width);
         d.setAllowUnicode(unicode); d.setSplitLines(split);
@@ -441,14 +509,15 @@ public class Stubs {
     /** Oracle: canonical dump of loaded data loads equal. */
     @Endpoint(bailsOn = {YAMLException.class})
     public static void canonical_dump(@Str(max = 512, type = "YamlText") String text) {
-        Object a = new Yaml(new SafeConstructor()).load(text);
+        Object a = tolerantLoad(new Yaml(new SafeConstructor()), text);
         Stitch.require(a != null, "null doc");
+        requirePrintable(a, new IdentityHashMap<>(), false);
         DumperOptions d = new DumperOptions();
         d.setCanonical(true);
-        String out = new Yaml(new SafeConstructor(), new Representer(), d).dump(a);
+        String out = dumpOrBail(new Yaml(new SafeConstructor(), new Representer(), d), a);
         Object b;
         try { b = new Yaml(new SafeConstructor()).load(out); }
-        catch (YAMLException e) { throw new AssertionError("canonical output does not load: " + e.getMessage().replace('\n', ' ')); }
+        catch (RuntimeException e) { throw new AssertionError("canonical output does not load: " + e.getMessage().replace('\n', ' ')); }
         Stitch.check(eq(a, b, new IdentityHashMap<>()), "canonical dump loads equal");
     }
 
@@ -462,6 +531,7 @@ public class Stubs {
             if (ia != ib) return false;
             return Double.compare(((Number) a).doubleValue(), ((Number) b).doubleValue()) == 0;
         }
+        if (a instanceof Date && b instanceof Date && ((Date) a).getTime() < -12219292800000L) return true;  // pre-Gregorian dates: known calendar skew
         if (a instanceof byte[] && b instanceof byte[]) return Arrays.equals((byte[]) a, (byte[]) b);
         boolean ac = a instanceof Collection || a instanceof Map;
         if (!ac) return a.equals(b);

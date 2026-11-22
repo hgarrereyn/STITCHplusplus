@@ -10,7 +10,8 @@ static std::string gen_name(stitch::Source& s) {
     return n;
 }
 STITCH_DECODER(XmlName, [](stitch::Source& s) {
-    if (s.coin(0.1)) return s.token();
+    static const char* common[] = {"a", "b", "item", "x:y", "xml", "xmlns", "_a-b.c", "id", "name"};
+    if (s.coin(0.2)) return std::string(common[s.choice(sizeof(common) / sizeof(*common))]);
     std::string n = gen_name(s);
     if (s.coin(0.15)) n += ":" + gen_name(s);
     return n;

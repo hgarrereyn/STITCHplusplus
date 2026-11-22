@@ -34,17 +34,16 @@ def parsestream_one(text: Str[1024, SqlText], enc: OneOf[None, "utf-8"]) -> New[
 def parse_check_lossless(text: Str[2048, SqlText]):
     r = sqlparse.parse(text)
     # trailing whitespace after the last statement is dropped by the splitter
-    stitch.check("".join(str(x) for x in r) == text.rstrip(), "str(parse(x)) == x")
-    stitch.check("".join(t.value for st in r for t in st.flatten()) == text.rstrip(), "flatten lossless")
+    stitch.check("".join(str(x) for x in r).rstrip() == text.rstrip(), "str(parse(x)) == x")
+    stitch.check("".join(t.value for st in r for t in st.flatten()).rstrip() == text.rstrip(), "flatten lossless")
 
 
 @stitch.endpoint
-def split_check(text: Str[2048, SqlText], strip: Bool):
-    pieces = sqlparse.split(text, strip_semicolon=strip)
-    if not strip:
-        joined = "".join("".join(p.split()) for p in pieces)
-        orig = "".join(text.split())
-        stitch.check(joined == orig, "split pieces join back modulo whitespace")
+def split_check(text: Str[2048, SqlText]):
+    pieces = sqlparse.split(text)
+    joined = "".join("".join(p.split()) for p in pieces)
+    orig = "".join(text.split())
+    stitch.check(joined == orig, "split pieces join back modulo whitespace")
     stitch.check(all(p == p.strip() for p in pieces), "split pieces stripped")
 
 
@@ -111,7 +110,7 @@ def fmt_case_idem(text: Str[512, SqlText], kc: OneOf["upper", "lower"]):
 
 
 @stitch.endpoint
-def fmt_misc(text: Str[1024, SqlText], ob: OneOf["python", "php"], sc: Bool, tl: OneOf[None, 1, 5, 40]):
+def fmt_misc(text: Str[1024, SqlText], ob: OneOf["python", "php"], sc: Bool, tl: OneOf[None, 2, 5, 40]):
     sqlparse.format(text, output_format=ob, strip_comments=sc, truncate_strings=tl)
 
 

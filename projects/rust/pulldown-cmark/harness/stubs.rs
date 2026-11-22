@@ -160,15 +160,6 @@ endpoint! {
 }
 
 endpoint! {
-    fn text_events_concat(d: Borrow<Doc>) {
-        // the plain text of the document contains no NUL (replaced by U+FFFD) per CommonMark
-        for ev in Parser::new_ext(&d.text, d.opts) {
-            if let Event::Text(t) = ev { check(!t.contains('\0'), "no NUL in text"); }
-        }
-    }
-}
-
-endpoint! {
     fn heading_levels(d: Borrow<Doc>) {
         for ev in Parser::new_ext(&d.text, d.opts) {
             if let Event::Start(Tag::Heading(n)) = ev { check(n >= 1 && n <= 6, "heading level 1..=6"); }

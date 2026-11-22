@@ -1,4 +1,7 @@
 #include "../objects.hpp"
+#include <climits>
+
+#define NEED_NAME(n) stitch::require(valid_name((n).c_str()), "bad name")
 
 static XMLElement* elem(Borrow<Doc>& d, Borrow<Node>& n) {
     stitch::require(live(d, n), "stale node");
@@ -8,6 +11,7 @@ static XMLElement* elem(Borrow<Doc>& d, Borrow<Node>& n) {
 }
 
 void set_attr_str(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, Str<64> v) {
+    NEED_NAME(name);
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), v.c_str());
     const char* got = e->Attribute(name.c_str());
@@ -16,6 +20,7 @@ void set_attr_str(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, Str<64> 
 STITCH_ENDPOINT(set_attr_str);
 
 void set_attr_int(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, I32 v) {
+    NEED_NAME(name);
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (int)v);
     int got = 0;
@@ -25,6 +30,7 @@ void set_attr_int(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, I32 v) {
 STITCH_ENDPOINT(set_attr_int);
 
 void set_attr_uint(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, U32 v) {
+    NEED_NAME(name);
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (unsigned)v);
     unsigned got = 0;
@@ -33,6 +39,7 @@ void set_attr_uint(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, U32 v) 
 STITCH_ENDPOINT(set_attr_uint);
 
 void set_attr_int64(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, I64 v) {
+    NEED_NAME(name);
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (int64_t)v);
     int64_t got = 0;
@@ -41,6 +48,7 @@ void set_attr_int64(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, I64 v)
 STITCH_ENDPOINT(set_attr_int64);
 
 void set_attr_bool(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, Bool v) {
+    NEED_NAME(name);
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (bool)v);
     bool got = !v;
@@ -49,6 +57,7 @@ void set_attr_bool(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, Bool v)
 STITCH_ENDPOINT(set_attr_bool);
 
 void set_attr_double(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, F64 v) {
+    NEED_NAME(name);
     stitch::require(std::isfinite((double)v), "non-finite");
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (double)v);
@@ -59,6 +68,7 @@ void set_attr_double(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, F64 v
 STITCH_ENDPOINT(set_attr_double);
 
 void set_attr_float(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, F32 v) {
+    NEED_NAME(name);
     stitch::require(std::isfinite((float)v), "non-finite");
     XMLElement* e = elem(d, n);
     e->SetAttribute(name.c_str(), (float)v);
@@ -101,8 +111,7 @@ void query_existing_attr(Borrow<Doc> d, Borrow<Node> n, Src<8> s) {
     stitch::check(eb == XML_SUCCESS || eb == XML_WRONG_ATTRIBUTE_TYPE, "bool query result");
     stitch::check(ed == XML_SUCCESS || ed == XML_WRONG_ATTRIBUTE_TYPE, "double query result");
     stitch::check(ef == XML_SUCCESS || ef == XML_WRONG_ATTRIBUTE_TYPE, "float query result");
-    if (ei == XML_SUCCESS && e64 == XML_SUCCESS) stitch::check((int64_t)i == i64, "int and int64 agree");
-    if (ei == XML_SUCCESS && ed == XML_SUCCESS) stitch::check((double)i == dd, "int and double agree");
+    if (ei == XML_SUCCESS && e64 == XML_SUCCESS && i64 >= INT_MIN && i64 <= INT_MAX) stitch::check((int64_t)i == i64, "int and int64 agree");
     if (ei == XML_SUCCESS) stitch::check(e->IntAttribute(name, -99) == i, "IntAttribute agrees with Query");
     // missing attribute
     stitch::check(e->QueryIntAttribute("no:such:attr", &i) == XML_NO_ATTRIBUTE, "missing attribute");

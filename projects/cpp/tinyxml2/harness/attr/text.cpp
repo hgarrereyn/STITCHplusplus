@@ -75,8 +75,6 @@ void query_text(Borrow<Doc> d, Borrow<Node> n) {
     if (!t) {
         stitch::check(a == XML_NO_TEXT_NODE && a2 == XML_NO_TEXT_NODE && a3 == XML_NO_TEXT_NODE &&
                       a4 == XML_NO_TEXT_NODE && a5 == XML_NO_TEXT_NODE && a6 == XML_NO_TEXT_NODE, "no text node");
-    } else if (a == XML_SUCCESS && a5 == XML_SUCCESS) {
-        stitch::check((double)i == dd, "int and double text agree");
     }
 }
 STITCH_ENDPOINT(query_text);

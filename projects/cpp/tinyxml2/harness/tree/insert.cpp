@@ -60,6 +60,10 @@ STITCH_ENDPOINT(delete_children);
 
 void set_value(Borrow<Doc> d, Borrow<Node> n, Str<32> v) {
     stitch::require(live(d, n), "stale node");
+    XMLNode* node = n;
+    stitch::require(!node->ToDocument(), "document has no value");
+    if (node->ToElement()) stitch::require(valid_name(v.c_str()), "bad name");
+    if (node->ToComment()) stitch::require(!strstr(v.c_str(), "--"), "comment with --");
     n->SetValue(v.c_str());
     stitch::check(!strcmp(n->Value(), v.c_str()), "Value() after SetValue");
 }

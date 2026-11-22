@@ -38,6 +38,11 @@ inline New<Node> mk(Borrow<Doc>& d, XMLNode* n) {
     stamp(r, d);
     return r;
 }
+inline bool valid_name(const char* s) {
+    if (!*s || !(isalpha((unsigned char)*s) || *s == '_')) return false;
+    for (; *s; s++) if (!(isalnum((unsigned char)*s) || *s == '_' || *s == '.' || *s == '-' || *s == ':')) return false;
+    return true;
+}
 inline std::string print_node(const XMLNode* n, bool compact) {
     XMLPrinter p(0, compact);
     n->Accept(&p);

@@ -1,14 +1,25 @@
 #include "../objects.hpp"
 #include <unistd.h>
+#include <deque>
+#include <memory>
+
+// A document we expect to print to something re-parsable: an element at the top and no stray
+// top-level text (tinyxml2 accepts such input but printing it back does not parse).
+static void need_wellformed_top(const XMLDocument* d) {
+    stitch::require(d->FirstChildElement() != nullptr, "no top-level element");
+    for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling())
+        stitch::require(!c->ToText(), "top-level text");
+}
+static XMLDocument* same_settings(const XMLDocument* d) { return new XMLDocument(d->ProcessEntities(), d->WhitespaceMode()); }
 
 // print -> parse -> print must reach a fixed point.
-void roundtrip_doc(Borrow<Doc> d, Bool compact, Bool collapse) {
+void roundtrip_doc(Borrow<Doc> d, Bool compact) {
+    need_wellformed_top(d);
     std::string s1 = print_node(d, compact);
-    stitch::require(!s1.empty(), "empty document");
-    XMLDocument d2(true, collapse ? COLLAPSE_WHITESPACE : PRESERVE_WHITESPACE);
-    XMLError e = d2.Parse(s1.c_str());
+    std::unique_ptr<XMLDocument> d2(same_settings(d));
+    XMLError e = d2->Parse(s1.c_str());
     stitch::check(e == XML_SUCCESS, "printed document parses");
-    std::string s2 = print_node(&d2, compact);
+    std::string s2 = print_node(d2.get(), compact);
     stitch::check(s1 == s2, "print(parse(print(doc))) == print(doc)");
 }
 STITCH_ENDPOINT(roundtrip_doc);
@@ -19,40 +30,41 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
     XMLNode* node = n;
     stitch::require(node->ToElement(), "not an element");
     std::string s1 = print_node(node, true);
-    XMLDocument d2;
-    stitch::check(d2.Parse(s1.c_str()) == XML_SUCCESS, "printed element parses");
-    stitch::check(print_node(&d2, true) == s1, "element print is stable");
+    std::unique_ptr<XMLDocument> d2(same_settings(d));
+    stitch::check(d2->Parse(s1.c_str()) == XML_SUCCESS, "printed element parses");
+    stitch::check(print_node(d2.get(), true) == s1, "element print is stable");
 }
 STITCH_ENDPOINT(roundtrip_node);
 
 // Parsing and printing the same text twice must agree.
-void parse_print_stable(Str<4096, XmlText> text, Bool compact) {
-    XMLDocument d;
+void parse_print_stable(Str<4096, XmlText> text, Bool compact, Bool processEntities) {
+    XMLDocument d(processEntities);
     stitch::require(d.Parse(text.c_str()) == XML_SUCCESS, "parse error");
+    need_wellformed_top(&d);
     std::string s1 = print_node(&d, compact);
-    XMLDocument d2;
-    stitch::check(d2.Parse(s1.c_str()) == XML_SUCCESS || s1.empty(), "reparse of printed output");
+    XMLDocument d2(processEntities);
+    stitch::check(d2.Parse(s1.c_str()) == XML_SUCCESS, "reparse of printed output");
     stitch::check(print_node(&d2, compact) == s1, "print is a fixed point");
 }
 STITCH_ENDPOINT(parse_print_stable);
 
 // Deep-cloning the whole document content into another document must print identically.
 void clone_doc(Borrow<Doc> d) {
-    XMLDocument d2;
+    XMLDocument d2(d->ProcessEntities(), d->WhitespaceMode());
     for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling()) d2.InsertEndChild(c->DeepClone(&d2));
     stitch::check(print_node(d, false) == print_node(&d2, false), "cloned document prints the same");
 }
 STITCH_ENDPOINT(clone_doc);
 
 void save_load(Borrow<Doc> d, Bool compact) {
+    need_wellformed_top(d);
     std::string path = "/tmp/stitch_tx2_" + std::to_string(getpid()) + ".xml";
     XMLError e = d->SaveFile(path.c_str(), compact);
     stitch::require(e == XML_SUCCESS, "save failed");
-    XMLDocument d2;
+    XMLDocument d2(d->ProcessEntities(), d->WhitespaceMode());
     XMLError l = d2.LoadFile(path.c_str());
     remove(path.c_str());
     std::string s1 = print_node(d, compact);
-    if (s1.empty()) return;
     stitch::check(l == XML_SUCCESS, "saved file loads");
     stitch::check(print_node(&d2, compact) == s1, "saved file prints the same");
 }
@@ -67,20 +79,31 @@ New<Printer> new_printer(Bool compact) {
 }
 STITCH_ENDPOINT(new_printer);
 
+// OpenElement keeps the name pointer until CloseElement: it must outlive the call.
+static const char* keep(const char* s) {
+    static std::deque<std::string> pool;
+    stitch::require(pool.size() < 100000, "pool full");
+    pool.push_back(s);
+    return pool.back().c_str();
+}
+
 void printer_open(Borrow<Printer> p, Str<32, XmlName> name) {
-    p->OpenElement(name.c_str());
+    stitch::require(valid_name(name.c_str()), "bad name");
+    p->OpenElement(keep(name.c_str()));
     stitch::set(p, "depth", (long)stitch::get(p, "depth", 0) + 1);
     stitch::set(p, "open", 1);
 }
 STITCH_ENDPOINT(printer_open);
 
 void printer_attr(Borrow<Printer> p, Str<32, XmlName> name, Str<32> v) {
+    stitch::require(valid_name(name.c_str()), "bad name");
     stitch::require(stitch::get(p, "open", 0) == 1, "no open start tag");
     p->PushAttribute(name.c_str(), v.c_str());
 }
 STITCH_ENDPOINT(printer_attr);
 
 void printer_attr_int(Borrow<Printer> p, Str<32, XmlName> name, I32 v) {
+    stitch::require(valid_name(name.c_str()), "bad name");
     stitch::require(stitch::get(p, "open", 0) == 1, "no open start tag");
     p->PushAttribute(name.c_str(), (int)v);
 }

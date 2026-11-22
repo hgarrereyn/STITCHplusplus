@@ -9,7 +9,7 @@ rev = "0.5.0"   # branch, tag or commit; `stitch build --rev X` overrides it
 
 [swift]
 dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness
-products = ['.product(name: "ink", package: "src")']             # the library products it imports
+products = ['.product(name: "Ink", package: "src")']             # the library products it imports
 
 [fuzz]
 timeout_ms = 2000
