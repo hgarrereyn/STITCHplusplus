@@ -1,6 +1,7 @@
 #!/bin/sh
 # End-to-end test on examples/demolib: build, check, probe, fuzz, triage, minimize, repro, bisect.
-# STITCH_SMOKE_SECS (default 90): fuzzing time; raise it on a busy machine.
+# STITCH_SMOKE_SECS (default 90): fuzzing time per round; STITCH_SMOKE_ROUNDS (default 3): rounds
+# to find both planted bugs. Raise them on a busy machine.
 # The demo library has two planted bugs with known introducing commits:
 #   "allow 16 character keys" (off-by-one)  and  "debug level hook" (magic value, needs cmplog).
 set -eu
@@ -13,15 +14,23 @@ fail() { echo "FAIL: $*"; exit 1; }
 $STITCH -C $P build >/dev/null || fail build
 $STITCH -C $P check --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["endpoints"] == 8, d' || fail check
 $STITCH -C $P --json probe --secs 10 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["execs"] and d["edges_covered"] and isinstance(d["report"], list), {k: d.get(k) for k in ("execs", "edges_covered")}' || fail probe
-$STITCH -C $P fuzz --name smoke --secs "${STITCH_SMOKE_SECS:-90}" --fresh --foreground >/dev/null 2>&1 || true
-$STITCH -C $P crashes smoke --json > /tmp/stitch-smoke-crashes.json || fail crashes
-python3 - <<'EOF' || fail "expected both planted bugs"
-import json
+# fuzz until both planted bugs are found: a fresh campaign, then up to STITCH_SMOKE_ROUNDS - 1 more
+# rounds that resume its corpus (the magic value can take a while on a slow machine)
+fresh=--fresh; round=0
+while :; do
+  round=$((round + 1))
+  $STITCH -C $P fuzz --name smoke --secs "${STITCH_SMOKE_SECS:-90}" $fresh --foreground >/dev/null 2>&1 || true
+  fresh=
+  $STITCH -C $P crashes smoke --json > /tmp/stitch-smoke-crashes.json || fail crashes
+  python3 - "$round" <<'EOF' && break
+import json, sys
 b = json.load(open("/tmp/stitch-smoke-crashes.json"))["buckets"]
 lines = {f.split()[1].split(":")[1] for x in b for f in x["frames"][:1]}
-print("crash lines in msg.c:", sorted(lines))
+print(f"round {sys.argv[1]}: crash lines in msg.c:", sorted(lines))
 assert {"47", "51"} <= lines, lines
 EOF
+  [ "$round" -lt "${STITCH_SMOKE_ROUNDS:-3}" ] || fail "expected both planted bugs"
+done
 for id in $(python3 -c 'import json; print(" ".join(b["id"] for b in json.load(open("/tmp/stitch-smoke-crashes.json"))["buckets"]))'); do
   $STITCH -C $P minimize smoke:$id --secs 30 >/dev/null || fail "minimize $id"
 done
