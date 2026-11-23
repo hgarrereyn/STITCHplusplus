@@ -48,8 +48,8 @@ for f in progs[:12]:
         sys.exit(0)
 sys.exit(f"no corpus program runs append_all ({len(progs)} mention it)")
 EOF
-$STITCH -C $P --json bisect smoke:$C1 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["first_bad_commit"]["subject"] == "allow 16 character keys", d' || fail "bisect off-by-one"
-$STITCH -C $P --json bisect smoke:$C2 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["first_bad_commit"]["subject"] == "debug level hook", d' || fail "bisect magic value"
+$STITCH -C $P --json bisect smoke:$C1 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("first_bad_commit", {}).get("subject") == "allow 16 character keys", d' || fail "bisect off-by-one"
+$STITCH -C $P --json bisect smoke:$C2 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("first_bad_commit", {}).get("subject") == "debug level hook", d' || fail "bisect magic value"
 $STITCH -C $P --json cov smoke --crashes --no-html | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
