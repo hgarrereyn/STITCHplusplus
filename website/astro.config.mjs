@@ -10,7 +10,44 @@ export default defineConfig({
       description: "API fuzzing for libraries in nine languages, built for coding agents.",
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/hgarrereyn/STITCHplusplus" }],
       editLink: { baseUrl: "https://github.com/hgarrereyn/STITCHplusplus/edit/main/website/" },
-      customCss: ["./src/styles/custom.css"],
+      customCss: [
+        "@fontsource-variable/inter",
+        "@fontsource-variable/jetbrains-mono",
+        "./src/styles/custom.css",
+        "./src/styles/landing.css",
+      ],
+      expressiveCode: {
+        themes: ["github-dark-default", "github-light-default"],
+        // No window chrome: shell commands and output read as plain blocks.
+        defaultProps: { frame: "none" },
+        styleOverrides: {
+          borderRadius: "0.625rem",
+          borderColor: "var(--sl-color-hairline-light)",
+          codeBackground: "var(--stitch-surface)",
+          codeFontFamily: "var(--sl-font-mono)",
+          codeFontSize: "0.8125rem",
+          codeLineHeight: "1.7",
+          codePaddingBlock: "0.875rem",
+          codePaddingInline: "1.125rem",
+          uiFontFamily: "var(--sl-font)",
+          frames: {
+            frameBoxShadowCssValue: "none",
+            editorBackground: "var(--stitch-surface)",
+            editorTabBarBackground: "var(--stitch-surface)",
+            editorActiveTabBackground: "var(--stitch-surface)",
+            editorActiveTabIndicatorTopColor: "transparent",
+            editorActiveTabIndicatorBottomColor: "var(--sl-color-accent)",
+            editorTabBarBorderBottomColor: "var(--sl-color-hairline-light)",
+            terminalBackground: "var(--stitch-surface)",
+            terminalTitlebarBackground: "var(--stitch-surface)",
+            terminalTitlebarBorderBottomColor: "var(--sl-color-hairline-light)",
+            terminalTitlebarDotsOpacity: "0",
+            inlineButtonBackground: "var(--sl-color-gray-5)",
+            inlineButtonBorder: "var(--sl-color-hairline-light)",
+            tooltipSuccessBackground: "var(--sl-color-accent)",
+          },
+        },
+      },
       head: [
         // Restore the tutorial language before the page paints.
         {
