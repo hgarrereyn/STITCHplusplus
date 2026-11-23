@@ -402,6 +402,71 @@ import Stitch
 // }
 """
 
+OBJC_TOML = """# STITCH++ project. Guide: `stitch guide`. Objective-C API: `stitch guide objc`.
+[project]
+name = "{name}"
+language = "objc"
+
+[source]
+{source}
+
+[build]
+# How stubs compile and link. Paths are inside the image; the library source is at /src.
+cflags = ["-I/src"]
+ldflags = []               # e.g. ["/src/build/libfoo.a"]; GNUstep Base (Foundation) is linked already
+sanitizers = ["address"]   # add "undefined" for UBSan
+
+# [objc]
+# arc = true               # compile the harness with ARC (default)
+
+[fuzz]
+timeout_ms = 2000
+max_nodes = 24
+jobs = 1
+exceptions = "finding"     # "bail": treat Objective-C exceptions from the library as failed calls
+"""
+
+OBJC_DOCKERFILE = """# Builds the library under test.
+#   STITCH_BASE  base image: clang, libobjc2, GNUstep Base, sanitizers, STITCH++ runtime. CC and CXX add
+#                instrumentation, and the Objective-C runtime flags for .m / .mm files.
+#   source       build context with the library source at the requested version.
+ARG STITCH_BASE
+FROM ${{STITCH_BASE}}
+
+# System packages:
+# RUN apt-get update && apt-get install -y --no-install-recommends libfoo-dev && rm -rf /var/lib/apt/lists/*
+
+COPY --from=source . /src
+WORKDIR /src
+
+# Build a static library. Examples:
+#   RUN for f in Sources/*.m; do $CC -fobjc-arc -ISources -c "$f" -o "${{f%.m}}.o"; done && ar rcs libfoo.a Sources/*.o
+#   RUN cmake -B build -DBUILD_SHARED_LIBS=OFF && cmake --build build -j$(nproc)
+RUN echo "edit {name}/Dockerfile to build the library" && false
+"""
+
+OBJC_EXAMPLE = """// Stubs: STITCH_ENDPOINT(ReturnType, name, parameters...) { body }. The declaration is the spec:
+//   Borrow(T) uses an object, Take(T) consumes it, returning New(T) produces one.
+//   Every other parameter is fuzzed: Str(64), Bytes(256), Range(0, 9), int32_t, double, BOOL, ...
+// An Objective-C exception that escapes a stub is a bug, like ASan reports and failed STCheck.
+#import <Stitch/Stitch.h>
+
+// #import "Foo.h"
+// STITCH_OBJECT(Doc, FooDocument *);                         // object type and its handle
+// STITCH_DATATYPE(FooText);                                   // data type: harness/data/FooText/
+//
+// STITCH_ENDPOINT(New(Doc), parse, Str(4096, FooText) text) {
+//     NSError *err = nil;
+//     FooDocument *doc = [FooDocument documentWithString:text error:&err];
+//     STRequire(doc != nil, @"parse error");                  // not a bug: invalid input
+//     return doc;
+// }
+//
+// STITCH_ENDPOINT(void, render, Borrow(Doc) doc) {
+//     (void)[doc render];
+// }
+"""
+
 LANGS = {
     "cpp": {"toml": TOML, "dockerfile": DOCKERFILE, "files": {"harness/objects.hpp": OBJECTS, "harness/api/example.cpp": EXAMPLE},
             "steps": ["edit Dockerfile until `stitch build --image-only` works",
@@ -431,6 +496,10 @@ LANGS = {
              "steps": ["edit Dockerfile until `stitch build --image-only` works (the library must gem install)",
                        "if the library's code is not under /src/lib, change RUBYLIB in the Dockerfile and [ruby] include in stitch.toml",
                        "write stubs in harness/*.rb, then `stitch build` and `stitch probe`"]},
+    "objc": {"toml": OBJC_TOML, "dockerfile": OBJC_DOCKERFILE, "files": {"harness/stubs.m": OBJC_EXAMPLE},
+             "steps": ["edit Dockerfile until `stitch build --image-only` works",
+                       "set [build] cflags and ldflags in stitch.toml",
+                       "write stubs in harness/*.m, then `stitch build` and `stitch probe`"]},
     "rust": {"toml": RUST_TOML, "dockerfile": RUST_DOCKERFILE, "files": {"harness/stubs.rs": RUST_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works",
                        "in stitch.toml [rust.dependencies], name the library dependency after its crate",

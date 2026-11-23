@@ -38,7 +38,7 @@ def image_exists(tag) -> bool:
     return _run(["docker", "image", "inspect", tag], capture_output=True).returncode == 0
 
 
-LANGUAGES = ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift")
+LANGUAGES = ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")
 _SKIP_PARTS = {"target", "standalone", "node_modules", "__pycache__", ".gradle", "build"}
 
 
@@ -61,8 +61,10 @@ def engine_hash():
 
 
 # Directories a language image needs besides languages/<lang>/ (copied into its build context
-# under the given name): Swift harnesses run on the C/C++ runtime.
-EXTRA_DIRS = {"swift": {"cpp-runtime": "languages/cpp/runtime"}}
+# under the given name): Swift and Objective-C harnesses run on the C/C++ runtime (Objective-C
+# also uses its compiler wrappers).
+EXTRA_DIRS = {"swift": {"cpp-runtime": "languages/cpp/runtime"},
+              "objc": {"cpp/runtime": "languages/cpp/runtime", "cpp/bin": "languages/cpp/bin"}}
 
 
 def toolchain_hash(lang="cpp"):

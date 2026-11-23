@@ -19,6 +19,8 @@ from . import docker
 from .source import Source
 
 IGNORE = r"^(/usr/|/stitch/|/opt/)"
+# languages whose coverage build is clang source-based coverage of the whole harness binary
+CLANG_COV = ("cpp", "objc")
 CHUNK = 200  # programs per repro process
 
 
@@ -140,7 +142,7 @@ def summarize(p, out: Path, files, dem):
         (and functions it never instantiated) separately: one function per definition line,
         covered if any instantiation ran."""
         fns = [(n, f["fn"].get(n, 0), f["fnda"].get(n, 0)) for n in f["fn"]]
-        if p.language not in ("rust", "swift", "cpp"):
+        if p.language not in ("rust", "swift", "cpp", "objc"):
             return fns
         by_line = {}
         for n, ln, c in fns:
@@ -187,7 +189,7 @@ def rewrite_lcov(p, out: Path, text):
 
 def run(p, programs, out: Path, label, rev=None, timeout=10, jobs=4, html=True, quiet=False):
     """Run `programs` (paths relative to the project root) on the coverage build. Returns the summary."""
-    if p.language == "cpp":
+    if p.language in CLANG_COV:
         image, binary, ident, commit = build_cov(p, rev, quiet=quiet)
     elif rev:
         from .cli import build_repro_at
@@ -203,7 +205,7 @@ def run(p, programs, out: Path, label, rev=None, timeout=10, jobs=4, html=True, 
     out.mkdir(parents=True)
     (out / "programs.txt").write_text("\n".join(programs) + "\n")
     out_rel = str(out.relative_to(p.root))
-    script = _script(binary, out_rel, timeout, jobs, html) if p.language == "cpp" else _lang_script(binary, out_rel, timeout, html)
+    script = _script(binary, out_rel, timeout, jobs, html) if p.language in CLANG_COV else _lang_script(binary, out_rel, timeout, html)
     r = docker.run(p, image, ["sh", "-c", script], capture=True)
     if r.returncode != 0:
         raise docker.DockerError(f"coverage run failed:\n{(r.stderr or '')[-3000:]}")

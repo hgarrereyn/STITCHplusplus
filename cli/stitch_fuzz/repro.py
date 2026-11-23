@@ -57,7 +57,7 @@ STANDALONE_LANG = ('  docker run --rm $U -v "$PWD/project:/project" -v "$PWD/sta
 # report section title and code fence, per language
 REPORT_NAME = {"cpp": "Sanitizer report"}
 FENCE = {"cpp": "cpp", "python": "python", "javascript": "js", "java": "java", "go": "go", "rust": "rust", "ruby": "ruby",
-         "swift": "swift"}
+         "swift": "swift", "objc": "objc"}
 
 
 def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
@@ -144,7 +144,8 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
 
 
 HARNESS_EXT = {"cpp": ("*.cpp", "*.cc", "*.c", "*.hpp", "*.h"), "python": ("*.py",), "javascript": ("*.js", "*.mjs"),
-               "java": ("*.java",), "go": ("*.go",), "rust": ("*.rs",), "ruby": ("*.rb",), "swift": ("*.swift",)}
+               "java": ("*.java",), "go": ("*.go",), "rust": ("*.rs",), "ruby": ("*.rb",), "swift": ("*.swift",),
+               "objc": ("*.m", "*.mm", "*.c", "*.h")}
 
 
 def _brace_block(lines, i, start):
@@ -209,6 +210,13 @@ def _stub_source(harness_dir: Path, name: str, language="cpp"):
                     code = _brace_block(lines, i, _comments_above(lines, i))
                     if code:
                         return rel, code
+        elif language == "objc":
+            # STITCH_ENDPOINT(Ret, name, ...) { ... }
+            for i, l in enumerate(lines):
+                if re.search(r"STITCH_ENDPOINT\s*\(.*?,\s*%s\s*[,)]" % re.escape(fn), l) and not l.lstrip().startswith("#"):
+                    code = _brace_block(lines, i, _comments_above(lines, i))
+                    if code:
+                        return rel, code
         elif language == "go":
             m = None
             for l in lines:
@@ -265,7 +273,7 @@ def _sanitizer_excerpt(output: str, limit=45):
 def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cpp") -> str:
     calls = [l[len("[stitch] "):] for l in output.splitlines() if l.startswith("[stitch] #")]
     kind = rep["kind"] if rep["crashed"] else "no crash when recorded"
-    where = rep["frames"][0].split(" ")[0] if rep["frames"] else (rep.get("endpoint") or "?")
+    where = reports.frame_func(rep["frames"][0]) if rep["frames"] else (rep.get("endpoint") or "?")
     src = f"[{sj['git']}]({sj['git']}) @ `{sj['commit'][:12]}`" if "git" in sj else "bundled snapshot (`source.tar.gz`)"
     r = [f"# {project}: {kind} in {where}", "",
          "| | |", "|---|---|",
@@ -314,23 +322,26 @@ def rewrite_readme(p, d: Path):
     (d / "README.md").write_text(text)
 
 
-def _standalone_files(language):
-    """(generated file name, candidate names of the minimized file)"""
+def _standalone_files(language, sdir: Path = None):
+    """(generated file name, candidate names of the minimized file). A writer whose file name
+    depends on the harness lists its names in FILENAMES: the one in `sdir` is the generated file."""
     if language == "cpp":
         return "repro.cpp", ("min.c", "min.cpp", "repro.cpp")
     from . import writers
-    gen = Path(writers.get(language).FILENAME)
-    return gen.name, ("min" + gen.suffix, gen.name)
+    w = writers.get(language)
+    gens = getattr(w, "FILENAMES", (w.FILENAME,))
+    gen = next((g for g in gens if sdir and (sdir / g).exists()), w.FILENAME)
+    return gen, tuple("min" + Path(g).suffix for g in gens) + tuple(gens)
 
 
 def attach_standalone(p, d: Path, sdir: Path = None):
     """Copy a standalone reproducer (`stitch write`, ideally minimized to min.<ext>) into the
     reproducer directory `d` and describe it in the README. Returns the file used, or None."""
-    gen, names = _standalone_files(p.language)
     cands = [sdir] if sdir else [p.state_dir / "standalone" / d.name, p.state_dir / "standalone" / d.name.replace(p.name + "-", "")]
-    sdir = next((c for c in cands if c and (c / gen).exists()), None)
+    sdir = next((c for c in cands if c and (c / _standalone_files(p.language, c)[0]).exists()), None)
     if not sdir:
         return None
+    gen, names = _standalone_files(p.language, sdir)
     main = next((sdir / n for n in names if (sdir / n).exists()), None)
     out = d / "standalone"
     shutil.rmtree(out, ignore_errors=True)
@@ -361,10 +372,12 @@ def standalone_readme(d: Path, language="cpp") -> str:
     out = d / "standalone"
     if not out.exists():
         return ""
-    gen, names = _standalone_files(language)
+    gen, names = _standalone_files(language, out)
     main = next((out / n for n in names if (out / n).exists()), None)
     if not main:
         return ""
+    if Path(gen).suffix != main.suffix:  # minimized: the generated file has the same extension
+        gen = next((n for n in names if not n.startswith("min") and Path(n).suffix == main.suffix), gen)
     code = main.read_text()
     from .standalone import code_lines
     n = code_lines(code)

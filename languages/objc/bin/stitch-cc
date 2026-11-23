@@ -1,0 +1,11 @@
+#!/bin/sh
+# clang with STITCH++ instrumentation (coverage + cmplog + sanitizers). Objective-C sources (.m,
+# .mm, -x objective-c) also get the GNUstep flags: the libobjc2 runtime ABI, blocks, exceptions and
+# the Foundation headers. Link Objective-C code with $(cat /stitch/objc/link-flags) or
+# `gnustep-config --base-libs`. STITCH_NO_INSTR=1 builds helper tools without instrumentation.
+OBJC=""
+for a in "$@"; do
+  case "$a" in *.m|*.mm|objective-c|objective-c++) OBJC="$(cat /stitch/objc/objc-flags)";; esac
+done
+if [ -n "$STITCH_NO_INSTR" ]; then exec clang $OBJC "$@"; fi
+exec clang $(/stitch/bin/stitch-flags) $OBJC "$@"

@@ -54,7 +54,7 @@ jobs:
     needs: engine
     strategy:
       matrix:
-        lang: [cpp, python, javascript, java, go, rust, ruby, swift]
+        lang: [cpp, python, javascript, java, go, rust, ruby, swift, objc]
         arch: [amd64, arm64]
         include:
           - { arch: amd64, runner: ubuntu-24.04 }
@@ -76,7 +76,7 @@ jobs:
           R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; L=${{ matrix.lang }}; A=${{ matrix.arch }}
           E=$(eval "$HASH engine_hash"); T=$(eval "$HASH toolchain_hash $L"); B=$(eval "$HASH base_hash $L")
           label=org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          # the build context as the CLI assembles it (Swift: languages/swift + the C/C++ runtime)
+          # the build context as the CLI assembles it (Swift, Objective-C: + the C/C++ runtime)
           C=$(PYTHONPATH=cli STITCH_CACHE=/tmp/stitch-cache python -c "from stitch_fuzz import docker; print(docker.language_context('$L'))")
           docker buildx build -f $C/Dockerfile --target toolchain --label $label \
             -t "$R/stitch-$L-toolchain:$T-$A" --push $C
@@ -102,7 +102,7 @@ jobs:
           R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
           multi() { docker buildx imagetools create -t "$1" "$1-amd64" "$1-arm64"; }
           multi "$R/stitch-engine:$(eval "$HASH engine_hash")"
-          for L in cpp python javascript java go rust ruby swift; do
+          for L in cpp python javascript java go rust ruby swift objc; do
             multi "$R/stitch-$L-toolchain:$(eval "$HASH toolchain_hash $L")"
             multi "$R/stitch-$L:$(eval "$HASH base_hash $L")"
           done

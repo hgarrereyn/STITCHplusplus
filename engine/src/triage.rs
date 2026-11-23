@@ -40,6 +40,15 @@ fn skip_frame(func: &str, loc: &str) -> bool {
         // Swift: the standard library (mangled $sS / $ss), compiler-generated thunks, the Stitch package
         || loc.contains("<compiler-generated>") || loc.contains("/stitch/swift/") || loc.contains("/stitch/cpp-runtime/")
         || func.starts_with("$sS") || func.starts_with("$ss") || func.starts_with("$s6Stitch") || func == "worker_main"
+        // Objective-C: the runtime (libobjc2), GNUstep Base and the Stitch layer
+        || loc.contains("libobjc.so") || loc.contains("libgnustep-base") || loc.contains("/usr/src/gnustep/")
+        || loc.contains("/stitch/objc/")
+}
+
+/// "-[Class(Category) selector:]" / "+[Class sel]": an Objective-C method name, kept whole
+/// (it contains spaces and parentheses).
+fn objc_method(func: &str) -> bool {
+    (func.starts_with("-[") || func.starts_with("+[")) && func.ends_with(']')
 }
 
 fn normalize(msg: &str) -> String {
@@ -154,6 +163,9 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
     let mut in_stack = false;
     let mut stack_done = false;
     let mut died: Option<String> = None;
+    // a language runtime reported an exception (Objective-C aborts after it, so a sanitizer's
+    // ABRT report follows): the exception is the kind
+    let mut lang_exception = false;
     // Swift: "Fatal error: <message>" (fatalError, -Onone checks) or a trap frame named
     // "Swift runtime failure: <message>" (-O checks): the message is the kind
     let mut swift_failure: Option<String> = None;
@@ -202,6 +214,7 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
             let (ep, after) = rest.split_once(": ").unwrap_or((rest, ""));
             let k = after.split_once(": ").map(|x| x.0).unwrap_or(after);
             kind = if k.is_empty() { "exception".into() } else { normalize(k) };
+            lang_exception = true;
             if endpoint.is_none() {
                 endpoint = Some(ep.to_string());
             }
@@ -213,7 +226,8 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
             let rest = &l[i + "ERROR: AddressSanitizer: ".len()..];
             let k = rest.split_whitespace().next().unwrap_or("unknown");
             let k = if k == "SEGV" || rest.starts_with("SEGV") { "SEGV" } else { k };
-            if kind.is_empty() || !kind.starts_with("check failed") && !kind.starts_with("uncaught") {
+            // (the ABRT of a runtime that aborts after reporting an exception is not the bug)
+            if kind.is_empty() || !kind.starts_with("check failed") && !kind.starts_with("uncaught") && !(lang_exception && k == "ABRT") {
                 kind = k.to_string();
                 summary = l[i..].to_string();
             }
@@ -258,6 +272,11 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
                         }
                         continue;
                     }
+                    // Objective-C: the generated trampoline that calls the stub; the runtime is below
+                    if func.starts_with("stitch_invoke_") {
+                        stack_done = true;
+                        continue;
+                    }
                     let func = func.strip_prefix("void ").unwrap_or(func);
                     // Rust legacy mangling: drop the ::h<16 hex> suffix
                     let func = match func.rfind("::h") {
@@ -267,7 +286,7 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
                     if !skip_frame(func, loc) && frames.len() < 3 {
                         let file = loc.rsplit('/').next().unwrap_or(loc);
                         let file = file.split(' ').next().unwrap_or(file);
-                        let fname = func.split('(').next().unwrap_or(func);
+                        let fname = if objc_method(func) { func } else { func.split('(').next().unwrap_or(func) };
                         frames.push(format!("{fname} {file}"));
                     }
                 }

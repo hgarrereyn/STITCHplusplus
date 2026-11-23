@@ -23,14 +23,15 @@ DEFAULTS = {
 
 # Programs per worker process before it is replaced (stitch.toml [fuzz] persistent overrides).
 # C/C++ forks cheaply; other runtimes keep one process until it crashes or grows too large.
-PERSISTENT_DEFAULT = {"cpp": 200, "rust": 5000, "swift": 200}
+PERSISTENT_DEFAULT = {"cpp": 200, "rust": 5000, "swift": 200, "objc": 200}
 
 
 def normalize_language(lang):
     lang = (lang or "cpp").lower()
     return {"c": "cpp", "c++": "cpp", "cxx": "cpp", "js": "javascript", "node": "javascript", "nodejs": "javascript",
             "typescript": "javascript", "ts": "javascript", "golang": "go", "py": "python", "python3": "python",
-            "jvm": "java", "kotlin": "java", "rb": "ruby"}.get(lang, lang)
+            "jvm": "java", "kotlin": "java", "rb": "ruby", "objective-c": "objc", "objectivec": "objc", "obj-c": "objc",
+            "objective-c++": "objc", "objc++": "objc"}.get(lang, lang)
 
 
 class ProjectError(Exception):

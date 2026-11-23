@@ -1,0 +1,3 @@
+**/__pycache__
+# not part of the image (the CLI copies it next to C/C++ reproducers)
+cpp/runtime/standalone

@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+"""Compile a STITCH++ Objective-C harness inside the project image.
+
+Reads <project>/stitch.toml and compiles harness/**/*.{m,mm,c} with instrumentation (ARC for
+Objective-C). A harness file with STITCH_ENDPOINT stubs is compiled through a generated wrapper
+(<out>/gen/) that includes it and appends a trampoline and a registration per stub, read from
+the declarations. Links, like the C/C++ build:
+  <out>/fuzzer   harness + runtime + Objective-C layer + LibAFL engine
+  <out>/repro    harness + runtime + Objective-C layer + reproducer driver (no engine)
+and writes <out>/manifest.json.
+
+  stitch-build --standalone SRC --out BIN    a reproducer file (stitch write / try): SRC has its own
+                                             main() and includes the harness sources it needs
+"""
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+STITCH = Path(os.environ.get("STITCH_HOME", "/stitch"))
+RT = STITCH / "runtime"          # the C/C++ runtime
+OBJC = STITCH / "objc"           # Stitch.h, the Objective-C layer, GNUstep flags
+
+
+def sh(cmd, **kw):
+    return subprocess.run(cmd, text=True, capture_output=True, **kw)
+
+
+def flags(no_cov=False):
+    return sh(["/stitch/bin/stitch-flags"] + (["--no-cov"] if no_cov else [])).stdout.split()
+
+
+def objc_flags():
+    return (OBJC / "objc-flags").read_text().split()
+
+
+def link_flags():
+    return (OBJC / "link-flags").read_text().split()
+
+
+# ------------------------------------------------------------------ parsing stub declarations
+def mask(src):
+    """Same-length copy with comments blanked and string / character literal contents replaced."""
+    out = list(src)
+    i, n = 0, len(src)
+    while i < n:
+        if src.startswith("//", i):
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            out[i:j] = " " * (j - i)
+            i = j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out[i:j] = [c if c == "\n" else " " for c in src[i:j]]
+            i = j
+        elif src[i] in "\"'":
+            q, j = src[i], i + 1
+            while j < n and src[j] != q and src[j] != "\n":
+                j += 2 if src[j] == "\\" else 1
+            out[i + 1:j] = "x" * (j - i - 1)
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+def split_spans(m, sep=","):
+    """(start, end) of the top-level parts of `m` (masked text: literals cannot confuse it)."""
+    spans, depth, start = [], 0, 0
+    for i, ch in enumerate(m):
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == sep and depth == 0:
+            spans.append((start, i))
+            start = i + 1
+    spans.append((start, len(m)))
+    return [(a, b) for a, b in spans if m[a:b].strip()]
+
+
+def split_top(s, sep=","):
+    """Top-level parts of `s`, with string literals kept intact."""
+    return [s[a:b].strip() for a, b in split_spans(mask(s), sep)]
+
+
+def close_paren(m, i):
+    depth = 0
+    for j in range(i, len(m)):
+        if m[j] == "(":
+            depth += 1
+        elif m[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return j
+    return -1
+
+
+# plain C parameter types: (kind, size, signed, ctype)
+INTS = {
+    "int8_t": (1, True), "char": (1, True), "signed char": (1, True), "uint8_t": (1, False), "unsigned char": (1, False),
+    "int16_t": (2, True), "short": (2, True), "uint16_t": (2, False), "unsigned short": (2, False), "unichar": (2, False),
+    "int32_t": (4, True), "int": (4, True), "signed": (4, True), "signed int": (4, True), "uint32_t": (4, False),
+    "unsigned": (4, False), "unsigned int": (4, False),
+    "int64_t": (8, True), "long": (8, True), "long long": (8, True), "NSInteger": (8, True), "ssize_t": (8, True),
+    "intptr_t": (8, True), "uint64_t": (8, False), "unsigned long": (8, False), "unsigned long long": (8, False),
+    "NSUInteger": (8, False), "size_t": (8, False), "uintptr_t": (8, False),
+}
+FLOATS = {"float": 4, "double": 8, "CGFloat": 8}
+BOOLS = {"BOOL", "bool", "_Bool"}
+
+
+class SpecError(Exception):
+    pass
+
+
+def param_spec(typ):
+    """A parameter's type text -> dict(kind, ...)."""
+    typ = " ".join(typ.split())
+    m = re.match(r"^(\w+)\s*\((.*)\)$", typ, re.S)
+    if m:
+        mac, args = m.group(1), split_top(m.group(2))
+        if mac in ("Borrow", "Take"):
+            if len(args) != 1:
+                raise SpecError(f"{typ}: {mac}(Type)")
+            return {"obj": args[0], "take": mac == "Take"}
+        if mac in ("Str", "CStr", "Bytes", "File"):
+            if not 1 <= len(args) <= 2:
+                raise SpecError(f"{typ}: {mac}(max) or {mac}(max, DataType)")
+            return {"kind": {"Bytes": 6, "Str": 7, "CStr": 7, "File": 8}[mac], "mac": mac, "max": args[0],
+                    "datatype": args[1] if len(args) > 1 else None}
+        if mac == "Range":
+            if len(args) != 2:
+                raise SpecError(f"{typ}: Range(lo, hi)")
+            return {"kind": 3, "mac": mac, "lo": args[0], "hi": args[1]}
+        if mac in ("OneOf", "Flags"):
+            if not args:
+                raise SpecError(f"{typ}: {mac}(A, B, ...)")
+            return {"kind": 4 if mac == "OneOf" else 5, "mac": mac, "values": args}
+        if mac == "Raw":
+            if len(args) != 1:
+                raise SpecError(f"{typ}: Raw(Type)")
+            return {"kind": 9, "mac": mac, "type": args[0]}
+        if mac == "Val":
+            if not 1 <= len(args) <= 2:
+                raise SpecError(f"{typ}: Val(DataType) or Val(DataType, max)")
+            return {"kind": 11, "mac": mac, "datatype": args[0], "max": args[1] if len(args) > 1 else "1024"}
+        if mac == "Src":
+            if len(args) != 1:
+                raise SpecError(f"{typ}: Src(max)")
+            return {"kind": 10, "mac": mac, "max": args[0]}
+        raise SpecError(f"unknown parameter type {typ}")
+    base = re.sub(r"\bconst\b", "", typ).strip()
+    if base in INTS:
+        size, signed = INTS[base]
+        return {"kind": 0, "c": typ, "size": size, "signed": signed,
+                "ctype": ("I" if signed else "U") + str(size * 8)}
+    if base in FLOATS:
+        return {"kind": 1, "c": typ, "size": FLOATS[base], "ctype": f"F{FLOATS[base] * 8}"}
+    if base in BOOLS:
+        return {"kind": 2, "c": typ, "size": 1, "ctype": "Bool"}
+    raise SpecError(f"unsupported parameter type '{typ}': use Borrow(T), Take(T), Str(max), CStr(max), Bytes(max), "
+                    "File(max), Range(lo, hi), OneOf(...), Flags(...), Raw(T), Val(Tag), Src(max) or a C number type")
+
+
+def return_spec(ret):
+    ret = " ".join(ret.split())
+    if ret == "void":
+        return []
+    m = re.match(r"^(New|Maybe)\s*\(\s*(\w+)\s*\)$", ret)
+    if m:
+        return [(m.group(2), m.group(1) == "Maybe")]
+    m = re.match(r"^Outputs\s*\((.*)\)$", ret, re.S)
+    if m:
+        outs = []
+        for o in split_top(m.group(1)):
+            mm = re.match(r"^(New|Maybe)\s*\(\s*(\w+)\s*\)$", o)
+            if not mm:
+                raise SpecError(f"{ret}: Outputs(New(A), Maybe(B), ...)")
+            outs.append((mm.group(2), mm.group(1) == "Maybe"))
+        if not 2 <= len(outs) <= 16:
+            raise SpecError(f"{ret}: Outputs takes 2 to 16 outputs")
+        return outs
+    raise SpecError(f"unsupported return type '{ret}': void, New(T), Maybe(T) or Outputs(New(A), Maybe(B), ...)")
+
+
+def endpoints(src):
+    """[(name, ret_text, outputs, [(type_text, arg_name, spec)], line)] declared in a source file."""
+    m = mask(src)
+    out = []
+    for mt in re.finditer(r"\bSTITCH_ENDPOINT\s*\(", m):
+        line_start = m.rfind("\n", 0, mt.start()) + 1
+        if m[line_start:mt.start()].lstrip().startswith("#"):
+            continue  # a macro definition
+        i = mt.end() - 1
+        j = close_paren(m, i)
+        if j < 0:
+            raise SpecError(f"line {src.count(chr(10), 0, mt.start()) + 1}: unbalanced STITCH_ENDPOINT(")
+        # the real text (literals intact), split where the masked text has top-level commas
+        parts = [src[i + 1 + a:i + 1 + b].strip() for a, b in split_spans(m[i + 1:j])]
+        line = src.count("\n", 0, mt.start()) + 1
+        if len(parts) < 2:
+            raise SpecError(f"line {line}: STITCH_ENDPOINT(ReturnType, name, parameters...)")
+        ret, name, params = parts[0], parts[1], parts[2:]
+        if not re.match(r"^[A-Za-z_]\w*$", name):
+            raise SpecError(f"line {line}: stub name '{name}' is not an identifier")
+        try:
+            outs = return_spec(ret)
+            args = []
+            if params not in ([], ["void"]):
+                for p in params:
+                    pm = re.match(r"^(.*?)\b([A-Za-z_]\w*)\s*$", p, re.S)
+                    if not pm or not pm.group(1).strip():
+                        raise SpecError(f"parameter '{p}' needs a type and a name")
+                    args.append((pm.group(1).strip(), pm.group(2), param_spec(pm.group(1))))
+        except SpecError as e:
+            raise SpecError(f"line {line}: stub {name}: {e}")
+        out.append((name, ret, outs, args, line))
+    return out
+
+
+# ------------------------------------------------------------------ generated registration
+def c_str(s):
+    return json.dumps(s) if s is not None else "NULL"
+
+
+def registration(rel, eps):
+    """Trampolines and constructors for the stubs of one harness file (appended to its wrapper)."""
+    L = ["", "// ---- generated by stitch-build: stub trampolines and registration ----",
+         "#pragma clang diagnostic push", '#pragma clang diagnostic ignored "-Wunused-variable"']
+    for name, ret, outs, args, _ in eps:
+        body, call, ko, kp = [], [], 0, 0
+        for idx, (typ, an, sp) in enumerate(args):
+            v = f"stitch_a{idx}"
+            call.append(v)
+            if "obj" in sp:
+                body.append(f"    {typ} {v} = (__bridge {typ})stitch_objc_in(stitch_ctx, {ko});")
+                ko += 1
+                continue
+            k = sp["kind"]
+            if k == 0:
+                body.append(f"    {sp['c']} {v} = ({sp['c']})stitch_objc_bits(stitch_ctx, {kp});")
+            elif k == 1:
+                fn = "stitch_objc_f32" if sp["size"] == 4 else "stitch_objc_f64"
+                body.append(f"    {sp['c']} {v} = ({sp['c']}){fn}(stitch_ctx, {kp});")
+            elif k == 2:
+                body.append(f"    {sp['c']} {v} = ({sp['c']})(stitch_objc_bits(stitch_ctx, {kp}) & 1);")
+            elif k == 3:
+                body.append(f"    long long {v} = stitch_objc_range(stitch_ctx, {kp}, (long long)({sp['lo']}), (long long)({sp['hi']}));")
+            elif k == 4:
+                vals = ", ".join(f"(long long)({x})" for x in sp["values"])
+                body.append(f"    const long long {v}_values[] = {{{vals}}};")
+                body.append(f"    long long {v} = stitch_objc_oneof(stitch_ctx, {kp}, {v}_values, {len(sp['values'])});")
+            elif k == 5:
+                mask_ = " | ".join(f"(long long)({x})" for x in sp["values"])
+                body.append(f"    long long {v} = stitch_objc_flags(stitch_ctx, {kp}, {mask_});")
+            elif k in (6, 7, 8):
+                fn = {"Bytes": "bytes", "Str": "str", "CStr": "cstr", "File": "file"}[sp["mac"]]
+                ty = {"Bytes": "NSData *", "Str": "NSString *", "CStr": "const char *", "File": "NSString *"}[sp["mac"]]
+                body.append(f"    {ty} {v} = stitch_objc_{fn}(stitch_ctx, {kp}, (size_t)({sp['max']}), {c_str(sp['datatype'])});")
+            elif k == 9:
+                body.append(f"    {sp['type']} {v};")
+                body.append(f"    stitch_objc_raw(stitch_ctx, {kp}, &{v}, sizeof {v});")
+            elif k == 10:
+                body.append(f"    STSource *{v} = stitch_objc_src(stitch_ctx, {kp}, (size_t)({sp['max']}));")
+            elif k == 11:
+                body.append(f"    id {v} = stitch_objc_val(stitch_ctx, {kp}, {c_str(sp['datatype'])}, (size_t)({sp['max']}));")
+            kp += 1
+        invoke = f"stub_{name}({', '.join(call)})"
+        if not outs:
+            body.append(f"    {invoke};")
+        elif len(outs) == 1 and not ret.strip().startswith("Outputs"):
+            body.append(f"    stitch_objc_out(stitch_ctx, 0, {invoke}, {1 if outs[0][1] else 0});")
+        else:
+            opt = ", ".join("1" if o else "0" for _, o in outs)
+            body.append(f"    static const uint8_t stitch_opt[] = {{{opt}}};")
+            body.append(f"    stitch_objc_outs(stitch_ctx, {invoke}, {len(outs)}, stitch_opt);")
+        L += ["", f'__attribute__((no_sanitize("coverage"))) static void stitch_invoke_{name}(void *stitch_ctx) {{', *body, "}"]
+
+        # descriptors
+        objs = [sp for _, _, sp in args if "obj" in sp]
+        prms = [sp for _, _, sp in args if "obj" not in sp]
+        reg = []
+        arr = lambda decl, items: (reg.append(f"    {decl}[] = {{{', '.join(items)}}};") or decl.split()[-1]) if items else "NULL"
+        is_obj = arr("static const uint8_t is_obj", ["1" if "obj" in sp else "0" for _, _, sp in args])
+        names = arr("static const char *const names", [json.dumps(an) for _, an, _ in args])
+        in_types = arr("static const char *const in_types", [json.dumps(sp["obj"]) for sp in objs])
+        in_take = arr("static const uint8_t in_take", ["1" if sp["take"] else "0" for sp in objs])
+        out_types = arr("static const char *const out_types", [json.dumps(t) for t, _ in outs])
+        out_opt = arr("static const uint8_t out_opt", ["1" if o else "0" for _, o in outs])
+        descs = []
+        for i, sp in enumerate(prms):
+            k = sp["kind"]
+            size, signed, lo, hi, nv, vals, dt, ct = "0", 0, "0", "0", 0, "NULL", "NULL", '"?"'
+            if k in (0, 1, 2):
+                size, signed, ct = str(sp["size"]), int(sp.get("signed", False)), json.dumps(sp["ctype"])
+            elif k == 3:
+                size, signed, lo, hi, ct = "8", 1, f"(int64_t)({sp['lo']})", f"(int64_t)({sp['hi']})", '"Range"'
+            elif k in (4, 5):
+                reg.append(f"    const int64_t values{i}[] = {{{', '.join(f'(int64_t)({x})' for x in sp['values'])}}};")
+                size, nv, vals, ct = "8", len(sp["values"]), f"values{i}", json.dumps(sp["mac"])
+            elif k in (6, 7, 8):
+                size, dt, ct = f"(uint32_t)({sp['max']})", c_str(sp["datatype"]), json.dumps(sp["mac"])
+            elif k == 9:
+                size, ct = f"(uint32_t)sizeof({sp['type']})", '"Raw"'
+            elif k == 10:
+                size, ct = f"(uint32_t)({sp['max']})", '"Source"'
+            elif k == 11:
+                size, dt, ct = f"(uint32_t)({sp['max']})", c_str(sp["datatype"]), '"Val"'
+            descs.append(f"{{{k}, {size}, {signed}, {lo}, {hi}, {nv}, {vals}, {dt}, {ct}}}")
+        params = "NULL"
+        if descs:
+            reg.append("    const stitch_objc_param params[] = {\n        " + ",\n        ".join(descs) + "\n    };")
+            params = "params"
+        L += [f"__attribute__((constructor)) static void stitch_register_{name}(void) {{", *reg,
+              f"    stitch_objc_endpoint({json.dumps(name)}, {json.dumps(rel)}, stitch_invoke_{name}, {len(args)}, {is_obj}, "
+              f"{names}, {in_types}, {in_take}, {len(outs)}, {out_types}, {out_opt}, {params});", "}"]
+    L.append("#pragma clang diagnostic pop")
+    return "\n".join(L) + "\n"
+
+
+# ------------------------------------------------------------------ incremental compile
+def needs_build(obj: Path, src: Path, key: str):
+    stamp, dep = obj.with_suffix(".key"), obj.with_suffix(".d")
+    if not obj.exists() or not stamp.exists() or stamp.read_text() != key:
+        return True
+    t = obj.stat().st_mtime
+    deps = [src]
+    if dep.exists():
+        deps += [Path(d) for d in dep.read_text().replace("\\\n", " ").split(":", 1)[-1].split()]
+    for d in deps:
+        try:
+            if d.stat().st_mtime > t:
+                return True
+        except FileNotFoundError:
+            return True
+    return False
+
+
+def compile_one(src: Path, obj: Path, cmd, key, label=None):
+    if not needs_build(obj, src, key):
+        return label or src, None
+    obj.parent.mkdir(parents=True, exist_ok=True)
+    r = sh(cmd + ["-MMD", "-MF", str(obj.with_suffix(".d")), "-c", str(src), "-o", str(obj)])
+    if r.returncode != 0:
+        return label or src, (r.stderr or r.stdout)
+    obj.with_suffix(".key").write_text(key)
+    if r.stderr.strip():
+        sys.stderr.write(r.stderr)
+    return label or src, None
+
+
+def keyed(cmd, extra=""):
+    return hashlib.sha1((" ".join(cmd) + extra).encode()).hexdigest()
+
+
+def runtime_jobs(objdir, std_cpp="c++17"):
+    """The C/C++ runtime, the Objective-C layer and the two mains (no coverage instrumentation)."""
+    nocov = flags(no_cov=True)
+    cpp = ["clang++", f"-std={std_cpp}"] + nocov + ["-I", str(RT / "include")]
+    mm = ["clang++", f"-std={std_cpp}"] + nocov + objc_flags() + ["-fobjc-arc", "-I", str(RT / "include"), "-I", str(OBJC / "include")]
+    c = ["clang"] + nocov
+    jobs = []
+    for src, cmd in [(RT / "src" / "runtime.cpp", cpp), (RT / "src" / "main_fuzzer.cpp", cpp), (RT / "src" / "main_repro.cpp", cpp),
+                     (OBJC / "src" / "stitch_objc.mm", mm), (OBJC / "src" / "stitch_objc_throw.c", c)]:
+        jobs.append((src, objdir / ("_" + src.name + ".o"), cmd, keyed(cmd, str(src.stat().st_mtime))))
+    return jobs
+
+
+def run_jobs(jobs):
+    errors = []
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as ex:
+        for src, err in ex.map(lambda j: compile_one(*j), jobs):
+            if err:
+                errors.append({"file": str(src), "output": err[-8000:]})
+                sys.stderr.write(err)
+    return errors
+
+
+SYS_LIBS = ["-lstdc++", "-lpthread", "-ldl", "-lm", "-lrt"]
+RT_OBJS = ("runtime.cpp", "stitch_objc.mm", "stitch_objc_throw.c")  # linked into every binary (not the mains)
+
+
+def harness_cmd(src: Path, std, user_cflags, cfg, instr):
+    inc = ["-I", str(OBJC / "include"), "-I", "harness", "-I", "."]
+    # ARC without -fobjc-arc-exceptions (as on Apple platforms): with libobjc2 that flag over-releases
+    # an exception re-thrown from @catch. A bail that unwinds a stub leaks the stub's locals.
+    arc = ["-fobjc-arc"] if cfg.get("objc", {}).get("arc", True) else []
+    if src.suffix == ".c":
+        return ["clang"] + instr + inc + user_cflags
+    if src.suffix == ".mm":
+        return ["clang++", f"-std={std}"] + instr + objc_flags() + arc + inc + user_cflags
+    return ["clang"] + instr + objc_flags() + arc + inc + user_cflags
+
+
+def standalone(a, proj, cfg):
+    """Build one reproducer file with the project's flags and the runtime (no harness objects)."""
+    b = cfg.get("build", {})
+    src = Path(a.standalone)
+    objdir = (Path(a.objdir) if a.objdir else proj / ".stitch" / "build" / "obj")
+    jobs = runtime_jobs(objdir)
+    errors = run_jobs([j for j in jobs if j[0].name in RT_OBJS])
+    if errors:
+        sys.exit(1)
+    cmd = harness_cmd(src, b.get("std", "c++17"), list(b.get("cflags", [])), cfg, flags(no_cov=True))
+    cmd = cmd[:1] + ["-I", str(src.parent)] + cmd[1:]
+    obj = Path("/tmp/stitch-standalone.o")
+    r = sh(cmd + ["-c", str(src), "-o", str(obj)])
+    sys.stderr.write(r.stderr)
+    if r.returncode != 0:
+        sys.exit(1)
+    link = ["clang++"] + flags(no_cov=True) + ["-o", a.out, str(obj)] + [str(objdir / f"_{n}.o") for n in RT_OBJS] \
+        + list(b.get("ldflags", [])) + link_flags() + SYS_LIBS
+    r = sh(link)
+    sys.stderr.write(r.stderr)
+    sys.exit(r.returncode)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--project", default="/project")
+    ap.add_argument("--out", default=None, help="output dir (default .stitch/build); with --standalone, the binary")
+    ap.add_argument("--target", default="all", choices=["all", "fuzzer", "repro"])
+    ap.add_argument("--standalone", help="build a reproducer source file instead of the harness")
+    ap.add_argument("--objdir", help="runtime objects for --standalone (default .stitch/build/obj)")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    import tomllib  # here: the CLI imports this file for its parser (Python 3.9+)
+    proj = Path(a.project)
+    os.chdir(proj)
+    cfg = tomllib.loads((proj / "stitch.toml").read_text()) if (proj / "stitch.toml").exists() else {}
+    b = cfg.get("build", {})
+    san = b.get("sanitizers")
+    if san:
+        os.environ["STITCH_SANITIZERS"] = ",".join(san) if isinstance(san, list) else str(san)
+    if a.standalone:
+        return standalone(a, proj, cfg)
+
+    out = Path(a.out) if a.out else proj / ".stitch" / "build"
+    objdir, gendir = out / "obj", out / "gen"
+    objdir.mkdir(parents=True, exist_ok=True)
+    gendir.mkdir(parents=True, exist_ok=True)
+    std = b.get("std", "c++17")
+    user_cflags = list(b.get("cflags", []))
+    patterns = b.get("sources", ["harness/**/*.m", "harness/**/*.mm", "harness/**/*.c"])
+    srcs = sorted({p for pat in patterns for p in Path(".").glob(pat) if p.is_file() and p.parts[1:2] != ("data",)})
+    if not srcs:
+        return finish(a, {"ok": False, "errors": [{"file": "harness", "output": "no harness sources (harness/**/*.m)"}]})
+
+    instr = flags()
+    jobs, errors, seen = [], [], {}
+    for s in srcs:
+        text = s.read_text(errors="replace")
+        try:
+            eps = endpoints(text)
+        except SpecError as e:
+            errors.append({"file": str(s), "output": f"{s}: {e}\n"})
+            continue
+        for name, *_rest, line in eps:
+            if name in seen:
+                errors.append({"file": str(s), "output": f"{s}:{line}: stub {name} is already defined in {seen[name]}\n"})
+            seen[name] = f"{s}:{line}"
+        compile_src = s
+        if eps:
+            wrapper = gendir / (str(s).replace("/", "__") + s.suffix)
+            txt = (f"// Generated by stitch-build from {s}: the file itself, then its stub registrations.\n"
+                   f'#include "{(proj / s).resolve()}"\n' + registration(str(s), eps))
+            if not wrapper.exists() or wrapper.read_text() != txt:
+                wrapper.write_text(txt)
+            compile_src = wrapper
+        cmd = harness_cmd(s, std, user_cflags, cfg, instr)
+        obj = objdir / (str(s).replace("/", "__") + ".o")
+        jobs.append((compile_src, obj, cmd, keyed(cmd), s))
+    if errors:
+        for e in errors:
+            sys.stderr.write(e["output"])
+        return finish(a, {"ok": False, "sources": [str(s) for s in srcs], "errors": errors})
+    if not seen:
+        return finish(a, {"ok": False, "errors": [{"file": "harness", "output": "no STITCH_ENDPOINT stubs in harness/**/*.m"}]})
+    rt_jobs = [(*j, None) for j in runtime_jobs(objdir, std)]
+    errors = run_jobs(jobs + rt_jobs)
+    result = {"ok": not errors, "sources": [str(s) for s in srcs], "errors": errors}
+    if not errors:
+        harness_objs = [str(j[1]) for j in jobs] + [str(objdir / f"_{n}.o") for n in RT_OBJS]
+        targets = ["fuzzer", "repro"] if a.target == "all" else [a.target]
+        if not (STITCH / "lib" / "libstitch_engine.a").exists():  # the toolchain image (reproducers): no engine
+            targets = [t for t in targets if t != "fuzzer"]
+        nocov = flags(no_cov=True)
+        for t in targets:
+            main_o = str(objdir / ("_main_fuzzer.cpp.o" if t == "fuzzer" else "_main_repro.cpp.o"))
+            engine = [str(STITCH / "lib" / "libstitch_engine.a")] if t == "fuzzer" else []
+            prof = ["-fprofile-instr-generate"] if os.environ.get("STITCH_COVERAGE") else []
+            cmd = ["clang++"] + nocov + prof + ["-o", str(out / t), main_o] + harness_objs + list(b.get("ldflags", [])) \
+                + engine + link_flags() + SYS_LIBS
+            r = sh(cmd)
+            if r.returncode != 0:
+                errors.append({"file": f"link {t}", "output": r.stderr[-8000:]})
+                sys.stderr.write(r.stderr)
+                result["ok"] = False
+            else:
+                result[t] = str(out / t)
+        if result["ok"]:
+            exe = out / ("fuzzer" if "fuzzer" in targets else "repro")
+            r = sh([str(exe), "manifest"] if exe.name == "fuzzer" else [str(exe), "--manifest"],
+                   env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0", "LLVM_PROFILE_FILE": "/dev/null"})
+            if r.returncode == 0:
+                (out / "manifest.json").write_text(r.stdout)
+                m = json.loads(r.stdout)
+                result.update(endpoints=len(m["endpoints"]), objects=len(m["objects"]), datatypes=len(m["datatypes"]))
+            else:
+                result["ok"] = False
+                errors.append({"file": "manifest", "output": (r.stderr or r.stdout)[-4000:]})
+                sys.stderr.write(r.stderr)
+    result["errors"] = errors
+    return finish(a, result)
+
+
+def finish(a, result):
+    if a.json:
+        print(json.dumps(result))
+    elif result["ok"]:
+        print(f"built {', '.join(t for t in ('fuzzer', 'repro') if t in result)}: "
+              f"{result.get('endpoints', '?')} endpoints, {result.get('objects', '?')} object types, "
+              f"{result.get('datatypes', '?')} datatypes")
+    sys.exit(0 if result["ok"] else 1)
+
+
+if __name__ == "__main__":
+    main()
