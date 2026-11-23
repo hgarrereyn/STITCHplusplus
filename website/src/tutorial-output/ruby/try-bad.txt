@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c4/bad.rb
+NO CRASH: .stitch/standalone/c4/bad.rb ran to completion (expected KeyError in Hash#fetch)

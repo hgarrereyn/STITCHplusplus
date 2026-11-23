@@ -1,39 +1,12 @@
 ---
-// Home page body: a harness next to the program it produced, the two guides, languages, install.
+// Home page body: a harness next to the program it produced (in the reader's language, recorded from
+// the tutorial run), the two guides, languages, install.
 import { Code } from "@astrojs/starlight/components";
+import RunOutput from "./RunOutput.astro";
+import LangSelect from "./LangSelect.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const url = (path: string) => `${base}/${path}`;
-
-const stubs = `@stitch.endpoint(bails_on=(ValueError,))
-def load(text: Str[256, KvText]) -> New[Store]:
-    return kvlib.load(text)
-
-@stitch.endpoint(bails_on=(ValueError,))
-def put(st: Borrow[Store], key: Str[16], value: Str[32]):
-    st.put(key, value)
-
-@stitch.endpoint
-def remove(st: Borrow[Store], key: Str[16]):
-    st.remove(key)
-
-@stitch.endpoint
-def roundtrip(st: Borrow[Store]):
-    again = kvlib.load(st.dump())
-    stitch.check(dict(again.items()) == dict(st.items()),
-                 "dump/load roundtrip")`;
-
-const trace = `[stitch] #0 load(text=Str[0,decoded]"")
-[stitch]     -> ok produced o0.0
-[stitch] #1 put(st=o0.0, key=Str[3]"tmp", value=Str[0]"")
-[stitch]     -> ok
-[stitch] #2 remove(st=o0.0, key=Str[3]"tmp")
-[stitch]     -> ok
-[stitch] #3 roundtrip(st=o0.0)
-
-[stitch] EXCEPTION in roundtrip: KeyError: 'tmp'
-    #0 0x0 in Store.items /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:26
-    #1 0x0 in Store.dump /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:29`;
 
 const languages = [
   ["cpp", "C/C++"],
@@ -49,16 +22,19 @@ const languages = [
 ---
 
 <div class="landing not-content">
+  <div class="showcase-wrap">
+  <LangSelect />
   <section class="showcase" aria-label="A harness and a crash it found">
     <div class="pane">
       <p class="pane-label">You write stubs</p>
-      <Code code={stubs} lang="python" title="harness/stubs.py" frame="code" />
+      <RunOutput name="harness" lang="source" />
     </div>
     <div class="pane">
       <p class="pane-label">STITCH++ finds a program that breaks it</p>
-      <Code code={trace} lang="text" title="stitch exec c5 --trace" frame="terminal" />
+      <RunOutput name="trace-short" />
     </div>
   </section>
+  </div>
 
   <section class="guides" aria-label="Guides">
     <a class="guide" href={url("guide/")}>

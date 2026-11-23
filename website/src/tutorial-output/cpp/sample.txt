@@ -1,0 +1,6 @@
+$ stitch sample KvText -n 5
+""
+"6./Z= +jG<P<MZ\"m$\n"
+"Z-PQG97d=\\KU'Arc,8]l0\ntmp=\ufffd\u052f\u0013\u44a8\ufffd\ufffd\u0001%\ufffd\n\ufffd8\ufffd=RA-X tFKd4d\nfq0YvKAu=VD\ntmp=J$^.te45Q@l7\n"
+""
+"N:[@F4\"p=^x`<4,HZ~JK\n6R=\ufffd\bT_?Z\u00ccu\ufffd\ufffd-\n\ufffd\ufffdk3\ufffd\ufffd\\G=#!\ufffd[\u000b\ufffdx\n"

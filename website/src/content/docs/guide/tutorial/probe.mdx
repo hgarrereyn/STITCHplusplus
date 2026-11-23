@@ -4,22 +4,15 @@ description: Build the harness and run a short probe to see which stubs work.
 languages: true
 ---
 
-The output on this page and the next ones comes from the Python store. Other languages print the
-same reports with their own numbers and error names.
+import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
+
+The output on this page and the next ones was recorded by running this tutorial in the language
+you picked. Fuzzing is random, so your numbers and crash ids will differ.
 
 ## Build
 
-```sh
-stitch build
-stitch check
-```
-
-```
-ok: 4 endpoints, 1 object types, 0 datatypes  [stitch-kv:local]
-4 endpoints, 1 object types, 0 datatypes
-  harness/: 4
-no issues
-```
+<RunOutput name="build" />
 
 `stitch build` compiles the harness against the library image and prints compile errors with file
 and line. `stitch check` runs static checks: stubs that can never run because nothing produces
@@ -29,37 +22,53 @@ their inputs, attributes that are read but never set, and data types with nothin
 
 A probe is a short run with one worker, followed by a report on the stubs that are not working.
 
-```sh
-stitch probe --secs 30
-```
-
-```
-probe: 30s, 279k execs (9.3k/s), 41 edges, corpus 12, calls bailing 49% (programs with a bail 98%), 0 crash/timeout programs saved
-depends on where an input came from (the stub that made or last used that object; the fuzzer learns these pairs. Act only when the low one should work: a different kind of object behind one type gets its own type):
-  put(st): ok 18% when st last came from put, 95% when from load
-often skipped because an input object was missing (1): its producer bailed or returned no object
-  remove  skipped 227692x, ran 156001x
-```
+<RunOutput name="probe-1" />
 
 The first line is the summary:
 
-- **279k execs**: programs run, about 9,300 per second.
-- **41 edges**: branches of the library reached so far.
-- **calls bailing 49%**: half of all calls were rejected as invalid input. That work is wasted.
+- **execs**: programs run, and how many per second.
+- **edges**: branches of the library reached so far.
+- **calls bailing**: the share of calls rejected as invalid input. That work is wasted.
+- **crash/timeout programs saved**: programs that found a bug. If there are some already, leave
+  them for page 6.
 
-The other lines name stubs to look at:
+The lines below the summary name stubs to look at, such as stubs that never succeed or that are
+often skipped because their input object is missing.
 
-- **depends on where an input came from**: `put` succeeds more often on some stores than others.
-  This is normal: the fuzzer learns which calls to chain.
-- **often skipped**: `remove` was skipped 227k times because its store was missing. The store
-  comes from `new_store` or `load`, and `load` usually fails.
+`stitch status probe --json` has the numbers for each stub. The entry for `load`:
 
-`stitch status probe --json` has the numbers for each stub. For `load`:
+<RunOutput name="load-1" lang="json" />
 
-```json
-{ "name": "load", "invoked": 515646, "ok": 113016, "bail_rate": 0.781,
-  "bail_reasons": [{ "reason": "raised ValueError", "count": 402630 }] }
-```
+{/* gen:load */}
+<Lang id="python">
+`load` bailed on 34% of its calls.
+</Lang>
+<Lang id="cpp">
+`load` bailed on 51% of its calls.
+</Lang>
+<Lang id="javascript">
+`load` bailed on 41% of its calls.
+</Lang>
+<Lang id="java">
+`load` bailed on 52% of its calls.
+</Lang>
+<Lang id="go">
+`load` bailed on 70% of its calls.
+</Lang>
+<Lang id="rust">
+`load` bailed on 37% of its calls.
+</Lang>
+<Lang id="ruby">
+`load` bailed on 37% of its calls.
+</Lang>
+<Lang id="swift">
+`load` bailed on 61% of its calls.
+</Lang>
+<Lang id="objc">
+`load` bailed on 57% of its calls.
+</Lang>
+{/* /gen:load */}
 
-`load` bails on 78% of its calls. It is given random text, and random text rarely consists of
-`key=value` lines. The next page fixes this with a data type, and adds a check.
+`load` is given random text. Random text rarely consists of `key=value` lines, so `load` rejects
+much of it and reads few entries from the rest. The next page fixes this with a data type, and adds
+a check.

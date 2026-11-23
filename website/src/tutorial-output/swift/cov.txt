@@ -1,0 +1,22 @@
+$ stitch cov
+[stitch] coverage build + 314 programs (main)
+coverage of 314 programs (292 ok, 22 crashed, 0 timed out), library at local
+
+library:
+  lines           68 / 75       90.7%
+  functions       18 / 21       85.7%
+  branches         -
+
+  file                                                lines  functions
+  src/Sources/KVSwift/KV.swift                        85.4%      83.3%
+  tch-swift-cov/app/pkg/Sources/worker/stubs.swift    96.4%      87.5%
+  itch-swift-cov/app/pkg/Sources/worker/main.swift   100.0%     100.0%
+
+never called: 3 library functions, 3 of them not static
+  $s7KVSwift5StoreC3getySSSgSSF  src/Sources/KVSwift/KV.swift:21
+  $s7KVSwift5StoreC6byteAtys5UInt8VSgSS_SitF  src/Sources/KVSwift/KV.swift:33
+  $s6worker9roundtrip6Stitch5Stub1VyAC6BorrowVyAA5StoreOGytGvpfiyAJKcfU_S2S_SStXEfU_  tmp/stitch-swift-cov/app/pkg/Sources/worker/stubs.swift:35
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

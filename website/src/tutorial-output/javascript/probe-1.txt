@@ -1,0 +1,4 @@
+$ stitch probe --secs 30
+[stitch] probing for 30s of fuzzing (plus the harness build and worker start-up)...
+probe: 30s, 161k execs (5.4k/s), 24 edges, corpus 47, calls bailing 14% (programs with a bail 54%), 5 crash/timeout programs saved
+crashes found: run `stitch crashes probe`

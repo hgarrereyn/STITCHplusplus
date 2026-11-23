@@ -1,0 +1,20 @@
+$ stitch cov
+[stitch] coverage build + 126 programs (main)
+coverage of 126 programs (124 ok, 2 crashed, 0 timed out), library at local
+
+library:
+  lines           54 / 69       78.3%
+  functions        7 / 10       70.0%
+  branches        23 / 32       71.9%
+
+  file             lines  functions
+  src/KVStore.m    78.3%      70.0%
+
+never called: 3 library functions, 3 of them not static
+  KVStore.m:invalid  src/KVStore.m:6
+  KVStore.m:_i_KVStore__stringForKey_  src/KVStore.m:53
+  KVStore.m:_i_KVStore__byteForKey_atIndex_  src/KVStore.m:78
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

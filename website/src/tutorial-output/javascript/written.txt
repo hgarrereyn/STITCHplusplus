@@ -1,0 +1,11 @@
+async function main() {
+  // #0 load(text)
+  const store0 = await stitch.call(0, "load", { text: "%Knn *%(Z=\ufffdu\ufffd\nf\f\ufffd=\ufffd\u1d94\u0001\u0015{\ufffd~\ufffd\ntmp=" });
+  // #1 remove(st=store0, key)
+  await stitch.call(1, "remove", { st: store0, key: "tmp" });
+  // #2 roundtrip(st=store0)  <-- crashes here in the original run
+  await stitch.call(2, "roundtrip", { st: store0 });
+  // the original run crashed in call #2; nothing after it ran
+}
+
+stitch.run(main);

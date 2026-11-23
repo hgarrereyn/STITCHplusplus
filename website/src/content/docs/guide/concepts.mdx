@@ -16,11 +16,11 @@ and what it produces (new objects). A program is a list of stub calls, where eac
 refers to an output of an earlier call. `stitch exec --trace` prints programs like this:
 
 ```
-[stitch] #0 new_store()
+[stitch] #0 load(text=Str[3,decoded]"a=1")
 [stitch]     -> ok produced o0.0
 [stitch] #1 put(st=o0.0, key=Str[4]"tmpa", value=Str[1]"x")
 [stitch]     -> ok
-[stitch] #2 remove(st=o0.0, key=Str[4]"tmpa")
+[stitch] #2 roundtrip(st=o0.0)
 [stitch]     -> ok
 ```
 
@@ -62,17 +62,97 @@ Every parameter that is not an object is fuzzed:
 Prefer a range or a list of values to a plain integer that the stub then rejects. A stub that
 rejects most values wastes runs.
 
-A source picks among things that exist at run time, such as an existing key:
+A source picks among things that exist at run time, such as an existing key or element. These
+examples come from the language reference:
 
+<Lang id="python">
 ```python
 @stitch.endpoint
-def remove_existing(st: Borrow[Store], s: Src[8]):
-    keys = sorted(k for k, _ in st.items())
-    stitch.require(keys, "empty store")
-    st.remove(s.pick(keys))
+def remove(doc: Borrow[Doc], s: Src[8]):
+    keys = list(doc.keys())
+    stitch.require(keys, "no keys")
+    doc.remove(s.pick(keys))                  # pick an existing key
 ```
+</Lang>
+<Lang id="cpp">
+```cpp
+void delete_member(Borrow<Json> obj, Src<16> s) {
+    int n = cJSON_GetArraySize(obj);
+    stitch::require(cJSON_IsObject(obj) && n > 0, "no members");
+    cJSON_DeleteItemFromArray(obj, (int)s->choice(n));   // pick an existing member
+}
+STITCH_ENDPOINT(delete_member);
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.endpoint("remove_key", { o: Borrow(Obj), s: Src(8) }, null, ({ o, s }) => {
+  const keys = Object.keys(o);
+  stitch.require(keys.length > 0, "no keys");
+  delete o[s.pick(keys)];                               // pick an existing key
+});
+```
+</Lang>
+<Lang id="java">
+```java
+@Endpoint
+public static void get_index(CSVRecord r, @Max(4) Source s) {
+    Stitch.require(r.size() > 0, "empty record");
+    int i = s.choice(r.size());                 // pick an existing field
+    Stitch.check(java.util.Objects.equals(r.get(i), r.toList().get(i)), "get(i) matches values()");
+}
+```
+</Lang>
+<Lang id="go">
+```go
+func remove(d *Doc, s *stitch.Source) {
+	keys := sortedKeys(d.M)                      // sorted: map order is random
+	stitch.Require(len(keys) > 0, "no keys")
+	delete(d.M, stitch.Pick(s, keys...))         // pick an existing key
+}
+```
+</Lang>
+<Lang id="rust">
+```rust
+endpoint! {
+    fn pick_comparator(req: Borrow<Req>, s: Src<8>) -> Option<New<Cmp>> {
+        if req.comparators.is_empty() { return None; }
+        let i = s.choice(req.comparators.len());          // pick an existing element
+        Some(New::new(req.comparators[i].clone()))
+    }
+}
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.endpoint :remove, { doc: Borrow[Doc], s: Src[8] } do |doc, s|
+  kids = doc.root ? doc.root.elements.to_a : []
+  Stitch.require(!kids.empty?, "no children")
+  doc.root.delete_element(s.pick(kids))       # pick an existing element
+end
+```
+</Lang>
+<Lang id="swift">
+```swift
+let removeChild = endpoint("remove_child") { (doc: Borrow<Doc>, s: Choices<8>) throws in
+    let kids = doc.value.body()?.children().array() ?? []
+    try require(!kids.isEmpty, "no children")
+    try s.source.pick(kids).remove()                        // pick an existing element
+}
+```
+</Lang>
+<Lang id="objc">
+```objc
+STITCH_ENDPOINT(void, remove_any, Borrow(Store) st, Src(8) s) {
+    NSArray *keys = [[st dictionary] allKeys];
+    STRequire(keys.count > 0, @"empty");
+    [st removeKey:[s pick:keys]];                   // pick an existing key
+}
+```
+</Lang>
 
-Sort before picking, so that a program replays the same way.
+When the order is not stable (a hash map), sort before picking, so that a program replays the same
+way.
 
 ## Bails, bugs and checks
 
@@ -97,21 +177,121 @@ A data type is a tag on a string or bytes parameter, such as `Str[256, KvText]`.
 - `*.dict`: tokens, one quoted string per line
 - a **decoder** in the harness, which builds a value from fuzzer choices
 
-A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token,
-`s.range(0, 9)` for a number, and `while s.more():` to loop. Mutations change the choices, so
-decoded values stay well formed. `stitch sample KvText -n 5` prints values a decoder makes.
+<Lang id="python">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more():` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="cpp">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw<Other>()`.
+</Lang>
+<Lang id="javascript">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="java">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw("Other")`.
+</Lang>
+<Lang id="go">
+A decoder draws from a source: `s.Str(8)` for text, `s.Token()` for a dictionary token, `s.Range(0, 9)` for a
+number, and `for s.More()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `stitch.Draw[T](s, "Other")`.
+</Lang>
+<Lang id="rust">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw::<Other>()`.
+</Lang>
+<Lang id="ruby">
+A decoder draws from a source: `s.str(8)` for text, `s.token` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="swift">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other.self)`.
+</Lang>
+<Lang id="objc">
+A decoder draws from a source: `[s str:8]` for text, `[s token]` for a dictionary token, `[s range:0 to:9]` for a
+number, and `while ([s more])` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `STDraw(s, Other)`.
+</Lang>
 
-A decoder can return any value, not only text. A parameter of type `Val` receives it. Decoders can
-call each other with `s.draw(Other)`.
+`stitch sample KvText -n 5` prints values a decoder makes.
 
 ## Attributes
 
-An attribute is a value the harness stores on an object, for facts the library can't tell you:
+An attribute is a value the harness stores on an object, for facts the library can't tell you,
+such as a count the harness keeps:
 
+<Lang id="python">
 ```python
-stitch.set(st, "frozen", True)          # in a freeze stub
-stitch.require(not stitch.get(st, "frozen", False), "frozen")   # in stubs that modify
+stitch.set(doc, "edits", stitch.get(doc, "edits", 0) + 1)   # any value
+stitch.get(doc, "edits", 0)          # with a default: a missing key is normal
 ```
+</Lang>
+<Lang id="cpp">
+```cpp
+stitch::set(obj, "refs", stitch::get(obj, "refs", 0) + 1);       // integer, with a default
+stitch::require(stitch::get(obj, "refs", 0) == 0, "object is referenced");
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.set(o, "edits", stitch.get(o, "edits", 0) + 1);   // any value
+stitch.get(o, "edits", 0);             // with a default: a missing key is normal
+```
+</Lang>
+<Lang id="java">
+```java
+Stitch.set(p, "count", Stitch.getLong(p, "count", 0) + 1);   // any Object, lists included
+Stitch.getLong(p, "count", 0);          // long, with a default
+```
+</Lang>
+<Lang id="go">
+```go
+stitch.Set(d, "depth", stitch.GetInt(d, "depth", 0)+1)   // any value
+stitch.GetInt(d, "depth", 0)            // int64 with a default
+```
+</Lang>
+<Lang id="rust">
+```rust
+set_int(&v, "bumps", 1);
+let n = get_int(&v, "bumps");            // Option<i64>; a miss is reported by `stitch probe`
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.set(doc, "edits", Stitch.get(doc, "edits", 0) + 1)   # any value
+Stitch.get(doc, "edits", 0)                 # with a default: a missing key is normal
+```
+</Lang>
+<Lang id="swift">
+```swift
+doc.set("children", (doc.int("children") ?? 0) + 1)
+```
+</Lang>
+<Lang id="objc">
+```objc
+STSetInt(st, @"puts", STGetIntOr(st, @"puts", 0) + 1);   // integer, with a default
+STRequire(STGetIntOr(st, @"puts", 0) < 100, @"store is full");
+```
+</Lang>
 
 Ask the library first; use an attribute only when there is no API for the fact. A stub that copies
 an object should copy its attributes too.
@@ -192,7 +372,7 @@ Full reference: [JavaScript](/STITCHplusplus/reference/languages/javascript/).
 | value, source | `@Val(value = "Tag", max = 256)`, `@Max(8) Source s` |
 | bail, require, check | `throw Stitch.bail(r)`, `Stitch.require(c, r)`, `Stitch.check(c, what)` |
 | data type, decoder | `@Decoder("Tag")` on a `public static` method taking a `Source` |
-| attributes | `Stitch.set(x, k, v)`, `Stitch.get(x, k)` |
+| attributes | `Stitch.set(x, k, v)`, `Stitch.getLong(x, k, default)` |
 
 Full reference: [Java](/STITCHplusplus/reference/languages/java/).
 </Lang>

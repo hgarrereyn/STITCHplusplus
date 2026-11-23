@@ -1,0 +1,17 @@
+$ stitch crashes
+[stitch] rerunning 37 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+4 unique crashes in 'main':
+  c1   x10    index out of range  in load
+         kvgo.Load kv.go:66
+         example (6 calls): .stitch/campaigns/main/w0/crashes/32adc2d5ed2d4dd3.stp
+  c2   x10    index out of range  in roundtrip
+         kvgo.Load kv.go:66
+         stitchharness.roundtrip stubs.go:35
+         example (5 calls): .stitch/campaigns/main/w0/crashes/e5a2b089c5515051.stp
+  c3   x10    nil pointer dereference  in roundtrip
+         kvgo.Store.Dump kv.go:48
+         stitchharness.roundtrip stubs.go:35
+         example (7 calls): .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.stp
+  c4   x7     check failed: dump/load roundtrip  in roundtrip
+         example (7 calls): .stitch/campaigns/main/w0/crashes/79ccccf21afb5c00.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

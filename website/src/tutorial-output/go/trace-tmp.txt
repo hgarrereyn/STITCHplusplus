@@ -1,0 +1,20 @@
+$ stitch minimize c3 --secs 30
+[stitch] main:c3 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.stp (up to 30s; --secs to change)
+7 -> 3 calls, still crashes: True (nil pointer dereference | kvgo.Store.Dump kv.go:48 | stitchharness.roundtrip stubs.go)
+  .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.min.stp
+$ stitch exec c3 --trace
+[stitch] main:c3 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.min.stp
+[stitch] #0 load(text=Str[5,decoded]"tmp=\n")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] EXCEPTION in roundtrip: nil pointer dereference: runtime error: invalid memory address or nil pointer dereference
+    #0 0x0 in kvgo.Store.Dump /src/kv.go:48
+    #1 0x0 in stitchharness.roundtrip /project/.stitch/build/app/mod/stubs.go:35
+
+
+result: CRASH nil pointer dereference | kvgo.Store.Dump kv.go:48 | stitchharness.roundtrip stubs.go (8 ms)

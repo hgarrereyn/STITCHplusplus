@@ -15,8 +15,8 @@ call needs and what it produces:
 - **Fuzzed parameters** are every other parameter: strings, numbers, choices. The fuzzer picks
   their values.
 
-The fuzzer chains stubs into **programs**: `new_store`, then `put` on that store, then `remove`,
-and so on.
+The fuzzer chains stubs into **programs**: it creates a store, calls `put` on that store, removes a
+key from it, and so on.
 
 ## The first four stubs
 
@@ -323,13 +323,71 @@ skipped.
 Everything else that goes wrong is a **bug**: a crash, a sanitizer report, an exception the stub
 did not declare, or a program that runs past the timeout.
 
-There are three ways to bail in every language:
+Three calls control this:
 
+<Lang id="python">
+| Call | Meaning |
+|---|---|
+| `stitch.bail("reason")` | stop this call; not a bug |
+| `stitch.require(cond, "reason")` | bail unless `cond` holds |
+| `stitch.check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="cpp">
+| Call | Meaning |
+|---|---|
+| `stitch::bail("reason")` | stop this call; not a bug |
+| `stitch::require(cond, "reason")` | bail unless `cond` holds |
+| `stitch::check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="javascript">
+| Call | Meaning |
+|---|---|
+| `stitch.bail("reason")` | stop this call; not a bug |
+| `stitch.require(cond, "reason")` | bail unless `cond` holds |
+| `stitch.check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="java">
+| Call | Meaning |
+|---|---|
+| `throw Stitch.bail("reason")` | stop this call; not a bug |
+| `Stitch.require(cond, "reason")` | bail unless `cond` holds |
+| `Stitch.check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="go">
+| Call | Meaning |
+|---|---|
+| `stitch.Bail("reason")` | stop this call; not a bug |
+| `stitch.Require(cond, "reason")` | bail unless `cond` holds |
+| `stitch.Check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="rust">
 | Call | Meaning |
 |---|---|
 | `bail("reason")` | stop this call; not a bug |
 | `require(cond, "reason")` | bail unless `cond` holds |
 | `check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="ruby">
+| Call | Meaning |
+|---|---|
+| `Stitch.bail("reason")` | stop this call; not a bug |
+| `Stitch.require(cond, "reason")` | bail unless `cond` holds |
+| `Stitch.check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="swift">
+| Call | Meaning |
+|---|---|
+| `throw Bail("reason")` | stop this call; not a bug |
+| `try require(cond, "reason")` | bail unless `cond` holds |
+| `try check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
+<Lang id="objc">
+| Call | Meaning |
+|---|---|
+| `STBail(@"reason")` | stop this call; not a bug |
+| `STRequire(cond, @"reason")` | bail unless `cond` holds |
+| `STCheck(cond, @"what")` | a bug if `cond` is false (used on page 5) |
+</Lang>
 
 Keep bail reasons short and fixed (`"invalid text"`, not the text itself). Reports count bails by
 reason.

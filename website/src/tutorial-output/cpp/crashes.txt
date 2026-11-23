@@ -1,0 +1,20 @@
+$ stitch crashes
+[stitch] rerunning 31 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+4 unique crashes in 'main':
+  c1   x10    SEGV  in load
+         strcspn  (BuildId:
+         kv_load kv.c:96:15
+         load stubs.cpp:20:20
+         example (4 calls): .stitch/campaigns/main/w1/crashes/c8eb10ab74699171.stp
+  c2   x10    heap-use-after-free READ  in roundtrip
+         kv_dump kv.c:72:37
+         roundtrip stubs.cpp:35:18
+         example (6 calls): .stitch/campaigns/main/w0/crashes/3ab9ff5378154395.stp
+  c3   x9     SEGV  in roundtrip
+         strcspn  (BuildId:
+         kv_load kv.c:96:15
+         roundtrip stubs.cpp:36:23
+         example (3 calls): .stitch/campaigns/main/w0/crashes/5fb33407f481b1f4.stp
+  c4   x2     check failed: dump/load roundtrip  in roundtrip
+         example (4 calls): .stitch/campaigns/main/w0/crashes/b2a0aa424e9a3e5a.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

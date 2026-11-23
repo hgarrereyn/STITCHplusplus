@@ -5,18 +5,11 @@ languages: true
 ---
 
 import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
 
 ## Run a campaign
 
-```sh
-stitch fuzz --jobs 2 --secs 60
-stitch status
-```
-
-```
-campaign 'main': running
-  24s, 275k execs (11.4k/s), 64 edges, corpus 32, calls bailing 16% (programs with a bail 54%), 50 crash/timeout programs saved
-```
+<RunOutput name="fuzz" />
 
 The campaign runs in the background. `--jobs` sets the number of workers, and `--secs` stops it
 after a while; without `--secs` it runs until `stitch stop`. Running `stitch fuzz` again resumes
@@ -24,171 +17,112 @@ from the programs it kept. `stitch status --wait` waits for the end.
 
 ## List the crashes
 
-```sh
-stitch crashes
-```
+<RunOutput name="crashes" />
 
-```
-5 unique crashes in 'main':
-  c1   x10    IndexError  in load
-         load __init__.py:41
-         load stubs.py:25
-         example (5 calls): .stitch/campaigns/main/w0/crashes/24ccd171e7c14f06.stp
-  c2   x10    IndexError  in roundtrip
-         load __init__.py:41
-         roundtrip stubs.py:40
-         example (3 calls): .stitch/campaigns/main/w1/crashes/d6781863ea8a05fd.stp
-  c3   x10    ValueError  in roundtrip
-         Store.put __init__.py:11
-         load __init__.py:42
-         roundtrip stubs.py:40
-         example (5 calls): .stitch/campaigns/main/w0/crashes/6d86183dceaa161a.stp
-  c4   x10    check failed: dump/load roundtrip  in roundtrip
-         example (5 calls): .stitch/campaigns/main/w0/crashes/48edc946a4d52a4a.stp
-  c5   x9     KeyError  in roundtrip
-         Store.items __init__.py:26
-         Store.dump __init__.py:29
-         roundtrip stubs.py:40
-         example (7 calls): .stitch/campaigns/main/w0/crashes/e5d2287e7c795607.stp
-```
-
-Crashes are grouped by their kind and the innermost frames in the library. `x10` is the number of
-saved programs in the group. Each group has an id: `c1`, `c2`, ...
+Crashes are grouped by their kind and the innermost frames in the library. The number after the
+id (`x10`) is how many saved programs are in the group.
 
 ## Look at one
 
-```sh
-stitch minimize c5
-stitch exec c5 --trace
-```
+Take the group whose frames go through `dump`, or `items`, which `dump` calls. `minimize` removes
+calls and shortens inputs while the program still crashes the same way. `exec --trace` runs it and prints every call:
 
-`minimize` removes calls and shortens inputs while the program still crashes the same way. `exec
---trace` runs it and prints every call:
+<RunOutput name="trace-tmp" />
 
-```
-[stitch] #0 load(text=Str[0,decoded]"")
-[stitch]     -> ok produced o0.0
-[stitch] #1 put(st=o0.0, key=Str[3]"tmp", value=Str[0]"")
-[stitch]     -> ok
-[stitch] #2 remove(st=o0.0, key=Str[3]"tmp")
-[stitch]     -> ok
-[stitch] #3 roundtrip(st=o0.0)
-
-[stitch] EXCEPTION in roundtrip: KeyError: 'tmp'
-    #0 0x0 in Store.items /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:26
-    #1 0x0 in Store.dump /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:29
-    #2 0x0 in roundtrip /project/.stitch/build/app/harness/stubs.py:40
-```
-
-Put `tmp`, remove it, then dump: `dump` fails. In the library, `remove` skips the order list for
-keys that start with `tmp`, so `dump` looks up a key that is gone.
+A key that starts with `tmp` goes into the store (through `load` or `put`), `remove` removes it,
+and then `dump` fails. In the library, `remove` skips the order list for keys that start with
+`tmp`, so `dump` looks up a key that is gone.
 
 ## Harness bug or library bug?
 
 Decide this for every crash:
 
 - **Harness bug**: the stubs used the API wrong, for example a double free or a missing
-  precondition. Fix the stub, run `stitch build`, and check that `stitch exec c5` no longer
-  crashes.
+  precondition. Fix the stub, run `stitch build`, and check that `stitch exec` with the crash id
+  no longer crashes.
 - **Library bug**: every call was valid use of the API. Make a reproducer (next page).
 
-Here every call is valid: putting, removing and dumping are always allowed. `c5` is a library bug.
+Here every call is valid: putting, removing and dumping are always allowed, so this is a library
+bug.
 
-The other groups:
+## The other groups
 
-```
-[stitch] #0 load(text=Str[5,decoded]"#!=#!")
+The other groups come from two more bugs. A value that starts with `#!` makes `load` crash; it
+should reject the text instead:
 
-[stitch] EXCEPTION in load: IndexError: list index out of range
-```
+<RunOutput name="trace-hash" />
 
-`c1`: a value that starts with `#!` makes `load` index past the end of a list. `load` should reject
-the text with a `ValueError`, not crash. `c2` is the same bug, reached through `roundtrip`.
+A key that contains `=` does not survive `dump` and `load`: `load` splits the line at the first
+`=`, so the key comes back different, or empty and rejected. `roundtrip` catches it:
 
-```
-[stitch] #1 put(st=o0.0, key=Str[2]"\xb7=", value=Str[0]"")
-[stitch]     -> ok
-[stitch] #2 roundtrip(st=o0.0)
+<RunOutput name="trace-eq" />
 
-[stitch] CHECK FAILED: dump/load roundtrip (node 2)
-```
+The groups of this run, by bug:
 
-`c4`: a key that contains `=` comes back from `load` as a different key. `c3` is the same bug with
-the key `=`: it comes back as an empty key, and `load` raises `ValueError` on the output of `dump`.
-
-Five groups, three bugs. One bug can show up as several groups, so fix or explain one group before
-judging the next.
-
-## In your language
-
+{/* gen:groups */}
 <Lang id="python">
-The output above is from Python.
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c5` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c3`, `c4` |
 </Lang>
 <Lang id="cpp">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | `heap-use-after-free READ` in `kv_dump` |
-| `#!` values | `SEGV` in `kv_load` |
-| keys with `=` | `check failed: dump/load roundtrip` |
+| `tmp` keys | `c2` |
+| `#!` values | `c1`, `c3` |
+| keys with `=` | `c4` |
 </Lang>
 <Lang id="javascript">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | `TypeError` in `dump` |
-| `#!` values | `TypeError` in `load` |
-| keys with `=` | `check failed: dump/load roundtrip` |
-
-The JavaScript store also has `setPath`, which does not filter `__proto__`. The finished harness
-has a `set_path` stub, and the fuzzer reports the prototype pollution.
+| `tmp` keys | `c4` |
+| `#!` values | `c2`, `c3` |
+| keys with `=` | `c1`, `c5` |
 </Lang>
 <Lang id="java">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | `NullPointerException` in `Store.dump` |
-| `#!` values | `StringIndexOutOfBoundsException` in `Store.load` |
-| keys with `=` | `check failed: dump/load roundtrip`, or `IllegalArgumentException` in `roundtrip` |
+| `tmp` keys | `c2` |
+| `#!` values | `c1` |
+| keys with `=` | `c3`, `c4` |
 </Lang>
 <Lang id="go">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | a nil pointer dereference panic in `Dump` |
-| `#!` values | an index out of range panic in `Load` |
-| keys with `=` | `check failed: dump/load roundtrip` |
+| `tmp` keys | `c3` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c4` |
 </Lang>
 <Lang id="rust">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | a panic on `unwrap()` of `None` in `dump` |
-| `#!` values | an index out of bounds panic in `load` |
-| keys with `=` | `check failed: dump/load roundtrip` |
-
-The Rust store also has `byte_at`, which reads one byte past the value. The finished harness has a
-`byte_at` stub, and AddressSanitizer reports the overflow.
+| `tmp` keys | `c2` |
+| `#!` values | `c1` |
+| keys with `=` | `c3` |
 </Lang>
 <Lang id="ruby">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | `KeyError` in `Store#items` |
-| `#!` values | `NoMethodError` in `Kvrb.load` |
-| keys with `=` | `check failed: dump/load roundtrip`, or `ArgumentError` in `roundtrip` |
+| `tmp` keys | `c4` |
+| `#!` values | `c1` |
+| keys with `=` | `c2`, `c3` |
 </Lang>
 <Lang id="swift">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | a force unwrap of `nil` in `items` |
-| `#!` values | `Index out of range` in `load` |
-| keys with `=` | `check failed: dump/load roundtrip` |
-
-The Swift store also has `byteAt`, which is off by one. The finished harness has a `byte_at`
-stub, and the fuzzer reports the out-of-range index.
+| `tmp` keys | `c4` |
+| `#!` values | `c2`, `c3` |
+| keys with `=` | `c1` |
 </Lang>
 <Lang id="objc">
-| Bug | Shows up as |
+| Bug | Groups |
 |---|---|
-| `tmp` keys | `NSInvalidArgumentException` in `-[KVStore items]` |
-| `#!` values | `NSRangeException` in `+[KVStore storeWithText:error:]` |
-| keys with `=` | `check failed: dump/load roundtrip` |
-
-The Objective-C store also has `byteForKey:atIndex:`, which is off by one. The finished harness
-has a `byte_at` stub, and AddressSanitizer reports the heap buffer overflow.
+| `tmp` keys | `c4` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c3` |
 </Lang>
+{/* /gen:groups */}
+
+One bug can show up as several groups, so fix or explain one group before judging the next.

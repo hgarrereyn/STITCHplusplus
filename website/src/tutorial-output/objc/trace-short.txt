@@ -1,0 +1,41 @@
+$ stitch exec c4 --trace
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/733243a843626d65.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/733243a843626d65.min.stp
+[stitch] #0 load(text=Str[4,decoded]"tmp=")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] EXCEPTION in roundtrip: NSInvalidArgumentException: Tried to init array with nil object
+    #0 0x55d624e3931c in objc_exception_throw /stitch/objc/src/stitch_objc_throw.c:30:21
+    #1 0x7ff3229060e2 in -[NSException raise] /usr/src/gnustep/libs-base/Source/NSException.m:1611:3
+    #2 0x7ff322905b7b in +[NSException raise:format:arguments:] /usr/src/gnustep/libs-base/Source/NSException.m:1490:3
+    #3 0x7ff322905b1e in +[NSException raise:format:] /usr/src/gnustep/libs-base/Source/NSException.m:1475:3
+    #4 0x7ff322865c26 in -[GSInlineArray initWithObjects:count:] /usr/src/gnustep/libs-base/Source/GSArray.m:419:8
+    #5 0x7ff3228acaa8 in +[NSArray arrayWithObjects:count:] /usr/src/gnustep/libs-base/Source/NSArray.m:277:10
+    #6 0x55d624e3a77f in -[KVStore items] /src/KVStore.m:65:24
+    #7 0x55d624e3aa41 in -[KVStore dump] /src/KVStore.m:74:25
+    #8 0x55d624dc309b in stub_roundtrip /project/harness/stubs.m:34:45
+
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==9==ERROR: AddressSanitizer: ABRT on unknown address 0x000000000009 (pc 0x7ff322129bec bp 0x7ffd7636a500 sp 0x7ffd7636a4c0 T0)
+    #0 0x7ff322129bec in pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x9ebec) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #1 0x7ff3220d027d in raise (/lib/x86_64-linux-gnu/libc.so.6+0x4527d) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #2 0x7ff3220b38fe in abort (/lib/x86_64-linux-gnu/libc.so.6+0x288fe) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #3 0x55d624dce831 in stitch::detail::report_finding(unsigned int, char const*) /stitch/runtime/src/runtime.cpp:389:5
+    #4 0x55d624e35d08 in (anonymous namespace)::run_endpoint(int, stitch::detail::Ctx&) /stitch/objc/src/stitch_objc.mm:272:9
+    #5 0x55d624deadb8 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1368:13
+    #6 0x55d624de6454 in stitch_exec /stitch/runtime/src/runtime.cpp:1545:12
+    #7 0x55d624df4f4e in stitch_run_file /stitch/runtime/src/runtime.cpp:1565:12
+    #8 0x55d624dc0059 in main /stitch/runtime/src/main_repro.cpp:99:13
+    #9 0x7ff3220b51c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #10 0x7ff3220b528a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #11 0x55d624ce3d24 in _start (/project/.stitch/build/repro+0x47d24) (BuildId: 48c8e4d0d17a8ac6189fbae3a5e84fa525864216)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ABRT (/lib/x86_64-linux-gnu/libc.so.6+0x9ebec) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09) in pthread_kill
+[... shadow memory map omitted ...]
+
+result: CRASH NSInvalidArgumentException | -[KVStore items] KVStore.m:65 | -[KVStore dump] KVStore.m | stub_roundtrip stubs.m (121 ms)

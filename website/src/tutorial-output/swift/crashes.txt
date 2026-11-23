@@ -1,0 +1,19 @@
+$ stitch crashes
+[stitch] rerunning 28 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+4 unique crashes in 'main':
+  c1   x10    check failed: dump/load roundtrip  in roundtrip
+         example (4 calls): .stitch/campaigns/main/w0/crashes/7f2befa296976e27.stp
+  c2   x9     Index out of range  in load
+         load KV.swift:47:60
+         closure #1 in variable initialization expression of load stubs.swift:22:13
+         example (4 calls): .stitch/campaigns/main/w0/crashes/ab6b366ba91cb783.stp
+  c3   x6     Index out of range  in roundtrip
+         load KV.swift:47:60
+         closure #1 in variable initialization expression of roundtrip stubs.swift:34:21
+         example (4 calls): .stitch/campaigns/main/w0/crashes/267cb6bb880f3fde.stp
+  c4   x3     Unexpectedly found nil while unwrapping an Optional value  in roundtrip
+         closure #1 in Store.items KV.swift:29:71
+         Store.items KV.swift:29:55
+         Store.dump KV.swift:31:36
+         example (7 calls): .stitch/campaigns/main/w1/crashes/57865b83790633d8.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

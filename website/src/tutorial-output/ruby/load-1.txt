@@ -1,0 +1,1 @@
+{"name": "load", "invoked": 234081, "ok": 126195, "bail_rate": 0.371, "bail_reasons": [{"reason": "raised ArgumentError", "count": 86870}]}

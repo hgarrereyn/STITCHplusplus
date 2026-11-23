@@ -1,0 +1,6 @@
+$ stitch write c4
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/b1548eecfaf69d0d.min.stp
+wrote .stitch/standalone/c4/repro.rb (66 lines, 3 calls, crash in call #2)
+  expected: KeyError in Hash#fetch
+SAME CRASH: .stitch/standalone/c4/repro.rb -> KeyError in Hash#fetch
+next: cp .stitch/standalone/c4/repro.rb .stitch/standalone/c4/min.rb, shrink it, and run `stitch try .stitch/standalone/c4/min.rb` after each edit

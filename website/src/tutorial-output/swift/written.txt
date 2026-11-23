@@ -1,0 +1,11 @@
+exit(reproMain {
+    // #0 load()
+    let store0 = obj(try call(0, "load") { try load.body(Str("")) })
+    // #1 put(=store0, , )
+    _ = try call(1, "put") { try put.body(store0.borrow, Str("tmp"), Str("")) }
+    // #2 remove(=store0, )
+    _ = try call(2, "remove") { try remove.body(store0.borrow, Str("tmp")) }
+    // #3 roundtrip(=store0)  <-- crashes here in the original run
+    _ = try call(3, "roundtrip") { try roundtrip.body(store0.borrow) }
+    // the original run crashed in call #3; nothing after it ran
+})

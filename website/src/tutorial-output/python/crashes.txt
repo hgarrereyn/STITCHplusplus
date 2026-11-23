@@ -1,0 +1,24 @@
+$ stitch crashes
+[stitch] rerunning 49 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+5 unique crashes in 'main':
+  c1   x10    IndexError  in load
+         load __init__.py:41
+         load stubs.py:25
+         example (1 calls): .stitch/campaigns/main/w1/crashes/3367673ffe2a89fe.stp
+  c2   x10    IndexError  in roundtrip
+         load __init__.py:41
+         roundtrip stubs.py:40
+         example (4 calls): .stitch/campaigns/main/w0/crashes/5c5575c48efea250.stp
+  c3   x10    ValueError  in roundtrip
+         Store.put __init__.py:11
+         load __init__.py:42
+         roundtrip stubs.py:40
+         example (3 calls): .stitch/campaigns/main/w0/crashes/5e117e4685da3245.stp
+  c4   x10    check failed: dump/load roundtrip  in roundtrip
+         example (3 calls): .stitch/campaigns/main/w1/crashes/def0a47db684502b.stp
+  c5   x9     KeyError  in roundtrip
+         Store.items __init__.py:26
+         Store.dump __init__.py:29
+         roundtrip stubs.py:40
+         example (5 calls): .stitch/campaigns/main/w0/crashes/4141d2e5c3d584be.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

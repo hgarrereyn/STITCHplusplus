@@ -1,0 +1,19 @@
+$ stitch cov
+[stitch] coverage build + 501 programs (main)
+coverage of 501 programs (461 ok, 40 crashed, 0 timed out), library at local
+
+library:
+  lines           37 / 45       82.2%
+  functions        9 / 11       81.8%
+  branches         -
+
+  file              lines  functions
+  src/src/lib.rs    82.2%      81.8%
+
+never called: 2 library functions, 2 of them not static
+  <kvrs::Store>::byte_at  src/src/lib.rs:41
+  <kvrs::Store>::byte_at::{closure#0}  src/src/lib.rs:42
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

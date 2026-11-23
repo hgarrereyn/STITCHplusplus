@@ -1,0 +1,45 @@
+$ stitch exec c4 --trace
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/57865b83790633d8.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/57865b83790633d8.min.stp
+[stitch] #0 load(text=Str[0]"")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[3]"tmp", value=Str[0]"")
+[stitch]     -> ok
+[stitch] #2 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #3 roundtrip(st=o0.0)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: ILL on unknown address 0x561704d30ed9 (pc 0x561704d30ed9 bp 0x7ffd248fe0f0 sp 0x7ffd248fdf80 T0)
+    #0 0x561704d30ed9 in Swift runtime failure: Unexpectedly found nil while unwrapping an Optional value /<compiler-generated>
+    #1 0x561704d30ed9 in closure #1 in Store.items() /src/Sources/KVSwift/KV.swift:29:71
+    #2 0x561704d30ed9 in specialized Collection.map<A, B>(_:) /<compiler-generated>
+    #3 0x561704d30ed9 in Store.items() /src/Sources/KVSwift/KV.swift:29:55
+    #4 0x561704d310a8 in Store.dump() /src/Sources/KVSwift/KV.swift:31:36
+    #5 0x561704d90843 in closure #1 in variable initialization expression of roundtrip /project/.stitch/build/app/pkg/Sources/worker/stubs.swift:34:43
+    #6 0x561704d3be4e in closure #1 in endpoint<A>(_:file:_:) /stitch/swift/Stitch/Sources/Stitch/Endpoints.swift:98:77
+    #7 0x561704d3bfb7 in partial apply for closure #1 in endpoint<A>(_:file:_:) /<compiler-generated>
+    #8 0x561704d7e0cb in thunk for @escaping @callee_guaranteed (@unowned Call) -> (@error @owned Error) /<compiler-generated>
+    #9 0x561704d85d94 in partial apply for thunk for @escaping @callee_guaranteed (@unowned Call) -> (@error @owned Error) /<compiler-generated>
+    #10 0x561704d7d5bf in closure #1 in static Runtime.setup() /stitch/swift/Stitch/Sources/Stitch/Stitch.swift:527:42
+    #11 0x561704d9b98b in void (anonymous namespace)::invoke<4>(stitch::detail::Ctx&) /stitch/swift/bridge/bridge.cpp:47:25
+    #12 0x561704de1a0e in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/cpp-runtime/src/runtime.cpp:1368:13
+    #13 0x561704dde26f in stitch_exec /stitch/cpp-runtime/src/runtime.cpp:1545:12
+    #14 0x561704dec28f in stitch_run_file /stitch/cpp-runtime/src/runtime.cpp:1565:12
+    #15 0x561704e19fe8 in stitch_repro_main(int, char**) /stitch/cpp-runtime/src/main_repro.cpp:99:13
+    #16 0x561704d7e8d4 in stitchMain(argNames:_:) /stitch/swift/Stitch/Sources/Stitch/Stitch.swift:595:12
+    #17 0x561704d8e497 in worker_main /project/.stitch/build/app/pkg/Sources/worker/main.swift:7:6
+    #18 0x7f3304d221c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #19 0x7f3304d2228a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #20 0x561704c70d04 in _start (/project/.stitch/build/app/worker+0xbcd04) (BuildId: 48f36afc3038b80cb372f1457c189abee706f593)
+
+==12==Register values:
+rax = 0x0000000000000001  rbx = 0x0000000000000000  rcx = 0x0000000000000000  rdx = 0x00007f3304898000  
+rdi = 0x0000000000000000  rsi = 0x0000000000000001  rbp = 0x00007ffd248fe0f0  rsp = 0x00007ffd248fdf80  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007fffffffff01  r11 = 0x0000000000000201  
+r12 = 0x0000503000000aa0  r13 = 0x000050d000000380  r14 = 0xe300000000000000  r15 = 0x0000506000001100  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ILL /<compiler-generated> in Swift runtime failure: Unexpectedly found nil while unwrapping an Optional value
+==12==ABORTING
+
+result: CRASH Unexpectedly found nil while unwrapping an Optional value | closure #1 in Store.items KV.swift:29 | Store.items KV.swift | Store.dump KV.swift (175 ms)

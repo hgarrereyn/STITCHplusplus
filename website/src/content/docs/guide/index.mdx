@@ -1,7 +1,10 @@
 ---
 title: Overview
 description: What STITCH++ does and how it works.
+languages: true
 ---
+
+import Lang from "../../../components/Lang.astro";
 
 STITCH++ finds bugs in libraries by calling their API with generated inputs. It supports C/C++,
 Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C, and works the same way in each.
@@ -10,6 +13,7 @@ Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C, and works the s
 
 You write **stubs**: small typed functions that each make one API call.
 
+<Lang id="python">
 ```python
 @stitch.endpoint(bails_on=(ValueError,))
 def load(text: Str[256]) -> New[Store]:
@@ -19,9 +23,102 @@ def load(text: Str[256]) -> New[Store]:
 def remove(st: Borrow[Store], key: Str[16]):
     st.remove(key)
 ```
+</Lang>
+<Lang id="cpp">
+```cpp
+New<Store> load(Str<256> text) {
+    kv_store* st = kv_load(text.c_str());
+    stitch::require(st, "invalid text");
+    return st;
+}
+STITCH_ENDPOINT(load);
 
-The fuzzer **stitches** stubs into programs: it creates a store with `load`, passes that store to
-`remove`, and so on. It generates the arguments, keeps the programs that reach new code, and
+void remove_key(Borrow<Store> st, Str<16> key) { kv_remove(st, key.c_str()); }
+STITCH_ENDPOINT(remove_key);
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.endpoint("load", { text: Str(256) }, New(Store), ({ text }) => kv.load(text),
+  { bailsOn: [RangeError] });
+
+stitch.endpoint("remove", { st: Borrow(Store), key: Str(16) }, null, ({ st, key }) => st.remove(key));
+```
+</Lang>
+<Lang id="java">
+```java
+@Endpoint(bailsOn = {IllegalArgumentException.class})
+public static Store load(@Str(max = 256) String text) {
+    return Store.load(text);
+}
+
+@Endpoint
+public static void remove(Store st, @Str(max = 16) String key) {
+    st.remove(key);
+}
+```
+</Lang>
+<Lang id="go">
+```go
+stitch.Endpoint("load", kvgo.Load, "text:max=256")
+stitch.Endpoint("remove", remove, "st", "key:max=16")
+
+func remove(st *kvgo.Store, key string) { st.Remove(key) }
+```
+</Lang>
+<Lang id="rust">
+```rust
+endpoint! {
+    fn load(text: Str<256>) -> Result<New<Store>, String> {
+        Ok(New::new(kvrs::load(&text)?))
+    }
+}
+
+endpoint! {
+    fn remove(st: Borrow<Store>, key: Str<16>) {
+        st.remove(&key);
+    }
+}
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.endpoint :load, { text: Str[256] }, New[Store], bails_on: [ArgumentError] do |text|
+  Kvrb.load(text)
+end
+
+Stitch.endpoint :remove, { st: Borrow[Store], key: Str[16] } do |st, key|
+  st.remove(key)
+end
+```
+</Lang>
+<Lang id="swift">
+```swift
+let load = endpoint("load") { (text: Str<256, Plain>) throws -> New<Store> in
+    New(try KVSwift.load(text.value))
+}
+
+let remove = endpoint("remove") { (st: Borrow<Store>, key: Str<16, Plain>) in
+    st.value.remove(key.value)
+}
+```
+</Lang>
+<Lang id="objc">
+```objc
+STITCH_ENDPOINT(New(Store), load, Str(256) text) {
+    KVStore *st = [KVStore storeWithText:text error:NULL];
+    STRequire(st != nil, @"invalid text");
+    return st;
+}
+
+STITCH_ENDPOINT(void, remove, Borrow(Store) st, Str(16) key) {
+    [st removeKey:key];
+}
+```
+</Lang>
+
+The fuzzer **stitches** stubs into programs: it creates a store with `load`, removes a key from that
+store, and so on. It generates the arguments, keeps the programs that reach new code, and
 mutates them: changing arguments, and inserting, deleting and rewiring calls.
 
 It reports:

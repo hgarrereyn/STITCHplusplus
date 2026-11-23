@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c2/Bad.java
+NO CRASH: .stitch/standalone/c2/Bad.java ran to completion (expected NullPointerException in Store.dump)

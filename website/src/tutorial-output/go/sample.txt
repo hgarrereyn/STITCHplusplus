@@ -1,0 +1,6 @@
+$ stitch sample KvText -n 5
+"9jLBi=\ufffd\ufffd\ufffd2\n\ufffdl\u0003\ufffd\ufffd!\ufffd\ufffd=E\nYb'1lAB_=uRMlD.\nKK\u02d9\ufffd'?O\ufffd-\ufffd^\ufffd\ufffd\ufffd\u001a\ufffd\u001f\ufffdgT\ufffd\ufffdtY=Qa!EVN?cwoZh\n'7u<::$6=e}>ci_p\n"
+"yRU3\"\\R$=Kvu>u]1k0KRN\nhr{53JZ7=5v~U==\"Be[=\n\u001bo\ufffd\ufffd\u00f2=OmV96si,Sec\n4#3j'74Lw]X:0*RXR=K%?,TZ$fZmXK#n7S{/q5ZgKRFwn/5#E2=No65th=CAoOg\"bd9!\n\ufffd\u0015\ufffd=m9V\"L\n$?}k.$\u0005\u0017=Y\ufffd\u0012\u0013%b\ufffdxz8\ufffd=\n/\ufffd\ufffd\ufffdq\u0014\ufffd\u0002\ufffd\u001d\ufffd\ufffd\ufffdQ\ufffd=4YM4\\\n\ufffde\n\ufffd\ufffd\\%\ufffd=5\n\u0015\ufffd\u0015\ufffd\ufffd=FI3tszo,\n@4=\ufffd\n')T4\\UwY=%R!cSySnuBQY\n"
+""
+"\u02f2\ufffd=-\ufffd\n_XO>o<Mu=8!az>-QQ3Q} \n_\ufffd\ufffdZD\ufffd\ufffd\ufffd=$X;7bmn7t`\n"
+""

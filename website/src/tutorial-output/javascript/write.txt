@@ -1,0 +1,7 @@
+$ stitch write c4
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/b9f14b85cad8c307.min.stp
+warning: .stitch/campaigns/main/w0/crashes/b9f14b85cad8c307.min.stp now crashes differently from bucket c4 (TypeError at Endpoint.fn (stub) instead of Endpoint.fn stubs.js); the reproducer expects the new crash
+wrote .stitch/standalone/c4/repro.js (85 lines, 3 calls, crash in call #2)
+  expected: TypeError in anonymous@index.js
+SAME CRASH: .stitch/standalone/c4/repro.js -> TypeError in anonymous@index.js
+next: cp .stitch/standalone/c4/repro.js .stitch/standalone/c4/min.js, shrink it, and run `stitch try .stitch/standalone/c4/min.js` after each edit

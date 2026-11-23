@@ -1,0 +1,12 @@
+def main():
+    # #0 load(text)
+    store0 = stitch.call(0, 'load', lambda: load('欀���\x19�=\x00 /Uc*ib%(\nCJ=8N;=fG\ntmp='))
+    # #1 remove(st=store0, key)
+    stitch.call(1, 'remove', lambda: remove(store0, 'tmp'))
+    # #2 roundtrip(st=store0)  <-- crashes here in the original run
+    stitch.call(2, 'roundtrip', lambda: roundtrip(store0))
+    # the original run crashed in call #2; nothing after it ran
+
+
+if __name__ == "__main__":
+    stitch.run(main)

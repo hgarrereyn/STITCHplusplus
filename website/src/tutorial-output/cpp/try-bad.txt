@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c2/bad.c
+NO CRASH: .stitch/standalone/c2/bad.c ran to completion (expected heap-use-after-free READ in kv_dump)

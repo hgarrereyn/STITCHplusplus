@@ -1,0 +1,38 @@
+int main() {
+    stitch::init();
+
+    // #0 new_store()  [harness/stubs.cpp:16]
+    Obj<Store> store0 = stitch::call(0, "new_store", [&]() -> New<Store> {
+        return kv_new(); 
+    });
+
+    // #1 put(st=store0, key, value)  [harness/stubs.cpp:26]
+    stitch::call(1, "put", [&] {
+        Borrow<Store> st = store0;
+        Str<16> key("tmp");
+        Str<32> value("");
+        stitch::require(kv_put(st, key.c_str(), value.c_str()) == 0, "invalid key or value");
+    });
+
+    // #2 remove_key(st=store0, key)  [harness/stubs.cpp:31]
+    stitch::call(2, "remove_key", [&] {
+        Borrow<Store> st = store0;
+        Str<16> key("tmp");
+        kv_remove(st, key.c_str()); 
+    });
+
+    // #3 roundtrip(st=store0)  [harness/stubs.cpp:34]  <-- crashes here in the original run
+    stitch::call(3, "roundtrip", [&] {
+        Borrow<Store> st = store0;
+        char* text = kv_dump(st);
+        kv_store* again = kv_load(text);
+        free(text);
+        stitch::require(again, "dump did not load");
+        size_t n = kv_len(again);
+        kv_free(again);
+        stitch::check(n == kv_len(st), "dump/load roundtrip");
+    });
+
+    // the original run crashed in call #3; nothing after it ran
+    return 0;
+}

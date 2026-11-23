@@ -1,0 +1,16 @@
+$ stitch exec c4 --trace
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/b9f14b85cad8c307.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/b9f14b85cad8c307.min.stp
+[stitch] #0 load(text=Str[45,decoded]"%Knn *%(Z=\xef\xbf\xbdu\xef\xbf\xbd\nf\x0c\xef\xbf\xbd=\xef\xbf\xbd\xe1\xb6\x94\x01\x15{\xef\xbf\xbd~\xef\xbf\xbd\ntmp=")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] EXCEPTION in roundtrip: TypeError: Cannot read properties of undefined (reading 'trim')
+    #0 0x0 in anonymous@index.js /src/index.js:21
+    #1 0x0 in Store.dump /src/index.js:21
+    #2 0x0 in Endpoint.fn /project/.stitch/build/app/harness/stubs.js:26
+
+
+result: CRASH TypeError | anonymous@index.js index.js:21 | Store.dump index.js | Endpoint.fn (stub) (270 ms)

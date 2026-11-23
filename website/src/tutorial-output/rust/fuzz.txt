@@ -1,0 +1,8 @@
+$ stitch fuzz --jobs 2 --secs 60
+campaign 'main' started in the background (2 workers, container stitch-kv-main).
+  stitch status main     progress + what blocks the fuzzer
+  stitch crashes main    triage crashes
+  stitch stop main
+$ stitch status
+campaign 'main': running
+  22s, 135k execs (6.1k/s), 458/1948 edges, corpus 499, calls bailing 13% (programs with a bail 46%), 30 crash/timeout programs saved

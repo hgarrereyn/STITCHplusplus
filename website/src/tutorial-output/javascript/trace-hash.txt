@@ -1,0 +1,16 @@
+$ stitch minimize c3 --secs 30
+[stitch] main:c3 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/09eba99a87ce854a.stp (up to 30s; --secs to change)
+2 -> 1 calls, still crashes: True (TypeError | Object.load index.js:33 | stitch.endpoint.bailsOn [as fn] stubs.js)
+  .stitch/campaigns/main/w0/crashes/09eba99a87ce854a.min.stp
+$ stitch exec c3 --trace
+[stitch] main:c3 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/09eba99a87ce854a.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/09eba99a87ce854a.min.stp
+[stitch] #0 load(text=Str[21,decoded]"QZl>,6r`=\xef\xbf\xbd\n\x03\xef\xbf\xbd`=#!")
+
+[stitch] EXCEPTION in load: TypeError: Cannot read properties of undefined (reading 'trim')
+    #0 0x0 in Object.load /src/index.js:33
+    #1 0x0 in stitch.endpoint.bailsOn [as fn] /project/.stitch/build/app/harness/stubs.js:16
+
+
+result: CRASH TypeError | Object.load index.js:33 | stitch.endpoint.bailsOn [as fn] (stub) (268 ms)

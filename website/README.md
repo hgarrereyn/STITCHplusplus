@@ -17,4 +17,8 @@ The tutorial's code is shown per language with `<Lang id="...">` blocks
 (`src/components/Lang.astro`). Pages with `languages: true` in their frontmatter show the language
 picker under the title. The finished tutorial harnesses are in `examples/<lang>-demo/`.
 
+Command output in the tutorial comes from running it in each language, and is stored in
+`src/tutorial-output/<lang>/<name>.txt`. `<RunOutput name="...">` shows the picked language's file.
+When the CLI's output changes, run the tutorial again and replace those files.
+
 `.github/workflows/docs.yml` publishes the site to GitHub Pages on pushes to `main`.

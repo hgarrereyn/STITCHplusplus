@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c5/min.py
+SAME CRASH: .stitch/standalone/c5/min.py -> KeyError in Store.items
+  4 code lines, plain library code

@@ -5,6 +5,7 @@ languages: true
 ---
 
 import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
 
 ## A check
 
@@ -122,8 +123,8 @@ STITCH_ENDPOINT(void, roundtrip, Borrow(Store) st) {
 
 ## A data type for `load`
 
-`load` failed on most calls because its text was random. A **data type** tells the fuzzer what a
-string parameter should look like. Tag the parameter with it:
+`load` gets random text, so it rejects much of it. A **data type** tells the fuzzer what a string
+parameter should look like. Tag the parameter with it:
 
 <Lang id="python">
 ```python
@@ -323,46 +324,139 @@ STITCH_DECODER(KvText) {
 ```
 </Lang>
 
+<Lang id="python">
 - `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
 - `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
 - `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="cpp">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="javascript">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="java">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="go">
+- `s.More()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.Token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.Str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="rust">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="ruby">
+- `s.more` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="swift">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="objc">
+- `[s more]` decides how many lines there are. The fuzzer can add and remove lines.
+- `[s token]` draws a token from the dictionary, so keys like `tmp` show up often.
+- `[s str:8]` draws text of at most 8 bytes.
+</Lang>
 
 See what it makes:
 
-```sh
-stitch build
-stitch sample KvText -n 5
-```
+<RunOutput name="sample" />
 
-```
-"=V\n#!=\ufffd_a7q\u98cc\ufffd\ufffd\ufffdQ\n)+6P4R70PR4~9=#j{\ne^S/?P=]L3P C_("
-""
-""
-"erc*k:n7=TrH-v%?v{!.3"
-"QTT=WNy+s'}QE{0;\njyKdP4n=kF<T=\nc\ufffd\ufffd\u0014T\ufffd\u0016e=h2!AkI[4E\ngxF%8ers=\ufffd e\f\n\ufffd\ufffd\ufffd\u0000\u0002h=\u0007=~T"
-```
-
-The keys and values are arbitrary, but every line has an `=`.
+The keys and values are arbitrary, but every line has an `=`. (`stitch sample` prints each value
+as a JSON string.)
 
 ## Probe again
 
-```sh
-stitch probe --secs 30
-```
-
-```
-probe: 30s, 185k execs (6.2k/s), 64 edges, corpus 18, calls bailing 12% (programs with a bail 45%), 25 crash/timeout programs saved
-crashes found: run `stitch crashes probe`
-```
+<RunOutput name="probe-2" />
 
 Compared with the first probe:
 
-| | before | after |
+{/* gen:compare */}
+<Lang id="python">
+| | first probe | second probe |
 |---|---|---|
-| calls bailing | 49% | 12% |
-| `load` bail rate | 78% | 37% |
-| edges | 41 | 64 |
-| crash programs | 0 | 25 |
+| calls bailing | 18% | 11% |
+| `load` bail rate | 34% | 22% |
+| edges | 43 | 64 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="cpp">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 19% | 12% |
+| `load` bail rate | 51% | 17% |
+| edges | 135 | 180 |
+| crash programs saved | 5 | 15 |
+</Lang>
+<Lang id="javascript">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 14% | 15% |
+| `load` bail rate | 41% | 49% |
+| edges | 24 | 32 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="java">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 26% | 12% |
+| `load` bail rate | 52% | 24% |
+| edges | 36 | 57 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="go">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 30% | 17% |
+| `load` bail rate | 70% | 37% |
+| edges | 28 | 43 |
+| crash programs saved | 5 | 18 |
+</Lang>
+<Lang id="rust">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 10% | 11% |
+| `load` bail rate | 37% | 22% |
+| edges | 406 | 459 |
+| crash programs saved | 5 | 16 |
+</Lang>
+<Lang id="ruby">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 22% | 19% |
+| `load` bail rate | 37% | 34% |
+| edges | 22 | 31 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="swift">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 22% | 8% |
+| `load` bail rate | 61% | 19% |
+| edges | 248 | 378 |
+| crash programs saved | 5 | 15 |
+</Lang>
+<Lang id="objc">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 20% | 13% |
+| `load` bail rate | 57% | 24% |
+| edges | 26 | 43 |
+| crash programs saved | 5 | 20 |
+</Lang>
+{/* /gen:compare */}
 
-The harness now reaches more of the library, and it found bugs. Next, run a longer campaign and
-look at them.
+The second probe reaches more of the library (more edges): `load` now makes stores with entries
+for the other stubs to work on. Next, run a longer campaign and look at the bugs it finds.

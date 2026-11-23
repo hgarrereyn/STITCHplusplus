@@ -1,0 +1,21 @@
+package main
+
+import (
+	"stitch"
+	_ "stitchharness" // the harness: registers the stubs
+)
+
+func main() {
+	stitch.Run(func() {
+		// #0 load(text)
+		r0 := stitch.Call(0, "load", "tmp=\n")
+		store0 := r0[0]
+		_ = r0
+		// #1 remove(st=store0, key)
+		stitch.Call(1, "remove", store0, "tmp")
+		// #2 roundtrip(st=store0)  <-- crashes here in the original run
+		stitch.Call(2, "roundtrip", store0)
+		// the original run crashed in call #2; nothing after it ran
+		_ = store0
+	})
+}

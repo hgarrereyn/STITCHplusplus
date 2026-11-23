@@ -79,7 +79,8 @@
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
 }
-.pane .expressive-code {
+.pane .expressive-code,
+.pane .lang-block .expressive-code {
   margin: 0;
 }
 
@@ -199,4 +200,13 @@
   .langs a {
     transition: none;
   }
+}
+
+.showcase-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.showcase-wrap .lang-select {
+  margin-top: 0;
 }

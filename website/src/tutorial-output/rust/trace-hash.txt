@@ -1,0 +1,16 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w1/crashes/96a5f72e3694dda1.stp (up to 30s; --secs to change)
+1 -> 1 calls, still crashes: True (index out of bounds | kvrs::load lib.rs:55)
+  .stitch/campaigns/main/w1/crashes/96a5f72e3694dda1.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/96a5f72e3694dda1.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/96a5f72e3694dda1.min.stp
+[stitch] #0 load(text=Str[34,decoded]"\x00 M\xef\xbf\xbd2\xef\xbf\xbdv\xef\xbf\xbd=\nO(iB%cD!a0TE@F=#!\n")
+
+[stitch] EXCEPTION in load: index out of bounds: index out of bounds: the len is 0 but the index is 1
+    #0 0x0 in kvrs::load /src/src/lib.rs:55
+    #1 0x0 in stitch_harness::stubs::load /project/harness/stubs.rs:23
+
+
+result: CRASH index out of bounds | kvrs::load lib.rs:55 | stitch_harness::stubs::load (stub) (34 ms)

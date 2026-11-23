@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c4/bad.m
+NO CRASH: .stitch/standalone/c4/bad.m ran to completion (expected NSInvalidArgumentException in -[KVStore items])

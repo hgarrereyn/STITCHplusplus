@@ -5,53 +5,90 @@ languages: true
 ---
 
 import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
 
 ## Write the crash as a file
 
-```sh
-stitch write c5
-```
+Take the `tmp` group from the previous page:
 
-```
-wrote .stitch/standalone/c5/repro.py (73 lines, 4 calls, crash in call #3)
-  expected: KeyError in Store.items
-SAME CRASH: .stitch/standalone/c5/repro.py -> KeyError in Store.items
-```
+<RunOutput name="write" />
 
-The file holds your stubs and a `main` that calls them with the recorded arguments:
+The file replays each call of the program with its recorded arguments, using your stub code:
 
-```python
-def main():
-    # #0 load(text)
-    store0 = stitch.call(0, 'load', lambda: load(''))
-    # #1 put(st=store0, key, value)
-    stitch.call(1, 'put', lambda: put(store0, 'tmp', ''))
-    # #2 remove(st=store0, key)
-    stitch.call(2, 'remove', lambda: remove(store0, 'tmp'))
-    # #3 roundtrip(st=store0)  <-- crashes here in the original run
-    stitch.call(3, 'roundtrip', lambda: roundtrip(store0))
-```
-
-<Lang id="python">The file is `repro.py`.</Lang>
-<Lang id="cpp">The file is `repro.cpp`.</Lang>
-<Lang id="javascript">The file is `repro.js`.</Lang>
-<Lang id="java">The file is `Repro.java`.</Lang>
-<Lang id="go">The file is `repro.go`.</Lang>
-<Lang id="rust">The file is `repro.rs`.</Lang>
-<Lang id="ruby">The file is `repro.rb`.</Lang>
-<Lang id="swift">The file is `repro.swift`.</Lang>
-<Lang id="objc">The file is `repro.m`.</Lang>
+<RunOutput name="written" lang="source" />
 
 ## Shrink it
 
 Copy the file and cut it down to plain library calls. After each edit, run `stitch try`: it builds
 and runs the file and compares the crash with the original.
 
+{/* gen:shrink */}
+<Lang id="python">
 ```sh
 cp .stitch/standalone/c5/repro.py .stitch/standalone/c5/min.py
 # edit min.py
 stitch try .stitch/standalone/c5/min.py
 ```
+</Lang>
+<Lang id="cpp">
+```sh
+cp .stitch/standalone/c2/repro.cpp .stitch/standalone/c2/min.c
+# edit min.c
+stitch try .stitch/standalone/c2/min.c
+```
+</Lang>
+<Lang id="javascript">
+```sh
+cp .stitch/standalone/c4/repro.js .stitch/standalone/c4/min.js
+# edit min.js
+stitch try .stitch/standalone/c4/min.js
+```
+</Lang>
+<Lang id="java">
+```sh
+cp .stitch/standalone/c2/Repro.java .stitch/standalone/c2/Min.java
+# edit Min.java
+stitch try .stitch/standalone/c2/Min.java
+```
+</Lang>
+<Lang id="go">
+```sh
+cp .stitch/standalone/c3/repro.go .stitch/standalone/c3/min.go
+# edit min.go
+stitch try .stitch/standalone/c3/min.go
+```
+</Lang>
+<Lang id="rust">
+```sh
+cp .stitch/standalone/c2/repro.rs .stitch/standalone/c2/min.rs
+# edit min.rs
+stitch try .stitch/standalone/c2/min.rs
+```
+</Lang>
+<Lang id="ruby">
+```sh
+cp .stitch/standalone/c4/repro.rb .stitch/standalone/c4/min.rb
+# edit min.rb
+stitch try .stitch/standalone/c4/min.rb
+```
+</Lang>
+<Lang id="swift">
+```sh
+cp .stitch/standalone/c4/repro.swift .stitch/standalone/c4/min.swift
+# edit min.swift
+stitch try .stitch/standalone/c4/min.swift
+```
+</Lang>
+<Lang id="objc">
+```sh
+cp .stitch/standalone/c4/repro.m .stitch/standalone/c4/min.m
+# edit min.m
+stitch try .stitch/standalone/c4/min.m
+```
+</Lang>
+{/* /gen:shrink */}
+
+A finished reproducer:
 
 <Lang id="python">
 ```python
@@ -137,7 +174,7 @@ st.dump            # KeyError
 ```swift
 import KVSwift
 
-let st = Store()
+let st = KVSwift.Store()   // the harness has its own type named Store
 try st.put("tmp", "x")
 st.remove("tmp")   // removes "tmp" from the data, but not from the order list
 _ = st.dump()      // force unwrap of nil
@@ -157,16 +194,11 @@ int main(void) {
 ```
 </Lang>
 
-```
-SAME CRASH: .stitch/standalone/c5/min.py -> KeyError in Store.items
-  4 code lines, plain library code
-```
+<RunOutput name="try-min" />
 
-If an edit removes the bug, `stitch try` says so:
+If an edit removes the bug, `stitch try` says so. Here the key is `a` instead of `tmp`:
 
-```
-NO CRASH: .stitch/standalone/c5/bad.py ran to completion (expected KeyError in Store.items)
-```
+<RunOutput name="try-bad" />
 
 This short file is what you send to the library's maintainers.
 
@@ -175,15 +207,7 @@ This short file is what you send to the library's maintainers.
 `stitch repro` writes a folder that rebuilds the library and replays the crash with nothing but
 Docker, and checks that it works:
 
-```sh
-stitch repro c5
-```
-
-```
-[stitch] verified: same crash
-reproducer: .stitch/repros/kv-c5
-  run it anywhere with docker: .stitch/repros/kv-c5/run.sh
-```
+<RunOutput name="repro" />
 
 ## Is it fixed upstream?
 
@@ -191,41 +215,25 @@ When the project's source is a git repository (`stitch init --git URL --rev REV`
 crash against other versions:
 
 ```sh
-stitch exec c5 --rev HEAD      # does the newest code still crash?
-stitch bisect c5               # the commit that introduced the bug
-stitch bisect c5 --fixed       # the commit that fixed it
+stitch exec c1 --rev HEAD      # does the newest code still crash?
+stitch bisect c1               # the commit that introduced the bug
+stitch bisect c1 --fixed       # the commit that fixed it
 ```
 
 ## Coverage
 
-```sh
-stitch cov
-```
+<RunOutput name="cov" />
 
-```
-coverage of 31 programs (24 ok, 7 crashed, 0 timed out), library at local
-
-library:
-  lines           32 / 33       97.0%
-  functions        6 / 7        85.7%
-  branches        16 / 16      100.0%
-
-never called: 1 library functions, 1 of them not static
-  Store.get  opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:16
-
-lcov: .stitch/cov/main/lcov.info
-html: .stitch/cov/main/html/index.html
-```
-
-No stub calls `get`. Adding one is the next step: write it, then `stitch build` and
-`stitch probe` again. `html/index.html` shows each line and branch the campaign never reached.
+When the report has a "never called" list, those are library functions that no stub calls. Writing
+stubs for them is the next step: add them, then `stitch build` and `stitch probe` again.
+`html/index.html` shows each line and branch the campaign never reached.
 
 ## What you have done
 
 - described an API with stubs, objects and fuzzed parameters
 - used the probe report to find a stub that wasted runs, and fixed it with a data type
 - asserted a property with a check
-- grouped crashes, separated three bugs, and reduced one to four lines
+- grouped crashes, separated three bugs, and reduced one to a few lines of library code
 
 The finished harness is in `examples/<language>-demo/harness/`. It has a few more stubs than this
 tutorial, including `put_all`, which takes a list of pairs from a decoder. [Concepts](/STITCHplusplus/guide/concepts/)

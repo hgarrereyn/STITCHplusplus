@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c2/min.c
+SAME CRASH: .stitch/standalone/c2/min.c -> heap-use-after-free READ in kv_dump
+  8 code lines, plain library code

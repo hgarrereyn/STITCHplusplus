@@ -1,0 +1,7 @@
+$ stitch write c2
+[stitch] main:c2 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/7fb95ce3ff1dccea.min.stp
+warning: .stitch/campaigns/main/w0/crashes/7fb95ce3ff1dccea.min.stp now crashes differently from bucket c2 (called `Option::unwrap()` on a `None` value at stitch_harness::stubs::roundtrip (stub) instead of (no frame)); the reproducer expects the new crash
+wrote .stitch/standalone/c2/repro.rs (24 lines, 3 calls, crash in call #2)
+  expected: called `Option::unwrap()` on a `None` value in kvrs::Store::dump::{{closure}}
+SAME CRASH: .stitch/standalone/c2/repro.rs -> called `Option::unwrap()` on a `None` value in kvrs::Store::dump::{{closure}}
+next: cp .stitch/standalone/c2/repro.rs .stitch/standalone/c2/min.rs, shrink it, and run `stitch try .stitch/standalone/c2/min.rs` after each edit

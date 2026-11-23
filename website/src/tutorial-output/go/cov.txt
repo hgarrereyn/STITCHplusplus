@@ -1,0 +1,15 @@
+$ stitch cov
+[stitch] coverage build + 122 programs (main)
+coverage of 122 programs (117 ok, 5 crashed, 0 timed out), library at local
+
+library:
+  lines           45 / 45      100.0%
+  functions        6 / 6       100.0%
+  branches         -
+
+  file         lines  functions
+  src/kv.go   100.0%     100.0%
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

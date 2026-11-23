@@ -1,0 +1,6 @@
+$ stitch write c2
+[stitch] main:c2 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/3ab9ff5378154395.min.stp
+wrote .stitch/standalone/c2/repro.cpp (66 lines, 4 calls, crash in call #3)
+  expected: heap-use-after-free READ in kv_dump
+SAME CRASH: .stitch/standalone/c2/repro.cpp -> heap-use-after-free READ in kv_dump
+next: cp .stitch/standalone/c2/repro.cpp .stitch/standalone/c2/min.cpp, shrink it, and run `stitch try .stitch/standalone/c2/min.cpp` after each edit
