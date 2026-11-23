@@ -76,17 +76,23 @@ check` because of a lint bug, below); every agent got from `stitch init` to veri
   not always, a dictionary token (all languages); stale `stitch guide api` references.
 - README: the new projects, the libxml2 stub count, and the 7 projects without notes.
 
+## Second pass (fixed)
+
+| Problem | Fix |
+|---|---|
+| flaky crashes were not marked, and `minimize` gave up on them | triage reruns each bucket's example (3 runs, timeouts excepted) and `stitch crashes` marks `[flaky: crashed 1 of 3 runs]`; `minimize` retries a flaky program and gives candidates two tries; saved programs that no longer crash are counted |
+| a Ruby/Python worker that died without a report left nothing in its bucket, and `exec` showed something else | `crash (exit N, no error report)` from triage, `exec` and reproducers alike (a signal is 128 + N), with the worker's last output; `exec` says when a run differs from its bucket |
+| `stitch probe --secs N` took much longer than N; no `--jobs` | it says the wall time includes the build and start-up (measured: 29 s for `--secs 20` on an idle machine; the 3x seen earlier was load); `--jobs` added |
+| `minimize` spent its whole budget without saying why it stopped | it says when the time budget stopped it (each candidate is a fresh worker process, about 1 s for Ruby) |
+| a Java stub returning `String` failed the build with a stack trace | one line with a hint |
+| the "depends on the previous call" lines were hard to act on | they say which stub made or last used the object, and when to act |
+| guide gaps: C++ handles that die with their owner; one Java value under two object types | recipes in `stitch guide cpp` and `stitch guide java`, both run: without the C++ recipe the harness finds its own use-after-free within a minute |
+| found while testing: `ENV PYTHONPATH=/src` in a project Dockerfile removed the stitch runtime ("No module named stitch") | the runtime is on the venv path through a `.pth` file |
+| found while testing: `stitch crashes NAME` for a campaign that does not exist printed a traceback | an error listing the campaigns |
+
 ## Still open
 
-- `smoke.sh` fuzzes 90 s; on a loaded machine the cmplog bug (msg.c:51) can take longer
-  (`STITCH_SMOKE_SECS` raises it).
-- Flaky crashes (Ink's hash-order dependent output) are not marked as flaky, and `minimize` does
-  not retry candidates.
-- `stitch probe --secs N` takes well over N seconds of wall time (build, worker start, triage).
-- Guide gaps: C++ handles that die when their owner is mutated (DOM nodes after `DeleteChild`),
-  one Java object under two static types.
-- A Java stub returning `String` is rejected with a stack trace (the message is right; the guide
-  now says so).
-- `stitch probe` does not take `--jobs` (it always uses one worker).
-- A Ruby/Python worker that dies without a report leaves no exit status or stderr in the bucket.
-- The probe's "outcome depends on the previous call" lines are hard to act on.
+- `minimize` starts a fresh worker for every candidate, which is slow for Ruby and the JVM; using
+  the fuzzer's persistent worker would make it much faster.
+- Prebuilt images published for earlier versions do not match this engine and runtime: the next
+  release (`v*` tag) publishes new ones; until then `stitch setup` builds locally.
