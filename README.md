@@ -2,7 +2,7 @@
 
 # STITCH++
 
-**API fuzzing for libraries in eight languages, built for coding agents.**
+**API fuzzing for libraries in nine languages, built for coding agents.**
 
 <img src="docs/assets/icons/cplusplus.svg" height="36" title="C/C++" alt="C/C++">&nbsp;&nbsp;
 <img src="docs/assets/icons/python.svg" height="36" title="Python" alt="Python">&nbsp;&nbsp;
@@ -11,7 +11,8 @@
 <img src="docs/assets/icons/go.svg" height="36" title="Go" alt="Go">&nbsp;&nbsp;
 <img src="docs/assets/icons/rust.svg" height="36" title="Rust" alt="Rust">&nbsp;&nbsp;
 <img src="docs/assets/icons/ruby.svg" height="36" title="Ruby" alt="Ruby">&nbsp;&nbsp;
-<img src="docs/assets/icons/swift.svg" height="36" title="Swift" alt="Swift">
+<img src="docs/assets/icons/swift.svg" height="36" title="Swift" alt="Swift">&nbsp;&nbsp;
+<img src="docs/assets/icons/objectivec.svg" height="36" title="Objective-C" alt="Objective-C">
 
 <br><br>
 
@@ -76,6 +77,7 @@ only need Docker and the `stitch` CLI.
 | <img src="docs/assets/icons/rust.svg" height="20"> | Rust | SanitizerCoverage | `trace-compares` | panics, ASan |
 | <img src="docs/assets/icons/ruby.svg" height="20"> | Ruby | Prism rewriting | rewritten `==`, `case`/`when` | undeclared exceptions |
 | <img src="docs/assets/icons/swift.svg" height="20"> | Swift | SanitizerCoverage | `trace-cmp` | traps, ASan |
+| <img src="docs/assets/icons/objectivec.svg" height="20"> | Objective-C | SanitizerCoverage | `trace-cmp`, `NSString` and `strcmp` hooks | exceptions, ASan, UBSan |
 
 Details: [`languages/README.md`](languages/README.md).
 

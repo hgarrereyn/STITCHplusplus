@@ -8,7 +8,7 @@ directory below its `stitch.toml`), or pass `-C <dir>`. Add `--json` for machine
 
 | Command | What it does |
 |---|---|
-| `stitch setup [--lang L ...]` | Check Docker and get the language images (`cpp` by default; `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift`, or `all`). Pulls prebuilt images when they exist, and otherwise builds them. |
+| `stitch setup [--lang L ...]` | Check Docker and get the language images (`cpp` by default; `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift`, `objc`, or `all`). Pulls prebuilt images when they exist, and otherwise builds them. |
 | `stitch skill [DIR] [--user]` | Install the agent skill into `./.claude/skills` (or `DIR`, or `~/.claude/skills`). |
 | `stitch guide [TOPIC]` | Print the workflow guide, or a language's harness API (`cpp`, `python`, ...), or `reproducers`. |
 

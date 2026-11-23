@@ -16,6 +16,18 @@ SKIP_PREFIX = (
 )
 
 
+def objc_method(func):
+    """'-[Class(Category) selector:]': an Objective-C method name (kept whole: spaces, parentheses)."""
+    return func.startswith(("-[", "+[")) and func.endswith("]")
+
+
+def frame_func(frame):
+    """The function of a frame ("func file:line")."""
+    if frame.startswith(("-[", "+[")) and "] " in frame:
+        return frame[:frame.index("] ") + 1]
+    return frame.split(" ")[0]
+
+
 def _norm(msg):
     return re.sub(r"0x[0-9a-fA-F]+", "ADDR", re.sub(r"\d+", "N", msg))[:120]
 
@@ -230,6 +242,7 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     timed_out = timed_out or TIMEOUT_LINE in output
     kind, summary, frames, endpoint, node = "", "", [], None, None
     in_stack = stack_done = False
+    lang_exception = False  # a runtime's EXCEPTION report (Objective-C aborts after it: ASan's ABRT follows)
     py = None
     if "[stitch] EXCEPTION in " not in output and "[stitch] CHECK FAILED" not in output:
         py = (_python_traceback(output) or _java_stack(output) or _go_panic(output) or _rust_panic(output)
@@ -268,6 +281,7 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
             rest = l[len("[stitch] EXCEPTION in "):]
             ep, _, after = rest.partition(": ")
             kind = _norm(after.split(": ", 1)[0]) if after else "exception"
+            lang_exception = True
             endpoint = endpoint or ep
             summary = l
             in_stack = True
@@ -280,7 +294,8 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
         if i >= 0:
             rest = l[i + len("ERROR: AddressSanitizer: "):]
             k = "SEGV" if rest.startswith("SEGV") else rest.split()[0]
-            if not kind.startswith(("check failed", "uncaught")):
+            # (the ABRT of a runtime that aborts after reporting an exception is not the bug)
+            if not kind.startswith(("check failed", "uncaught")) and not (lang_exception and k == "ABRT"):
                 kind, summary = k, l[i:]
             in_stack = True
             continue
@@ -305,6 +320,9 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
                     if len(frames) < 3:
                         frames.append(f"{em.group(1)} (stub)")
                     continue
+                if func.startswith("stitch_invoke_"):  # Objective-C: the stub's trampoline; the runtime is below
+                    stack_done = True
+                    continue
                 if func.startswith("void "):
                     func = func[5:]
                 func = re.sub(r"::h[0-9a-f]{16}$", "", func)  # Rust legacy mangling
@@ -314,9 +332,12 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
                     continue
                 swift_skip = ("<compiler-generated>" in loc or "/stitch/swift/" in loc or "/stitch/cpp-runtime/" in loc
                               or func == "worker_main" or func.startswith(("specialized ", "$sS", "$ss")))
+                objc_skip = ("libobjc.so" in loc or "libgnustep-base" in loc or "/usr/src/gnustep/" in loc
+                             or "/stitch/objc/" in loc)
                 if (not func.startswith(SKIP_PREFIX) and "/runtime/src/" not in loc and "libc.so" not in loc and "/rustc/" not in loc
-                        and "/stitch/rust/" not in loc and not swift_skip and len(frames) < 3):
-                    frames.append(f"{func.split('(')[0]} {loc.rsplit('/', 1)[-1].split(' ')[0]}")
+                        and "/stitch/rust/" not in loc and not swift_skip and not objc_skip and len(frames) < 3):
+                    name = func if objc_method(func) else func.split('(')[0]
+                    frames.append(f"{name} {loc.rsplit('/', 1)[-1].split(' ')[0]}")
             elif not l and frames:
                 stack_done = True
     if swift_failure and (not kind or kind.startswith(("TRAP", "ILL")) or kind == "ABRT"):

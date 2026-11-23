@@ -716,7 +716,7 @@ def cmd_shell(a):
 
 SKILL = STITCH_HOME / "skill" / "stitch"
 GUIDES = {"": "SKILL.md", "reproducers": "reference/reproducers.md",
-          **{lang: f"reference/{lang}.md" for lang in ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift")}}
+          **{lang: f"reference/{lang}.md" for lang in ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
 
 
 def cmd_guide(a):
@@ -911,7 +911,7 @@ def cmd_try(a):
         _, b = resolve_crash(p, a.crash, campaign=a.campaign)
         if b is None:
             die("to compare with a crash, name it by id (c3, probe:c3)")
-        top = next((x.split(" ")[0] for x in b.get("frames", []) if not x.endswith("(stub)") and not x.startswith("main")), "")
+        top = next((reports.frame_func(x) for x in b.get("frames", []) if not x.endswith("(stub)") and not x.startswith("main")), "")
         expected = {"kind": b["kind"], "frame": top, "signature": b["signature"], "crash_id": f"{b['campaign']}:{b['id']}"}
     elif a.expect:
         e = Path(a.expect)
@@ -982,7 +982,7 @@ def main(argv=None):
     s.add_argument("--skill-dir", help="install the agent skill into this skills directory")
     s.add_argument("--user", action="store_true", help="with --skill: install into ~/.claude/skills")
     s.add_argument("--rebuild", action="store_true", help="build the base image locally even if one exists")
-    s.add_argument("--lang", action="append", help="language image(s) to get: cpp (default), python, javascript, java, go, rust, ruby, swift, all")
+    s.add_argument("--lang", action="append", help="language image(s) to get: cpp (default), python, javascript, java, go, rust, ruby, swift, objc, all")
     s.set_defaults(fn=cmd_setup)
 
     s = sp.add_parser("init", help="create a new project (stitch.toml, Dockerfile, harness/)")
@@ -992,7 +992,7 @@ def main(argv=None):
     g.add_argument("--git", help="library git URL")
     g.add_argument("--path", help="local library checkout")
     s.add_argument("--rev", help="default revision (git)")
-    s.add_argument("--lang", default="cpp", help="harness language: cpp (C/C++), python, javascript, java, go, rust, ruby, swift")
+    s.add_argument("--lang", default="cpp", help="harness language: cpp (C/C++), python, javascript, java, go, rust, ruby, swift, objc (Objective-C)")
     s.set_defaults(fn=cmd_init)
 
     s = sp.add_parser("build", help="build the library image and the harness")
@@ -1109,7 +1109,7 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, reproducers)")
+    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, objc, reproducers)")
     s.add_argument("topic", nargs="?", help="a language: its harness API (api is cpp); reproducers: stitch write / try")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)

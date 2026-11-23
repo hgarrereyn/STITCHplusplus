@@ -5,13 +5,17 @@ from pathlib import Path
 
 LIVENESS_KEYS = {"alive", "freed", "dead", "destroyed", "valid", "live", "deleted", "closed_flag", "is_freed", "is_alive"}
 
-# stitch::set (C++), stitch.set (Python, JS), Stitch.set (Java, Ruby), stitch.Set (Go)
+# stitch::set (C++), stitch.set (Python, JS), Stitch.set (Java, Ruby), stitch.Set (Go), STSetInt (Objective-C)
 _API = r"\b[Ss]titch(?:::|\.)"
 _ATTR_RE = re.compile(_API + r"(set|get|get_str|getStr|get_obj|getObj|getLong|getString|has|del|delete|Set|Get|GetStr|GetObj|GetInt|GetString|Has|Del)"
                       r"(?:\s*<[^>]*>|\[[^\]]*\])?\s*\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*[\"']([^\"']+)[\"']")
 _GLOBAL_RE = re.compile(_API + r"(global_set|global_set_str|global_get|global_get_str|global_has|globalSet|globalGet"
                         r"|globalHas|GlobalSet|GlobalGet|GlobalHas)\s*\(\s*[\"']([^\"']+)[\"']")
-_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".h", ".c", ".py", ".js", ".mjs", ".cjs", ".ts", ".java", ".go", ".rs", ".rb"}
+# Objective-C: STSetInt(obj, @"key", v), STGetStr(obj, @"key"), STGetObj(obj, @"key", T), STGlobalGet(@"key")
+_OBJC_RE = re.compile(r"\bST(Set|Get|Has|Del)(?:Int|Str|Obj)?(?:Or)?\s*\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*@\"([^\"]+)\"")
+_OBJC_GLOBAL_RE = re.compile(r"\bSTGlobal(Set|Get|Has)(?:Str)?(?:Or)?\s*\(\s*@\"([^\"]+)\"")
+_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".h", ".c", ".py", ".js", ".mjs", ".cjs", ".ts", ".java", ".go", ".rs", ".rb",
+             ".m", ".mm"}
 
 
 def strip_comments(src, suffix=".cpp"):
@@ -37,6 +41,12 @@ def attr_lints(project):
             op, key = m.group(1).lower().replace("_", ""), "global:" + m.group(2)
             line = code.count("\n", 0, m.start()) + 1
             (sets if op.startswith("globalset") else gets)[key].append(f"{project.rel(f)}:{line}")
+        for m in _OBJC_RE.finditer(code):
+            line = code.count("\n", 0, m.start()) + 1
+            (sets if m.group(1) == "Set" else gets)[m.group(3)].append(f"{project.rel(f)}:{line}")
+        for m in _OBJC_GLOBAL_RE.finditer(code):
+            line = code.count("\n", 0, m.start()) + 1
+            (sets if m.group(1) == "Set" else gets)["global:" + m.group(2)].append(f"{project.rel(f)}:{line}")
     out = []
     for k, locs in sorted(gets.items()):
         if k not in sets:

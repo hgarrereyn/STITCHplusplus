@@ -207,6 +207,7 @@ static std::vector<Slot> g_pool;
 static std::map<std::pair<int, int>, int> g_obj_of;  // (node, output) -> slot
 static AttrMap g_globals;
 static int g_cur_node = -1;
+static int g_cur_ep = -1;  // endpoint index of the call in progress
 static bool g_in_exec = false;
 static bool g_trace = false;
 static uint32_t g_cur_consumed = 0;
@@ -378,6 +379,16 @@ void check(bool cond, const char* what) {
     fflush(stderr);
     abort();
 }
+
+namespace detail {
+void report_finding(uint32_t key, const char* report) {
+    results()->crash_pc = (1ull << 63) | ((uint64_t)(uint32_t)g_cur_ep << 32) | key;
+    if (fuzz_mode() && !g_trace && g_in_exec) throw FindingSignal{};
+    fputs(report ? report : "[stitch] finding\n", stderr);
+    fflush(stderr);
+    abort();
+}
+}  // namespace detail
 
 void log(const char* fmt, ...) {
     if (!g_trace) return;
@@ -1273,6 +1284,7 @@ static int run_program(const std::vector<PNode>& nodes, bool trace) {
         StitchNodeResult& res = R->nodes[i];
         R->current = (int32_t)i;
         g_cur_node = (int)i;
+        g_cur_ep = nd.ep;
         if (nd.ep < 0) {
             res.status = STITCH_SKIP_INVALID;
             plan_line("{\"t\":\"skip\",\"node\":" + std::to_string(i) + ",\"why\":\"unknown endpoint\"}");
@@ -1728,6 +1740,10 @@ void __sanitizer_weak_hook_strcasestr(void*, const char* s1, const char* s2, cha
 void __sanitizer_weak_hook_memmem(void*, const void* s1, size_t l1, const void* s2, size_t l2, void* result) {
     if (cmplog_on() && !result) cmp_record_bytes(s1, l1, s2, l2);
 }
+
+// Comparison records are being collected (language layers that hook their own comparisons,
+// such as Objective-C's NSString methods, check this before doing any work).
+int stitch_cmplog_active(void) { return cmplog_on() ? 1 : 0; }
 
 // Reset per-exec dedupe of comparison records (called by the engine before a tracing run).
 void stitch_cmplog_reset(void) {

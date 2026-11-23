@@ -2,6 +2,8 @@
 
 Each module provides:
   FILENAME                        name of the generated file (e.g. repro.py)
+  filename(p)                     optional: the name for project p, when it depends on the harness
+  FILENAMES                       optional: every name filename() can return
   SHIM                            name of the stand-in for the STITCH++ runtime written next to it
   write(p, plan, header) -> (text, meta)
   install_shim(dir)               write the shim into dir

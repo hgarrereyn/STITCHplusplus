@@ -1,0 +1,4 @@
+#!/bin/sh
+# llvm-symbolizer for sanitizer reports (ASAN_SYMBOLIZER_PATH): Objective-C methods by their source
+# names (-[KVStore valueForKey:]) instead of their symbols (_i_KVStore__valueForKey_).
+/usr/bin/llvm-symbolizer-18 "$@" | python3 -u /stitch/objc/symbolizer/objc_names.py

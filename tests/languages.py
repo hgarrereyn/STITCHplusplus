@@ -29,11 +29,13 @@ DEMOS = {
     "rust": ("lib.rs", "nocrash.rs", "fn main() {}\n"),
     "ruby": ("kvrb.rb", "nocrash.rb", 'puts "ok"\n'),
     "swift": ("KV.swift", "nocrash.swift", "import Stitch\n#if canImport(Glibc)\nimport Glibc\n#endif\nexit(reproMain {})\n"),
+    "objc": ("KVStore.m", "nocrash.m", "#import <Foundation/Foundation.h>\n\nint main(void) { return 0; }\n"),
 }
 
 # how each writer replays a Val parameter
 VAL_LITERAL = {"python": "stitch.value(", "javascript": "stitch.value(", "java": "Standalone.value(",
-               "go": "stitch.Value(", "rust": "Val::replay(", "ruby": "Stitch.value(", "swift": "Val(replay:"}
+               "go": "stitch.Value(", "rust": "Val::replay(", "ruby": "Stitch.value(", "swift": "Val(replay:",
+               "objc": "STValue("}
 
 
 class Fail(Exception):

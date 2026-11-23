@@ -101,6 +101,7 @@ size_t stitch_decode_spans(int dt, const uint8_t* choices, size_t n, uint32_t* o
  * iteration, plus (site, instance, p, p) where each loop execution ended; returns the record count */
 size_t stitch_decode_items(int dt, const uint8_t* choices, size_t n, uint32_t* out, size_t max_items);
 void stitch_cmplog_reset(void); /* clear comparison records and per-run dedupe */
+int stitch_cmplog_active(void); /* comparisons are being recorded now (language-level hooks) */
 
 /* misc */
 int stitch_run_file(const char* path, uint32_t flags); /* load + exec a .stp file */
