@@ -27,7 +27,7 @@ const blocks = LANGUAGES.map(([lang]) => {
     const name = nameOf(lang, e.id);
     const g = glyph(e, name, PAD_X, PAD_TOP, { labels: true });
     const summary = `Inputs: ${io(e.in)}${e.fuzz.length ? `; fuzzed: ${e.fuzz.map((f) => f.name + (f.decoder ? ` (${f.decoder})` : "")).join(", ")}` : ""}. Outputs: ${io(e.out)}.`;
-    return { id: e.id, name, line: lineOf(L.at[e.id]), svg: g.svg, w: g.w + PAD_X * 2, h: PAD_TOP + BOX_H + 20, cy: PAD_TOP + BOX_H / 2, note: e.note, summary };
+    return { id: e.id, name, line: lineOf(L.at[e.id]), svg: g.svg, w: g.extent + PAD_X * 2, h: PAD_TOP + BOX_H + 20, cy: PAD_TOP + BOX_H / 2, note: e.note, summary };
   });
   const marks = [
     ...Object.entries(L.types).map(([t, at]) => ({ at, kind: `type-${t === "Store" ? "store" : "snap"}`, title: t, note: TYPE_NOTES[t as "Store"] })),

@@ -309,6 +309,7 @@
 .g-port.p-store { fill: var(--port-store); }
 .g-port.p-snap { fill: var(--port-snap); }
 .g-port.p-fuzz { fill: var(--stitch-orange); stroke-width: 1.5; }
+.g-lead { fill: none; stroke: var(--stitch-orange); stroke-width: 1.4; stroke-linecap: round; }
 .g-port.p-fuzz.decoded { fill: var(--sl-color-black); stroke: var(--stitch-orange); stroke-width: 1.6; }
 .g-port.take { fill: var(--sl-color-black); stroke-width: 1.8; }
 .g-port.take.p-store { stroke: var(--port-store); }

@@ -28,8 +28,8 @@ export function renderProgram(calls: Call[], name: (id: string) => string, opts:
   const outs = outputs(calls);
   const widths = calls.map((c) => glyphWidth(ep(c.ep), name(c.ep)));
   const maxW = Math.max(...widths, 120);
-  const valuesW = opts.values ? 92 : 0;
   const cx = 18 + maxW / 2;
+  let right = cx + maxW / 2;  // the rightmost point of any block or its fuzzed inputs
   const blocks: string[] = [], wires: string[] = [];
   const placed: { ins: Placed[]; outs: Placed[] }[] = [];
 
@@ -40,6 +40,7 @@ export function renderProgram(calls: Call[], name: (id: string) => string, opts:
       cls: c.crash ? "crash" : undefined,
     });
     blocks.push(`<g class="call" style="--i:${i}">${g.svg}</g>`);
+    right = Math.max(right, cx - w / 2 + g.extent);
     placed.push({ ins: g.ins, outs: g.outs });
   });
 
@@ -58,7 +59,7 @@ export function renderProgram(calls: Call[], name: (id: string) => string, opts:
 
   // calls that a wire skips: give it a lane on the right, one per overlapping interval
   const lanes: [number, number][][] = [];
-  const laneX = (n: number) => cx + maxW / 2 + 14 + valuesW + n * 11;
+  const laneX = (n: number) => right + 14 + n * 11;
   for (const ed of edges) {
     let lane: number | null = null;
     if (ed.to > ed.from + 1) {

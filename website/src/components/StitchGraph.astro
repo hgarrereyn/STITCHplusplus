@@ -8,7 +8,7 @@
   <figcaption class="legend">
     <span><i class="dot p-store"></i>Store</span>
     <span><i class="dot p-snap"></i>Snapshot</span>
-    <span><i class="diamond"></i>fuzzed value</span>
+    <span><i class="diamond"></i>fuzzed value (not an object)</span>
     <span><i class="dot hollow"></i>taken</span>
   </figcaption>
 </figure>
@@ -25,7 +25,8 @@
     let program: Call[] = randomProgram();
 
     const draw = (enter: boolean) => {
-      const { svg: body, height } = renderProgram(program, (id) => nameOf(currentLang(), id), { values: true, width: W });
+      const { svg: body, height, width } = renderProgram(program, (id) => nameOf(currentLang(), id), { values: true, width: W });
+      svg.setAttribute("viewBox", `0 0 ${width} ${H}`);
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       g.setAttribute("class", `program${enter && !reduced ? " entering" : ""}`);
       g.setAttribute("transform", `translate(0 ${Math.max(0, (H - height) / 2)})`);
