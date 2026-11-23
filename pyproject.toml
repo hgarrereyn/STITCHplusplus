@@ -7,6 +7,7 @@ name = "stitch-fuzz"
 version = "0.2.0"
 description = "STITCH++: API fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby and Swift libraries, built for coding agents"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = []
 
@@ -33,4 +34,4 @@ exclude = ["**/node_modules", "**/__pycache__", "**/target"]
 
 [tool.hatch.build.targets.sdist]
 include = ["cli/stitch_fuzz", "languages", "engine/Dockerfile", "engine/.dockerignore", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock",
-           "engine/rust-toolchain.toml", "skill", "README.md", "pyproject.toml"]
+           "engine/rust-toolchain.toml", "skill", "README.md", "LICENSE", "pyproject.toml"]
