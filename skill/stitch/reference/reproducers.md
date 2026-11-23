@@ -45,8 +45,8 @@ SAME CRASH: .stitch/standalone/c1/repro.cpp -> heap-use-after-free WRITE in suff
 
 - `repro.<ext>`: `main()` makes every call of the crashing program with its arguments filled in.
   In C/C++ each stub's body is pasted inline. In the other languages the file contains (Python,
-  JavaScript, Ruby) or builds against (Java, Go, Rust, Swift) the harness, and `main()` calls the
-  stubs.
+  JavaScript, Ruby, Objective-C) or builds against (Java, Go, Rust, Swift) the harness, and
+  `main()` calls the stubs.
 - a stand-in for the STITCH++ runtime (`stitch_standalone.h`, `stitch.py`, ...), so `repro` runs
   without the fuzzer.
 - `expected.json`: the crash to match (kind and innermost library function).

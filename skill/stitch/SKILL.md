@@ -1,6 +1,6 @@
 ---
 name: stitch
-description: Fuzz the API of a C, C++, Python, JavaScript, Java, Go, Rust, Ruby or Swift library with STITCH++. Covers the Dockerfile that builds the library, harness stubs, fuzzing campaigns, the health report, crash triage, coverage and reproducers. Use when asked to fuzz a library, write or fix a STITCH++ harness, or triage STITCH++ crashes.
+description: Fuzz the API of a C, C++, Objective-C, Python, JavaScript, Java, Go, Rust, Ruby or Swift library with STITCH++. Covers the Dockerfile that builds the library, harness stubs, fuzzing campaigns, the health report, crash triage, coverage and reproducers. Use when asked to fuzz a library, write or fix a STITCH++ harness, or triage STITCH++ crashes.
 ---
 
 # STITCH++
@@ -10,12 +10,12 @@ one API call. The fuzzer chains stubs into **programs** (sequences of calls), ge
 arguments, and reports crashes, uncaught exceptions and failed checks. Everything builds and runs
 in Docker.
 
-Supported languages: C/C++, Python, JavaScript, Java, Go, Rust, Ruby and Swift. The commands and
+Supported languages: C/C++, Objective-C, Python, JavaScript, Java, Go, Rust, Ruby and Swift. The commands and
 the workflow are the same for all of them. The stub syntax, the `Dockerfile` and `stitch.toml`
 differ: **read your language's page before writing stubs**:
 
 ```sh
-stitch guide cpp          # or python, javascript, java, go, rust, ruby, swift
+stitch guide cpp          # or objc, python, javascript, java, go, rust, ruby, swift
 stitch guide reproducers  # turning a crash into a short standalone file
 ```
 

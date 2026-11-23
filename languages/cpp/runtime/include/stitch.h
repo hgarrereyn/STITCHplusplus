@@ -164,6 +164,10 @@ bool attr_has(int slot, const char* key);
 void attr_del(int slot, const char* key);
 void note_missing(const char* key);
 bool tracing();  // `stitch exec --trace` is running this program
+// A bug that a language layer detected in the current call (Objective-C: an exception that
+// escaped the stub). `key` groups the findings of the current stub. While fuzzing the program
+// ends as a finding; otherwise `report` (kind line and frames) is printed and the process aborts.
+[[noreturn]] void report_finding(uint32_t key, const char* report);
 void pending_set_int(const void* p, const char* key, int64_t v);
 void pending_set_str(const void* p, const char* key, const std::string& v);
 void pending_set_obj(const void* p, const char* key, int target_slot);

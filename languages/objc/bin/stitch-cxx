@@ -1,0 +1,8 @@
+#!/bin/sh
+# clang++ with STITCH++ instrumentation; Objective-C++ sources (.mm) also get the GNUstep flags.
+OBJC=""
+for a in "$@"; do
+  case "$a" in *.m|*.mm|objective-c|objective-c++) OBJC="$(cat /stitch/objc/objc-flags)";; esac
+done
+if [ -n "$STITCH_NO_INSTR" ]; then exec clang++ $OBJC "$@"; fi
+exec clang++ $(/stitch/bin/stitch-flags) $OBJC "$@"

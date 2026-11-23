@@ -1,0 +1,57 @@
+#import <Stitch/Stitch.h>
+#import "KVStore.h"
+
+STITCH_OBJECT(Store, KVStore *);
+
+STITCH_DECODER(KvText) {
+    NSMutableArray *lines = [NSMutableArray array];
+    while ([s more]) {
+        NSString *key = [s coin:0.3] ? [s token] : [s str:8];
+        [lines addObject:[NSString stringWithFormat:@"%@=%@", key, [s str:12]]];
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
+STITCH_ENDPOINT(New(Store), new_store) {
+    return [KVStore new];
+}
+
+STITCH_ENDPOINT(New(Store), load, Str(256, KvText) text) {
+    KVStore *st = [KVStore storeWithText:text error:NULL];
+    STRequire(st != nil, @"invalid text");
+    return st;
+}
+
+STITCH_ENDPOINT(void, put, Borrow(Store) st, Str(16) key, Str(32) value) {
+    STRequire([st putValue:value forKey:key error:NULL], @"invalid key or value");
+}
+
+STITCH_ENDPOINT(void, remove, Borrow(Store) st, Str(16) key) {
+    [st removeKey:key];
+}
+
+STITCH_ENDPOINT(void, byte_at, Borrow(Store) st, Str(16) key, Range(0, 64) i) {
+    (void)[st byteForKey:key atIndex:(NSUInteger)i];
+}
+
+STITCH_ENDPOINT(void, roundtrip, Borrow(Store) st) {
+    KVStore *again = [KVStore storeWithText:[st dump] error:NULL];
+    STCheck(again != nil && [[again dictionary] isEqual:[st dictionary]], @"dump/load roundtrip");
+}
+
+// A typed data type: Pairs decodes to an array of [key, value], drawing each with Pair's decoder.
+STITCH_DECODER(Pair) {
+    NSString *key = [s coin:0.3] ? [s token] : [s str:8];
+    NSString *value = [s coin] ? [s str:12] : [NSString stringWithFormat:@"%.2f", [s f64:0 to:100]];
+    return @[key, value];
+}
+
+STITCH_DECODER(Pairs) {
+    NSMutableArray *out = [NSMutableArray array];
+    while ([s more]) [out addObject:STDraw(s, Pair)];
+    return out;
+}
+
+STITCH_ENDPOINT(void, put_all, Borrow(Store) st, Val(Pairs, 256) kvs) {
+    for (NSArray *kv in kvs) STRequire([st putValue:kv[1] forKey:kv[0] error:NULL], @"invalid key or value");
+}

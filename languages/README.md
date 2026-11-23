@@ -12,16 +12,22 @@ Each folder holds one harness language: its runtime, its Docker image and its bu
 | `rust/` | `endpoint! { fn ... }` | SanitizerCoverage (`-Cpasses=sancov-module`) | `trace-compares`, ASan `memcmp` hooks | panics (incl. overflow checks), ASan |
 | `ruby/` | `Stitch.endpoint :name, {specs}, outputs do ... end` | Prism source rewriting (byte counters per statement list and `&&`/`\|\|`) | rewritten `==`, `<`, `eql?`, `start_with?`, `include?`, `case`/`when` | undeclared exceptions, `Stitch.check` |
 | `swift/` | `let x = endpoint("name") { (a: Str<64, Plain>) -> New<T> in }` | SanitizerCoverage (`-sanitize-coverage=edge,trace-pc-guard,trace-cmp`) | `trace-cmp` | traps (bounds, overflow, nil unwrap), ASan, `check` |
+| `objc/` | `STITCH_ENDPOINT(New(T), name, Str(64) a) { ... }` (GNUstep, ARC) | SanitizerCoverage (clang) | `trace-cmp`, `memcmp`/`strcmp` hooks, `NSString` `isEqual…`/`hasPrefix:`/`compare:`/`rangeOfString:` wrappers | Objective-C exceptions, ASan, UBSan, `STCheck` |
 
 ## How a language runs
 
-- **In-process** (C/C++, Rust, Swift): the harness binary contains the runtime and the engine
-  (C/C++ and Swift link `libstitch_engine.a`; the Rust worker binary loads `libstitch_engine.so`
+- **In-process** (C/C++, Rust, Swift, Objective-C): the harness binary contains the runtime and the engine
+  (C/C++, Swift and Objective-C link `libstitch_engine.a`; the Rust worker binary loads `libstitch_engine.so`
   and exports the `stitch_*` ABI). A persistent fork server runs programs in a forked child with
   results, edges and comparisons in shared memory. A runtime that survives a finding (a Rust
   panic, a failed check) returns `EXEC_FINDING` from `stitch_exec` and the child keeps running.
   Swift stubs run on the C/C++ runtime through `swift/bridge/bridge.cpp` (C API in
-  `swift/runtime/Sources/CStitch/include/cstitch.h`).
+  `swift/runtime/Sources/CStitch/include/cstitch.h`). Objective-C stubs run on it through
+  `objc/runtime/src/stitch_objc.mm`: `stitch-build` reads each `STITCH_ENDPOINT` declaration and
+  compiles the stub file with a generated trampoline and registration appended. An exception that
+  escapes a stub is reported with the stack of its throw (`objc_exception_throw` is interposed in
+  `objc/runtime/src/stitch_objc_throw.c`), and NSString comparison methods report failed
+  comparisons to cmplog (GNUstep Base itself is not instrumented).
 - **Worker** (Python, JavaScript, Java, Go, Ruby): the language's own process talks to the
   `stitch-engine` binary over the worker protocol below. The engine numbers the edges a worker
   reports densely (`engine/src/worker.rs`), so its per-run work grows with the library's coverage,
