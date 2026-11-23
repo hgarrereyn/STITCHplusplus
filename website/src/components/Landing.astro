@@ -1,10 +1,10 @@
 ---
-// Home page body: the language picker, the tutorial harness (with notes) next to how the fuzzer
+// Home page body: the language picker, the tutorial harness (with a guided tour) next to how the fuzzer
 // stitches its stubs and the crash it finds (recorded from the tutorial run), the guides, install.
 import { Code } from "@astrojs/starlight/components";
 import RunOutput from "./RunOutput.astro";
 import LangButtons from "./LangButtons.astro";
-import HarnessNotes from "./HarnessNotes.astro";
+import HarnessTour from "./HarnessTour.astro";
 import StitchGraph from "./StitchGraph.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -16,11 +16,11 @@ const url = (path: string) => `${base}/${path}`;
     <LangButtons />
     <div class="showcase">
       <div class="pane">
-        <p class="pane-label">You write stubs <span class="pane-hint">hover the marked parts</span></p>
-        <HarnessNotes />
+        <p class="pane-label">You write a spec</p>
+        <HarnessTour />
       </div>
       <div class="pane">
-        <p class="pane-label">STITCH++ stitches them into programs</p>
+        <p class="pane-label">STITCH++ stitches its endpoints into programs</p>
         <StitchGraph />
         <p class="pane-label">and finds one that breaks</p>
         <RunOutput name="trace-short" />
