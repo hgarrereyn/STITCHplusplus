@@ -1,10 +1,28 @@
-# Checks that the package installs and carries the same sources as the checkout (so the prebuilt
-# images it pulls match), and that the CLI starts.
+# CI for pull requests and main. Everything here is deterministic: no step calls an LLM or agent.
+#
+#   package     the package installs, carries the same sources as the checkout (so the prebuilt
+#               images it pulls match), and the CLI starts.
+#   engine      the fuzzer engine image, pulled if published for this source hash, otherwise built
+#               once and handed to the language jobs (so they do not each rebuild it).
+#   languages   the CLI flow on each language's demo project: tests/smoke.sh for C/C++ and
+#               tests/languages.py for the others (build, check, probe, fuzz, crashes, minimize,
+#               exec, write, try, repro, cov; C/C++ also bisects).
+#   ci-ok       a single status that passes only when every job above passed. Make this the one
+#               required check in the branch protection rule / ruleset for main.
 name: ci
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
@@ -20,11 +38,99 @@ jobs:
         working-directory: /tmp
         run: |
           /tmp/venv/bin/stitch --version
+          /tmp/venv/bin/stitch --help > /dev/null
           /tmp/venv/bin/stitch guide > /dev/null
-          /tmp/venv/bin/stitch guide cpp > /dev/null
+          for t in cpp python javascript java go rust ruby swift objc reproducers; do
+            /tmp/venv/bin/stitch guide $t > /dev/null || { echo "stitch guide $t failed"; exit 1; }
+          done
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
       - name: installed sources hash like the checkout
         run: |
           a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
           b=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
           echo "installed: $a  checkout: $b"; [ "$a" = "$b" ]
+      - name: stitch init scaffolds a project for every language
+        working-directory: /tmp
+        run: |
+          for l in cpp python javascript java go rust ruby swift objc; do
+            /tmp/venv/bin/stitch --json init /tmp/init-$l --lang $l --git https://example.com/lib.git --rev v1 > /dev/null \
+              || { echo "stitch init --lang $l failed"; exit 1; }
+            test -f /tmp/init-$l/stitch.toml && test -f /tmp/init-$l/Dockerfile && test -d /tmp/init-$l/harness \
+              || { echo "stitch init --lang $l: missing files"; ls -la /tmp/init-$l; exit 1; }
+          done
+
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      hash: ${{ steps.engine.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pull or build the engine image
+        id: engine
+        run: |
+          h=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash())')
+          echo "hash=$h" >> "$GITHUB_OUTPUT"
+          PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.ensure_engine())' \
+            || { cat ~/.cache/stitch/logs/engine.log 2>/dev/null | tail -100; exit 1; }
+          docker save "stitch/engine:$h" -o engine.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-image
+          path: engine.tar
+          retention-days: 1
+
+  languages:
+    needs: engine
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [cpp, python, javascript, java, go, rust, ruby, swift, objc]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    name: languages (${{ matrix.lang }})
+    env:
+      # fuzzing time per language; longer than the defaults so the planted bugs are found reliably
+      STITCH_SMOKE_SECS: "180"
+      STITCH_TEST_SECS: "120"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-image
+      - name: load the engine image
+        run: docker load -i engine.tar && rm engine.tar
+      - name: stitch setup
+        run: |
+          bin/stitch setup --lang ${{ matrix.lang }} \
+            || { tail -100 ~/.cache/stitch/logs/*.log 2>/dev/null; exit 1; }
+      - name: CLI flow (C/C++)
+        if: matrix.lang == 'cpp'
+        run: tests/smoke.sh
+      - name: CLI flow
+        if: matrix.lang != 'cpp'
+        run: python3 tests/languages.py --secs "$STITCH_TEST_SECS" ${{ matrix.lang }}
+      - name: logs on failure
+        if: failure()
+        run: |
+          for f in ~/.cache/stitch/logs/*.log examples/*/.stitch/campaigns/*/w*.log; do
+            [ -f "$f" ] && { echo "::group::$f"; tail -200 "$f"; echo "::endgroup::"; }
+          done
+          true
+
+  ci-ok:
+    if: always()
+    needs: [package, engine, languages]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every job passed
+        run: |
+          echo '${{ toJSON(needs) }}'
+          [ "${{ needs.package.result }}" = success ] && [ "${{ needs.engine.result }}" = success ] \
+            && [ "${{ needs.languages.result }}" = success ]

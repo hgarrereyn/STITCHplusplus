@@ -1,5 +1,5 @@
 #!/bin/sh
-# End-to-end test on examples/demolib: build, check, fuzz, triage, minimize, repro, bisect.
+# End-to-end test on examples/demolib: build, check, probe, fuzz, triage, minimize, repro, bisect.
 # STITCH_SMOKE_SECS (default 90): fuzzing time; raise it on a busy machine.
 # The demo library has two planted bugs with known introducing commits:
 #   "allow 16 character keys" (off-by-one)  and  "debug level hook" (magic value, needs cmplog).
@@ -12,6 +12,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 
 $STITCH -C $P build >/dev/null || fail build
 $STITCH -C $P check --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["endpoints"] == 8, d' || fail check
+$STITCH -C $P --json probe --secs 10 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["execs"] and d["edges_covered"] and isinstance(d["report"], list), {k: d.get(k) for k in ("execs", "edges_covered")}' || fail probe
 $STITCH -C $P fuzz --name smoke --secs "${STITCH_SMOKE_SECS:-90}" --fresh --foreground >/dev/null 2>&1 || true
 $STITCH -C $P crashes smoke --json > /tmp/stitch-smoke-crashes.json || fail crashes
 python3 - <<'EOF' || fail "expected both planted bugs"
