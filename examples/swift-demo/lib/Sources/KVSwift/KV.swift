@@ -28,6 +28,11 @@ public final class Store {
 
     public func items() -> [(String, String)] { order.map { ($0, d[$0]!) } } // force unwrap of nil after removing a tmp key
 
+    /// Puts every entry of other into this store.
+    public func merge(_ other: Store) throws {
+        for (k, v) in other.items() { try put(k, v) }
+    }
+
     public func dump() -> String { items().map { "\($0)=\($1)" }.joined(separator: "\n") }
 
     public func byteAt(_ key: String, _ i: Int) -> UInt8? {

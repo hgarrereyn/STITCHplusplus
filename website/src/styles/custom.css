@@ -47,6 +47,11 @@
   /* the paper's block and wire color */
   --stitch-indigo: #8d8ff7;
   --stitch-orange: #f59e42;
+  /* endpoint shapes: object types, checks, crashes */
+  --port-store: #5d9cf8;
+  --port-snap: #a98bfa;
+  --port-ok: #3fbf7f;
+  --port-crash: #f2555a;
 
   --sl-content-width: 46rem;
   --sl-sidebar-width: 17rem;
@@ -90,6 +95,11 @@
   --lang-swift: #e0442a;
   --lang-objc: #5452e0;
   --stitch-indigo: #5452d6;
+  --stitch-orange: #c4690c;
+  --port-store: #2f6fe0;
+  --port-snap: #7c4ddb;
+  --port-ok: #1d8a52;
+  --port-crash: #d0303a;
 
   --stitch-surface: #f7f8fa;
   --stitch-surface-hover: #f1f3f6;

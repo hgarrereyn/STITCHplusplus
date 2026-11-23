@@ -20,6 +20,11 @@ public class Store {
         if (data.remove(key) != null && !key.startsWith("tmp")) order.remove(key); // BUG: tmp keys stay
     }
 
+    /** Puts every entry of other into this store. */
+    public void merge(Store other) {
+        for (String k : other.order) put(k, other.data.get(k)); // NPE after a tmp removal in other
+    }
+
     public String dump() {
         StringBuilder b = new StringBuilder();
         for (String k : order) b.append(k).append('=').append(data.get(k).trim()).append('\n'); // NPE after a tmp removal

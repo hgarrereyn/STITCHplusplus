@@ -1,0 +1,29 @@
+---
+// The crash the home page harness found, from a real run (src/showcase/<lang>/trace.txt): the
+// minimized program drawn with the harness shapes, the error, and the full trace.
+import { Code } from "@astrojs/starlight/components";
+import { LANGUAGES } from "./languages";
+import { endpointByName, nameOf } from "./showcase";
+import { programFromTrace, renderProgram } from "./program";
+
+const traces = import.meta.glob<string>("../showcase/*/trace.txt", { query: "?raw", import: "default", eager: true });
+const cards = LANGUAGES.flatMap(([lang]) => {
+  const trace = traces[`../showcase/${lang}/trace.txt`];
+  if (!trace) return [];
+  const { calls, kind, frame } = programFromTrace(trace, (name) => endpointByName(lang, name)?.id);
+  const { svg, width, height } = renderProgram(calls, (id) => nameOf(lang, id), { values: true });
+  return [{ lang, trace: trace.replace(/\n+$/, ""), svg, width, height, kind, frame, n: calls.length }];
+});
+---
+
+{cards.map((c) => (
+  <div class="lang-block crash-card" data-for={c.lang}>
+    <svg viewBox={`0 0 ${c.width} ${c.height}`} width={c.width} height={c.height} role="img"
+         aria-label={`The crashing program: ${c.n} calls`} set:html={c.svg} />
+    <p class="crash-error"><span class="crash-kind">{c.kind}</span>{c.frame && <span class="crash-frame"> in {c.frame}</span>}</p>
+    <details class="crash-trace">
+      <summary>Show the trace</summary>
+      <Code code={c.trace} lang="text" frame="none" />
+    </details>
+  </div>
+))}

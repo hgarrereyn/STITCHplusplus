@@ -29,6 +29,17 @@ public class Stubs {
         st.remove(key);
     }
 
+    @Endpoint(bailsOn = {IllegalArgumentException.class})
+    @Obj("Snapshot")
+    public static Store snapshot(Store st) {
+        return Store.load(st.dump());
+    }
+
+    @Endpoint
+    public static void merge(Store st, @Take @Obj("Snapshot") Store snap) {
+        st.merge(snap);
+    }
+
     @Endpoint
     public static void roundtrip(Store st) {
         Store again = Store.load(st.dump());

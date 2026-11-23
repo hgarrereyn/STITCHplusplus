@@ -29,6 +29,14 @@ impl Store {
         }
     }
 
+    /// Puts every entry of `other` into this store.
+    pub fn merge(&mut self, other: &Store) -> Result<(), String> {
+        for k in &other.order {
+            self.put(k, other.data.get(k).unwrap())?; // panics after a tmp removal in other
+        }
+        Ok(())
+    }
+
     pub fn dump(&self) -> String {
         self.order.iter().map(|k| format!("{k}={}\n", self.data.get(k).unwrap())).collect() // panics after a tmp removal
     }

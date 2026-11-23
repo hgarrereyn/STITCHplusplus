@@ -2,6 +2,7 @@ import KVSwift
 import Stitch
 
 enum Store: StitchObject { typealias Handle = KVSwift.Store }
+enum Snapshot: StitchObject { typealias Handle = KVSwift.Store }
 
 enum KvText: Decoded {
     static func decode(_ s: Source) -> String {
@@ -28,6 +29,14 @@ let put = endpoint("put") { (st: Borrow<Store>, key: Str<16, Plain>, value: Str<
 
 let remove = endpoint("remove") { (st: Borrow<Store>, key: Str<16, Plain>) in
     st.value.remove(key.value)
+}
+
+let snapshot = endpoint("snapshot") { (st: Borrow<Store>) throws -> New<Snapshot> in
+    New(try KVSwift.load(st.value.dump()))
+}
+
+let merge = endpoint("merge") { (st: Borrow<Store>, snap: Take<Snapshot>) throws in
+    try st.value.merge(snap.value)
 }
 
 let roundtrip = endpoint("roundtrip") { (st: Borrow<Store>) throws in

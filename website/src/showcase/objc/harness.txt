@@ -2,6 +2,7 @@
 #import "KVStore.h"
 
 STITCH_OBJECT(Store, KVStore *);
+STITCH_OBJECT(Snapshot, KVStore *);
 
 STITCH_DECODER(KvText) {
     NSMutableArray *lines = [NSMutableArray array];
@@ -28,6 +29,16 @@ STITCH_ENDPOINT(void, put, Borrow(Store) st, Str(16) key, Str(32) value) {
 
 STITCH_ENDPOINT(void, remove, Borrow(Store) st, Str(16) key) {
     [st removeKey:key];
+}
+
+STITCH_ENDPOINT(New(Snapshot), snapshot, Borrow(Store) st) {
+    KVStore *copy = [KVStore storeWithText:[st dump] error:NULL];
+    STRequire(copy != nil, @"dump did not load");
+    return copy;
+}
+
+STITCH_ENDPOINT(void, merge, Borrow(Store) st, Take(Snapshot) snap) {
+    STRequire([st mergeStore:snap error:NULL], @"invalid entry");
 }
 
 STITCH_ENDPOINT(void, roundtrip, Borrow(Store) st) {

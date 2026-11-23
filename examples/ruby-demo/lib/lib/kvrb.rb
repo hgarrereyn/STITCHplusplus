@@ -26,6 +26,8 @@ module Kvrb
 
     def items = @order.map { |k| [k, @d.fetch(k)] } # KeyError after removing a tmp key
 
+    def merge(other) = other.items.each { |k, v| put(k, v) }
+
     def dump = items.map { |k, v| "#{k}=#{v}" }.join("\n")
   end
 

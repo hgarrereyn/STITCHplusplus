@@ -1,0 +1,20 @@
+$ stitch exec c2 --trace
+[stitch] main:c2: running the minimized program .stitch/campaigns/main/w0/crashes/3080d7c8f59d0158.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/3080d7c8f59d0158.min.stp
+[stitch] #0 load(text=Str[4,decoded]"tmp=")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 snapshot(st=o0.0)
+
+[stitch] EXCEPTION in snapshot: KeyError: key not found: "tmp"
+    #0 0x0 in Hash#fetch /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:27
+    #1 0x0 in block in Kvrb::Store#items /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:27
+    #2 0x0 in Array#map /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:27
+    #3 0x0 in Kvrb::Store#items /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:27
+    #4 0x0 in Kvrb::Store#dump /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:31
+    #5 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:35
+    #6 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+
+
+result: CRASH KeyError | Hash#fetch kvrb.rb:27 | block in Kvrb::Store#items kvrb.rb | Array#map kvrb.rb (76 ms)

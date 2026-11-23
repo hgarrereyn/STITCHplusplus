@@ -1,8 +1,9 @@
 const stitch = require("stitch");
-const { Borrow, New, Str } = stitch;
+const { Borrow, New, Str, Take } = stitch;
 const kv = require("kvjs");
 
 const Store = stitch.object("Store");
+const Snapshot = stitch.object("Snapshot");
 const KvText = stitch.datatype("KvText");
 
 stitch.decoder(KvText, (s) => {
@@ -21,6 +22,11 @@ stitch.endpoint("put", { st: Borrow(Store), key: Str(16), value: Str(32) }, null
 }, { bailsOn: [RangeError] });
 
 stitch.endpoint("remove", { st: Borrow(Store), key: Str(16) }, null, ({ st, key }) => st.remove(key));
+
+stitch.endpoint("snapshot", { st: Borrow(Store) }, New(Snapshot), ({ st }) => kv.load(st.dump()),
+  { bailsOn: [RangeError] });
+
+stitch.endpoint("merge", { st: Borrow(Store), snap: Take(Snapshot) }, null, ({ st, snap }) => st.merge(snap));
 
 stitch.endpoint("roundtrip", { st: Borrow(Store) }, null, ({ st }) => {
   const again = kv.load(st.dump());

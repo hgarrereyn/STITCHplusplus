@@ -1,6 +1,7 @@
 use stitch::*;
 
 object!(Store, kvrs::Store);
+object!(Snapshot, kvrs::Store);
 datatype!(KvText);
 
 decoder!(KvText, fn kv_text(s: &mut Source) -> String {
@@ -33,6 +34,18 @@ endpoint! {
 endpoint! {
     fn remove(st: Borrow<Store>, key: Str<16>) {
         st.remove(&key);
+    }
+}
+
+endpoint! {
+    fn snapshot(st: Borrow<Store>) -> Result<New<Snapshot>, String> {
+        Ok(New::new(kvrs::load(&st.dump())?))
+    }
+}
+
+endpoint! {
+    fn merge(st: Borrow<Store>, snap: Take<Snapshot>) -> Result<(), String> {
+        st.merge(&snap.into_inner())
     }
 }
 

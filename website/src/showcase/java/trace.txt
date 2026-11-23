@@ -1,0 +1,15 @@
+$ stitch exec c2 --trace
+[stitch] main:c2: running the minimized program .stitch/campaigns/main/w0/crashes/9dcb68d9fe999072.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/9dcb68d9fe999072.min.stp
+[stitch] #0 load(text=Str[5,decoded]"tmp=\n")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] EXCEPTION in roundtrip: NullPointerException: Cannot invoke "String.trim()" because the return value of "java.util.Map.get(Object)" is null
+    #0 0x0 in Store.dump /demo/kv/Store.java:30
+    #1 0x0 in Stubs.roundtrip /project/harness/Stubs.java:45
+
+
+result: CRASH NullPointerException | Store.dump Store.java:30 | Stubs.roundtrip (stub) (133 ms)

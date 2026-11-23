@@ -66,6 +66,11 @@ void kv_remove(kv_store *st, const char *key) {
 
 size_t kv_len(const kv_store *st) { return st->n; }
 
+void kv_merge(kv_store *st, const kv_store *other) {
+    for (size_t i = 0; i < other->n_order; i++) /* use-after-free after removing a tmp key from other */
+        kv_put(st, other->order[i]->key, other->order[i]->value);
+}
+
 char *kv_dump(const kv_store *st) {
     size_t len = 1;
     for (size_t i = 0; i < st->n_order; i++) /* use-after-free after removing a tmp key */

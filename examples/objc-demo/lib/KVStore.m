@@ -69,6 +69,13 @@ static NSError *invalid(NSString *why) {
 
 - (NSDictionary<NSString *, NSString *> *)dictionary { return [_d copy]; }
 
+- (BOOL)mergeStore:(KVStore *)other error:(NSError **)error {
+    for (NSArray *kv in [other items]) {
+        if (![self putValue:kv[1] forKey:kv[0] error:error]) return NO;
+    }
+    return YES;
+}
+
 - (NSString *)dump {
     NSMutableArray *lines = [NSMutableArray array];
     for (NSArray *kv in [self items]) [lines addObject:[NSString stringWithFormat:@"%@=%@", kv[0], kv[1]]];

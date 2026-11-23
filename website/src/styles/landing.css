@@ -147,7 +147,14 @@
   font-size: var(--sl-text-sm);
   color: var(--sl-color-gray-3);
 }
+.hero-btn .btn-icon {
+  flex: none;
+  margin-inline-start: -0.125rem;
+}
 .copy-bibtex {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   padding: 0;
   border: 0;
   background: none;
@@ -240,189 +247,211 @@
   outline-offset: -2px;
 }
 
-/* A harness next to the programs made from it */
-.showcase {
+/* The example: the spec (left) beside the programs and the crash (right) */
+.example {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 1.5rem;
   align-items: start;
 }
-.pane {
+.example-side {
+  position: sticky;
+  top: calc(var(--sl-nav-height) + 1rem);
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  min-width: 0;
+  gap: 1rem;
 }
-.pane-label {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sl-color-gray-3);
-}
-.pane-label:not(:first-child) {
-  margin-top: 0.75rem;
-}
-.pane .expressive-code {
-  margin: 0;
-}
-
-/* The guided tour of the harness */
-.tour {
+.example-card {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-.tour-panel {
-  position: sticky;
-  top: calc(var(--sl-nav-height) + 0.5rem);
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.875rem 1rem 0.625rem;
+  min-width: 0;
+  padding: 1rem 1rem 0.875rem;
   border: 1px solid var(--sl-color-hairline-light);
-  border-inline-start: 3px solid var(--stitch-orange);
-  border-radius: 0.625rem;
-  background: var(--sl-color-black);
-  box-shadow: 0 4px 18px rgb(0 0 0 / 0.08);
+  border-radius: 0.875rem;
+  background: var(--stitch-surface);
 }
-.tour-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.625rem;
-}
-.tour-count {
-  flex: none;
-  font-family: var(--sl-font-mono);
-  font-size: 0.75rem;
-  color: var(--sl-color-gray-3);
-}
-.tour-title {
-  font-size: 1rem;
+.example-head h3 {
+  margin: 0;
+  font-size: 0.9375rem;
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--sl-color-white);
 }
-.tour-text {
-  margin: 0;
-  min-height: 4.8em;
+.example-head p {
+  margin: 0.25rem 0 0;
   font-size: var(--sl-text-sm);
-  line-height: 1.6;
-  color: var(--sl-color-gray-2);
+  line-height: 1.55;
+  color: var(--sl-color-gray-3);
 }
-.tour-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+
+/* Endpoint shapes (shared by the spec, the programs and the crash) */
+.g-box {
+  fill: var(--sl-color-black);
+  stroke: var(--sl-color-gray-5);
+  stroke-width: 1;
 }
-.tour-nav > button {
-  flex: none;
-  white-space: nowrap;
-  min-height: 2.25rem;
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--sl-color-hairline-light);
-  border-radius: 999px;
-  background: transparent;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--sl-color-white);
-  cursor: pointer;
+.g-name,
+.g-label,
+.g-value {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
-.tour-nav > button:hover:not(:disabled) {
-  border-color: var(--sl-color-gray-4);
+.g-name {
+  font-family: var(--sl-font-mono);
+  font-size: 11.5px;
+  fill: var(--sl-color-white);
 }
-.tour-nav > button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.g-port {
+  stroke: var(--sl-color-black);
+  stroke-width: 2;
 }
-.tour-dots {
-  display: flex;
-  justify-content: center;
-  min-width: 0;
+.g-port.p-store { fill: var(--port-store); }
+.g-port.p-snap { fill: var(--port-snap); }
+.g-port.p-fuzz { fill: var(--stitch-orange); stroke-width: 1.5; }
+.g-port.p-fuzz.decoded { fill: var(--sl-color-black); stroke: var(--stitch-orange); stroke-width: 1.6; }
+.g-port.take { fill: var(--sl-color-black); stroke-width: 1.8; }
+.g-port.take.p-store { stroke: var(--port-store); }
+.g-port.take.p-snap { stroke: var(--port-snap); }
+.g-label {
+  font-family: var(--sl-font-mono);
+  font-size: 9.5px;
 }
-.tour-dot {
-  width: 1.375rem;
-  height: 1.375rem;
+.g-label.p-store { fill: var(--port-store); }
+.g-label.p-snap { fill: var(--port-snap); }
+.g-label.p-fuzz { fill: var(--stitch-orange); }
+.g-value {
+  font-family: var(--sl-font-mono);
+  font-size: 10.5px;
+  fill: var(--stitch-orange);
+}
+.g-check { fill: color-mix(in srgb, var(--port-ok) 18%, transparent); stroke: var(--port-ok); stroke-width: 1.2; }
+.g-check-mark { fill: none; stroke: var(--port-ok); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.glyph.crash .g-box { stroke: var(--port-crash); stroke-width: 1.6; fill: color-mix(in srgb, var(--port-crash) 10%, var(--sl-color-black)); }
+.wire {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.wire.w-store { stroke: var(--port-store); }
+.wire.w-snap { stroke: var(--port-snap); }
+
+/* The spec: code with the shapes in a gutter on its left (above each endpoint on narrow screens) */
+.spec {
+  position: relative;
+}
+.spec-block {
+  position: relative;
+}
+.spec-glyphs {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 8.25rem;
+}
+.spec-block:not(.above) .spec-code {
+  margin-inline-start: 8.5rem;
+}
+.spec-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  display: block;
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
+  border-radius: 0.625rem;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: opacity 0.2s ease;
 }
-.tour-dot::before {
-  content: "";
+.spec-glyph svg {
   display: block;
-  width: 0.4375rem;
-  height: 0.4375rem;
-  margin: auto;
-  border-radius: 50%;
-  background: var(--sl-color-gray-5);
-  transition: background-color 0.15s, transform 0.15s;
+  overflow: visible;
 }
-.tour-dot[aria-current="true"]::before {
-  background: var(--stitch-orange);
-  transform: scale(1.3);
+.spec-block.above .spec-glyph {
+  left: 0.75rem;
 }
-.tour-nav button:focus-visible,
-.tour-mark:focus-visible {
+.spec-block.above .spec-glyphs {
+  inset: 0;
+  width: auto;
+  pointer-events: none;
+}
+.spec-block.above .spec-glyph {
+  pointer-events: auto;
+}
+.spec-glyph:hover .g-box,
+.spec-glyph.active .g-box {
+  stroke: var(--sl-color-gray-3);
+}
+.spec-glyph:focus-visible {
   outline: 2px solid var(--sl-color-accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
-
-.tour-code {
-  position: relative;
+.spec-block.focus .spec-glyph:not(.active) {
+  opacity: 0.4;
 }
-.tour-code .ec-line {
-  transition: opacity 0.25s ease, background-color 0.25s ease;
+.spec-code .expressive-code {
+  margin: 0;
 }
-.tour-code.tour-dim .ec-line:not(.tour-on) {
-  opacity: 0.32;
+.spec-code .ec-line {
+  transition: opacity 0.2s ease;
 }
-.tour-code.tour-dim .ec-line.tour-on {
-  background: color-mix(in srgb, var(--stitch-orange) 7%, transparent);
+.spec-block.focus .ec-line:not(.lit) {
+  opacity: 0.38;
 }
-.tour-code.tour-all .expressive-code pre {
-  box-shadow: inset 3px 0 0 var(--stitch-orange);
-}
-.tour-mark {
+.spec-mark {
   border-radius: 3px;
   text-decoration: underline dotted;
-  text-decoration-color: var(--stitch-orange);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-.tour-mark:hover,
-.tour-mark.tour-on {
-  background: color-mix(in srgb, var(--stitch-orange) 22%, transparent);
+.spec-mark.type-store { text-decoration-color: var(--port-store); }
+.spec-mark.type-snap { text-decoration-color: var(--port-snap); }
+.spec-mark.decoder { text-decoration-color: var(--stitch-orange); }
+.spec-mark.bail { text-decoration-color: var(--sl-color-gray-3); }
+.spec-mark.check { text-decoration-color: var(--port-ok); }
+.spec-mark:hover,
+.spec-mark.active {
+  background: color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent);
   text-decoration-style: solid;
 }
-.note-pop {
+.spec-mark:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+.spec-pop {
   position: absolute;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: max-content;
   max-width: min(22rem, 100%);
-  padding: 0.375rem 0.625rem;
-  border: 1px solid var(--sl-color-hairline-light);
-  border-radius: 0.5rem;
-  background: var(--sl-color-black);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
-  font-size: 0.8125rem;
-  color: var(--sl-color-gray-1);
-  pointer-events: none;
-}
-
-/* The stitching graph (blocks and wires as in the paper's Figure 3) */
-.stitch-graph {
-  margin: 0;
-  padding: 0.75rem 0.75rem 0.5rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--sl-color-hairline-light);
   border-radius: 0.625rem;
-  background: var(--stitch-surface);
+  background: var(--sl-color-black);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+  color: var(--sl-color-gray-2);
+  pointer-events: none;
+}
+.spec-pop-title {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8125rem;
+  color: var(--sl-color-white);
+}
+
+/* Programs */
+.stitch-graph {
+  margin: 0;
 }
 .stitch-graph svg {
   display: block;
@@ -431,53 +460,87 @@
   height: auto;
   margin-inline: auto;
 }
-.stitch-graph .call {
-  transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.4s ease;
+.stitch-graph .program {
+  transition: opacity 0.35s ease;
 }
-.stitch-graph .call.entering,
-.stitch-graph .call.leaving {
+.stitch-graph .program.leaving {
   opacity: 0;
 }
-.stitch-graph .block {
-  fill: var(--sl-color-black);
-  stroke: var(--sl-color-hairline-light);
-  stroke-width: 1;
+.stitch-graph .program .call {
+  transition: opacity 0.4s ease calc(var(--i) * 70ms), transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) calc(var(--i) * 70ms);
 }
-.stitch-graph .bar,
-.stitch-graph .tab {
-  fill: var(--stitch-indigo);
-}
-.stitch-graph .name {
-  font-family: var(--sl-font-mono);
-  font-size: 12.5px;
-  fill: var(--sl-color-white);
-}
-.stitch-graph .wire {
-  fill: none;
-  stroke: var(--stitch-indigo);
-  stroke-width: 1.5;
+.stitch-graph .program .wire {
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
-  transition: stroke-dashoffset 0.5s ease, opacity 0.25s ease;
+  transition: stroke-dashoffset 0.5s ease calc(var(--i) * 70ms + 180ms);
 }
-.stitch-graph .wire.drawing {
+.stitch-graph .program.entering .call {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.stitch-graph .program.entering .wire {
   stroke-dashoffset: 1;
   transition: none;
 }
-.stitch-graph .wire.leaving {
-  opacity: 0;
-}
-.stitch-graph figcaption {
-  min-height: 1.5em;
-  padding-top: 0.25rem;
-  text-align: center;
-  font-family: var(--sl-font-mono);
-  font-size: 0.8125rem;
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 1rem;
+  font-size: 0.75rem;
   color: var(--sl-color-gray-3);
 }
-.stitch-graph .step-verb {
-  color: var(--stitch-indigo);
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.legend .dot {
+  width: 0.5625rem;
+  height: 0.5625rem;
+  border-radius: 50%;
+}
+.legend .dot.p-store { background: var(--port-store); }
+.legend .dot.p-snap { background: var(--port-snap); }
+.legend .dot.hollow { border: 1.6px solid var(--sl-color-gray-3); }
+.legend .diamond {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--stitch-orange);
+  transform: rotate(45deg);
+}
+
+/* The crash */
+.crash-card svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+.crash-error {
+  margin: 0.5rem 0 0;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crash-kind {
+  color: var(--port-crash);
   font-weight: 600;
+}
+.crash-frame {
+  color: var(--sl-color-gray-3);
+}
+.crash-trace {
+  margin-top: 0.5rem;
+}
+.crash-trace summary {
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-text-accent);
+  cursor: pointer;
+}
+.crash-trace .expressive-code {
+  margin-top: 0.5rem;
 }
 
 /* The two guides */
@@ -557,8 +620,11 @@
 }
 
 @media (max-width: 62rem) {
-  .showcase {
+  .example {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .example-side {
+    position: static;
   }
 }
 @media (max-width: 50rem) {
@@ -583,12 +649,6 @@
   }
 }
 @media (max-width: 40rem) {
-  .tour-dot {
-    width: 1rem;
-  }
-  .tour-nav > button {
-    padding-inline: 0.625rem;
-  }
   .guides {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -610,8 +670,11 @@
   .stitch-graph .call,
   .stitch-graph .wire,
   .hero-btn,
-  .tour-code .ec-line,
-  .tour-dot::before,
+  .spec-glyph,
+  .spec-code .ec-line,
+  .stitch-graph .program,
+  .stitch-graph .program .call,
+  .stitch-graph .program .wire,
   .guide,
   .guide-title::after,
   .lang-buttons button,

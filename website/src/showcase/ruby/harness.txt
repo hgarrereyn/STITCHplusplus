@@ -3,6 +3,7 @@ require "kvrb"
 include Stitch::DSL
 
 Store = Stitch.object("Store")
+Snapshot = Stitch.object("Snapshot")
 KvText = Stitch.datatype("KvText")
 
 Stitch.decoder(KvText) do |s|
@@ -28,6 +29,14 @@ end
 
 Stitch.endpoint :remove, { st: Borrow[Store], key: Str[16] } do |st, key|
   st.remove(key)
+end
+
+Stitch.endpoint :snapshot, { st: Borrow[Store] }, New[Snapshot], bails_on: [ArgumentError] do |st|
+  Kvrb.load(st.dump)
+end
+
+Stitch.endpoint :merge, { st: Borrow[Store], snap: Take[Snapshot] } do |st, snap|
+  st.merge(snap)
 end
 
 Stitch.endpoint :roundtrip, { st: Borrow[Store] } do |st|

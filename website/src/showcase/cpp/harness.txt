@@ -5,6 +5,8 @@ extern "C" {
 
 STITCH_OBJECT(Store, kv_store*);
 STITCH_DROP(Store, [](kv_store* st) { kv_free(st); });
+STITCH_OBJECT(Snapshot, kv_store*);
+STITCH_DROP(Snapshot, [](kv_store* st) { kv_free(st); });
 STITCH_DATATYPE(KvText);
 
 STITCH_DECODER(KvText, [](stitch::Source& s) {
@@ -30,6 +32,21 @@ STITCH_ENDPOINT(put);
 
 void remove_key(Borrow<Store> st, Str<16> key) { kv_remove(st, key.c_str()); }
 STITCH_ENDPOINT(remove_key);
+
+New<Snapshot> snapshot(Borrow<Store> st) {
+    char* text = kv_dump(st);
+    kv_store* copy = kv_load(text);
+    free(text);
+    stitch::require(copy, "dump did not load");
+    return copy;
+}
+STITCH_ENDPOINT(snapshot);
+
+void merge(Borrow<Store> st, Take<Snapshot> snap) {
+    kv_merge(st, snap);
+    kv_free(snap);
+}
+STITCH_ENDPOINT(merge);
 
 void roundtrip(Borrow<Store> st) {
     char* text = kv_dump(st);

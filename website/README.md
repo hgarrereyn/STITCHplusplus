@@ -23,4 +23,9 @@ Command output in the tutorial comes from running it in each language, and is st
 `src/tutorial-output/<lang>/<name>.txt`. `<RunOutput name="...">` shows the picked language's file.
 When the CLI's output changes, run the tutorial again and replace those files.
 
+The home page example is in `src/showcase/<lang>/`: `harness.txt`, a spec for the key-value store
+with two object types, and `trace.txt`, a crash a 90-second run of it found. `showcase.ts` describes
+its endpoints (their shapes and notes) and where each part is in each language's file; the build
+fails if an anchor is missing. `glyph.ts` and `program.ts` draw endpoints and programs.
+
 `.github/workflows/docs.yml` publishes the site to GitHub Pages on pushes to `main`.

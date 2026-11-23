@@ -17,6 +17,9 @@ class Store {
       if (!key.startsWith("tmp")) this.order.splice(this.order.indexOf(key), 1); // BUG: tmp keys stay
     }
   }
+  merge(other) {
+    for (const k of other.order) this.put(k, other.data[k]); // TypeError after removing a tmp key from other
+  }
   dump() {
     return this.order.map((k) => `${k}=${this.data[k].trim()}`).join("\n"); // TypeError after removing a tmp key
   }

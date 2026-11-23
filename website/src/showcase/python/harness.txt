@@ -1,8 +1,9 @@
 import kvlib
 import stitch
-from stitch import Borrow, New, Str
+from stitch import Borrow, New, Str, Take
 
 Store = stitch.object("Store")
+Snapshot = stitch.object("Snapshot")
 KvText = stitch.datatype("KvText")
 
 
@@ -33,6 +34,16 @@ def put(st: Borrow[Store], key: Str[16], value: Str[32]):
 @stitch.endpoint
 def remove(st: Borrow[Store], key: Str[16]):
     st.remove(key)
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def snapshot(st: Borrow[Store]) -> New[Snapshot]:
+    return kvlib.load(st.dump())
+
+
+@stitch.endpoint
+def merge(st: Borrow[Store], snap: Take[Snapshot]):
+    st.merge(snap)
 
 
 @stitch.endpoint

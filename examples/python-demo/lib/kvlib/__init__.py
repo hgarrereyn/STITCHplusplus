@@ -25,6 +25,11 @@ class Store:
     def items(self):
         return [(k, self._d[k]) for k in self._order]  # KeyError after removing a tmp key
 
+    def merge(self, other):
+        """Puts every entry of other into this store."""
+        for k, v in other.items():
+            self.put(k, v)
+
     def dump(self):
         return "\n".join(f"{k}={v}" for k, v in self.items())
 

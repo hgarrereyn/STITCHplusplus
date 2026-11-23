@@ -12,6 +12,8 @@ int kv_put(kv_store *st, const char *key, const char *value);
 const char *kv_get(const kv_store *st, const char *key);
 void kv_remove(kv_store *st, const char *key);
 size_t kv_len(const kv_store *st);
+/* Puts every entry of other into st. */
+void kv_merge(kv_store *st, const kv_store *other);
 /* "key=value\n" lines in insertion order. The caller frees the result. */
 char *kv_dump(const kv_store *st);
 /* Parses kv_dump's format. NULL for a line without '='. */
