@@ -4,6 +4,13 @@ const kv = require("kvjs");
 
 const Store = stitch.object("Store");
 const Path = stitch.datatype("Path");
+const KvText = stitch.datatype("KvText");
+
+stitch.decoder(KvText, (s) => {
+  const lines = [];
+  while (s.more()) lines.push(`${s.coin(0.3) ? s.token() : s.str(8)}=${s.str(12)}`);
+  return lines.join("\n");
+});
 
 stitch.decoder(Path, (s) => {
   const parts = [];
@@ -13,13 +20,19 @@ stitch.decoder(Path, (s) => {
 
 stitch.endpoint("new_store", {}, New(Store), () => new kv.Store());
 
+stitch.endpoint("load", { text: Str(256, KvText) }, New(Store), ({ text }) => kv.load(text), { bailsOn: [RangeError] });
+
 stitch.endpoint("put", { st: Borrow(Store), key: Str(16), value: Str(32) }, null, ({ st, key, value }) => {
   st.put(key, value);
 }, { bailsOn: [RangeError] });
 
 stitch.endpoint("remove", { st: Borrow(Store), key: Str(16) }, null, ({ st, key }) => st.remove(key));
 
-stitch.endpoint("dump", { st: Borrow(Store) }, null, ({ st }) => st.dump());
+stitch.endpoint("roundtrip", { st: Borrow(Store) }, null, ({ st }) => {
+  const again = kv.load(st.dump());
+  const keys = (o) => JSON.stringify([...o].sort());
+  stitch.check(keys(Object.keys(again.data)) === keys(st.order), "dump/load roundtrip");
+});
 
 stitch.endpoint("set_path", { st: Borrow(Store), path: Str(64, Path), value: Str(8) }, null, ({ st, path, value }) => {
   kv.setPath(st.data, path, value);

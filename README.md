@@ -18,6 +18,8 @@
 
 <img src="docs/assets/stitching.gif" width="760" alt="Stubs are stitched into a program, fuzzed, re-stitched, and a crash is found">
 
+**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)**
+
 </div>
 
 > [!IMPORTANT]
@@ -97,7 +99,8 @@ Triage a crash and check whether it is fixed upstream:
 
 <img src="docs/assets/triage.gif" width="760" alt="stitch crashes and stitch exec on tomlkit">
 
-All commands are in [`docs/cli.md`](docs/cli.md).
+All commands are in [`docs/cli.md`](docs/cli.md). The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/)
+walks through a whole run on a small key-value store, in the language you pick.
 
 ## Results
 

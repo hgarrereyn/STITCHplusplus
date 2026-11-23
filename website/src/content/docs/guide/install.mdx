@@ -1,0 +1,41 @@
+---
+title: Install
+description: Install the stitch command and a language image.
+---
+
+Install the command:
+
+```sh
+pip install stitch-fuzz
+```
+
+Then get the image for each language you want to fuzz:
+
+```sh
+stitch setup --lang python          # or cpp, objc, javascript, java, go, rust, ruby, swift
+stitch setup --lang python,go       # several at once
+stitch setup --lang all
+```
+
+`stitch setup` checks that Docker works, then pulls the prebuilt image for your version of
+`stitch-fuzz`. If there is none, it builds the image locally.
+
+## Use it with a coding agent
+
+STITCH++ ships a guide for coding agents as a skill:
+
+```sh
+stitch skill            # into ./.claude/skills
+stitch skill --user     # into ~/.claude/skills
+```
+
+Agents without skills can read the same guide with `stitch guide`, or the
+[agent section](/STITCHplusplus/agents/) of this site.
+
+## From a checkout
+
+```sh
+git clone https://github.com/hgarrereyn/STITCHplusplus
+cd STITCHplusplus
+pip install -e .        # or run bin/stitch directly
+```

@@ -1,0 +1,9 @@
+---
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+import LangSelect from "./LangSelect.astro";
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<Default><slot /></Default>
+{entry.data.languages && <LangSelect />}

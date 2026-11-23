@@ -1,0 +1,172 @@
+---
+title: 1. The library
+description: The key-value store this tutorial fuzzes.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+
+This tutorial fuzzes a small key-value store. The store has the same API in every language. Pick
+your language above; the choice applies to every page of the tutorial.
+
+The store can:
+
+- create an empty store
+- `put` a key and a value (keys and values are single lines, keys are not empty)
+- `get` and `remove` a key
+- `dump` the store as text, one `key=value` line per entry
+- `load` that text back into a store
+
+It also has a few planted bugs. You don't need to know where they are: finding them is the
+fuzzer's job.
+
+## The API
+
+<Lang id="python">
+```python
+import kvlib
+
+st = kvlib.Store()
+st.put("a", "1")             # ValueError for an empty key or a newline
+st.get("a")                  # "1"
+st.remove("a")
+text = st.dump()             # "a=1\nb=2"
+st = kvlib.load(text)        # ValueError for a line without '='
+```
+
+Source: [`examples/python-demo/lib/kvlib/__init__.py`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/python-demo/lib/kvlib/__init__.py)
+</Lang>
+
+<Lang id="cpp">
+```c
+#include <kv.h>
+
+kv_store *st = kv_new();
+kv_put(st, "a", "1");          // -1 for an empty key or a newline
+kv_get(st, "a");               // "1"
+kv_remove(st, "a");
+char *text = kv_dump(st);      // "a=1\nb=2\n"; the caller frees it
+kv_store *b = kv_load(text);   // NULL for a line without '='
+kv_free(st);
+```
+
+Source: [`examples/cpp-demo/lib/kv.c`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/cpp-demo/lib/kv.c)
+</Lang>
+
+<Lang id="javascript">
+```js
+const kv = require("kvjs");
+
+const st = new kv.Store();
+st.put("a", "1");              // RangeError for an empty key or a newline
+st.data.a;                     // "1"
+st.remove("a");
+const text = st.dump();        // "a=1\nb=2"
+const again = kv.load(text);   // RangeError for a line without '='
+kv.setPath(st.data, "x.y", "1");   // nested assignment
+```
+
+Source: [`examples/javascript-demo/lib/index.js`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/javascript-demo/lib/index.js)
+</Lang>
+
+<Lang id="java">
+```java
+import demo.kv.Store;
+
+Store st = new Store();
+st.put("a", "1");              // IllegalArgumentException for an empty key or a newline
+st.remove("a");
+String text = st.dump();       // "a=1\nb=2\n"
+st = Store.load(text);         // IllegalArgumentException for a line without '='
+st.size();
+```
+
+Source: [`examples/java-demo/lib/demo/kv/Store.java`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/java-demo/lib/demo/kv/Store.java)
+</Lang>
+
+<Lang id="go">
+```go
+import "example.com/kvgo"
+
+st := kvgo.New()
+err := st.Put("a", "1")        // an error for an empty key or a newline
+st.Remove("a")
+text := st.Dump()              // "a=1\nb=2\n"
+st, err = kvgo.Load(text)      // an error for a line without '='
+st.Len()
+```
+
+Source: [`examples/go-demo/lib/kv.go`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/go-demo/lib/kv.go)
+</Lang>
+
+<Lang id="rust">
+```rust
+let mut st = kvrs::Store::new();
+st.put("a", "1")?;             // Err for an empty key or a newline
+st.remove("a");
+let text = st.dump();          // "a=1\nb=2\n"
+let st = kvrs::load(&text)?;   // Err for a line without '='
+st.len();
+st.byte_at("a", 0);            // byte 0 of the value of "a"
+```
+
+Source: [`examples/rust-demo/lib/src/lib.rs`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/rust-demo/lib/src/lib.rs)
+</Lang>
+
+<Lang id="ruby">
+```ruby
+require "kvrb"
+
+st = Kvrb::Store.new
+st.put("a", "1")               # ArgumentError for an empty key or a newline
+st.get("a")                    # "1"
+st.remove("a")
+text = st.dump                 # "a=1\nb=2"
+st = Kvrb.load(text)           # ArgumentError for a line without '='
+```
+
+Source: [`examples/ruby-demo/lib/lib/kvrb.rb`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/ruby-demo/lib/lib/kvrb.rb)
+</Lang>
+
+<Lang id="swift">
+```swift
+import KVSwift
+
+let st = Store()
+try st.put("a", "1")           // throws for an empty key or a newline
+st.get("a")                    // "1"
+st.remove("a")
+let text = st.dump()           // "a=1\nb=2"
+let again = try load(text)     // throws for a line without '='
+st.byteAt("a", 0)              // byte 0 of the value of "a"
+```
+
+Source: [`examples/swift-demo/lib/Sources/KVSwift/KV.swift`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/swift-demo/lib/Sources/KVSwift/KV.swift)
+</Lang>
+
+<Lang id="objc">
+```objc
+#import "KVStore.h"
+
+KVStore *st = [KVStore new];
+[st putValue:@"1" forKey:@"a" error:&err];       // NO for an empty key or a newline
+[st stringForKey:@"a"];                          // @"1"
+[st removeKey:@"a"];
+NSString *text = [st dump];                      // @"a=1\nb=2"
+st = [KVStore storeWithText:text error:&err];    // nil for a line without '='
+[st byteForKey:@"a" atIndex:0];                  // byte 0 of the value of "a"
+```
+
+Source: [`examples/objc-demo/lib/KVStore.m`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/examples/objc-demo/lib/KVStore.m)
+</Lang>
+
+## Get the code
+
+```sh
+git clone https://github.com/hgarrereyn/STITCHplusplus
+cd STITCHplusplus/examples
+```
+
+Each language has a folder `examples/<language>-demo/`. Its `lib/` folder holds the store, and its
+`harness/` folder holds the finished harness. This tutorial writes the harness again from scratch
+in a new project, so you can compare your result with the finished one.

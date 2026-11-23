@@ -1,0 +1,96 @@
+---
+title: Writing stubs
+description: Rules for stubs that the fuzzer can use well.
+---
+
+Examples are Python. The syntax for each language is in `stitch guide <lang>`; the rules are the
+same.
+
+## Signatures
+
+```python
+@stitch.endpoint(bails_on=(ParseError,))          # these exceptions are bails, not bugs
+def parse(text: Str[4096, JsonText]) -> New[Doc]:  # produces a Doc
+    return lib.parse(text)
+
+@stitch.endpoint
+def add(doc: Borrow[Doc], key: Str[64], item: Take[Item]):   # uses a Doc, consumes an Item
+    doc.add(key, item)
+```
+
+| Call | Use |
+|---|---|
+| `bail("reason")` | stop this call; not a bug |
+| `require(cond, "reason")` | bail unless `cond` |
+| `check(cond, "what")` | a bug if `cond` is false |
+
+Bail reasons are short fixed strings (`"parse error"`), never values. Reports count them.
+
+## Rules
+
+**One producer per kind of object.** Write `new_number` and `new_string`, not `new_value(kind)`.
+The fuzzer learns which producer each consumer needs.
+
+**Constrain parameters instead of rejecting values.** Use `Range[0, 9]` or `OneOf[...]`, not a
+plain integer plus `require(0 <= n <= 9)`. Keep one stub with an unconstrained parameter when the
+library must reject bad values: that tests the error path.
+
+**Pick existing keys and indexes.** A random key almost never exists. Take a `Src` parameter and
+choose from what is there, in a stable order:
+
+```python
+@stitch.endpoint
+def remove(doc: Borrow[Doc], s: Src[8]):
+    keys = sorted(doc.keys())
+    stitch.require(keys, "no keys")
+    doc.remove(s.pick(keys))
+```
+
+**Return typed optional outputs when the result type depends on the input.** A parser that returns
+a table or an array returns both as optional outputs, so stubs that need a table get one.
+
+**Respect ownership.** A `Take` input belongs to the stub on every path, including bails: free it
+or hand it to the library. If the library takes ownership only on success, borrow the input and
+call `consume(x)` after the call succeeds.
+
+**Ask the library before storing attributes.** Store an attribute only for state the library
+cannot report (a reference count the harness tracks, a link to a parent object). A stub that
+copies an object copies its attributes; a stub that changes an object updates them. Read with a
+default (`get(x, "k", 0)`) when a missing key is normal.
+
+**Write `check` only for properties that always hold.** Round trips (print, then parse),
+idempotence (`normalize(normalize(x)) == normalize(x)`), agreement between two APIs. Exclude known
+edge cases (NaN, duplicate keys) with an `if` before the check.
+
+**Do not add guards the library does not need.** Each guard hides behavior from the fuzzer. Add one
+only when the probe report or a crash shows the stub breaks the API contract.
+
+**Keep program state in objects, attributes or locals.** One worker runs many programs; module
+level variables leak between them. Use them only for setup that never changes.
+
+**Keep stubs compiling across library versions**, so `stitch exec --rev` and `stitch bisect`
+work.
+
+**C and C++:** do not name stubs after libc functions (`read`, `open`, `remove`).
+
+## Data types
+
+Tag a string or bytes parameter with a data type when the library parses structured input
+(`Str[4096, JsonText]`), then create `harness/data/JsonText/` with any of:
+
+- `seeds/`: sample inputs, one per file. Copy them from the library's tests.
+- `*.dict`: tokens, one quoted string per line.
+- a decoder in the harness that builds values from fuzzer choices.
+
+Decoders:
+
+- Draw literal text with `s.str(max)` and dictionary tokens with `s.token()`.
+- Compute lengths, counts and checksums from the data; do not draw them.
+- Loop with `while s.more():` so the fuzzer can add and remove elements.
+- For structured arguments that do not depend on object state, return a structured value and take
+  it as `Val[Tag, max]`, instead of decoding inside the stub.
+
+Verify a decoder with `stitch sample JsonText -n 5`.
+
+A data type with only a dictionary starts from random bytes. Give structured inputs seeds or a
+decoder; `stitch check` warns otherwise.

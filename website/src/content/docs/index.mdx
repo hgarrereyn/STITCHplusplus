@@ -1,0 +1,50 @@
+---
+title: STITCH++
+description: API fuzzing for libraries in nine languages, built for coding agents.
+template: splash
+hero:
+  tagline: API fuzzing for libraries in C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C.
+  actions:
+    - text: For humans
+      link: /STITCHplusplus/guide/
+      icon: right-arrow
+    - text: For agents
+      link: /STITCHplusplus/agents/
+      variant: minimal
+      icon: right-arrow
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+You write **stubs**: small typed functions that each make one API call. STITCH++ **stitches** them
+into programs, passes objects from one call to the next, and fuzzes the arguments. It keeps the
+programs that reach new code and reports crashes, uncaught exceptions and failed checks.
+
+```python
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256, KvText]) -> New[Store]:
+    return kvlib.load(text)
+
+@stitch.endpoint
+def roundtrip(st: Borrow[Store]):
+    again = kvlib.load(st.dump())
+    stitch.check(dict(again.items()) == dict(st.items()), "dump/load roundtrip")
+```
+
+<CardGrid>
+  <Card title="For humans">
+    A tutorial that fuzzes a small key-value store, step by step, in the language you pick.
+    [Start the guide](/STITCHplusplus/guide/).
+  </Card>
+  <Card title="For agents">
+    The workflow, the rules for good stubs, and how to read reports and triage crashes.
+    [Read the agent guide](/STITCHplusplus/agents/).
+  </Card>
+</CardGrid>
+
+```sh
+pip install stitch-fuzz
+stitch setup --lang python
+```
+
+Everything else runs in Docker.

@@ -1,0 +1,30 @@
+---
+import { LANGUAGES } from "./languages";
+---
+
+<label class="lang-select">
+  <span>Language</span>
+  <select aria-label="Tutorial language">
+    {LANGUAGES.map(([id, label]) => <option value={id}>{label}</option>)}
+  </select>
+</label>
+
+<script>
+  import { LANGUAGES } from "./languages";
+
+  const root = document.documentElement;
+  const current = () => root.dataset.stitchLang ?? LANGUAGES[0][0];
+
+  for (const select of document.querySelectorAll<HTMLSelectElement>(".lang-select select")) {
+    select.value = current();
+    select.addEventListener("change", () => {
+      root.dataset.stitchLang = select.value;
+      try {
+        localStorage.setItem("stitch-lang", select.value);
+      } catch {}
+      for (const other of document.querySelectorAll<HTMLSelectElement>(".lang-select select")) {
+        other.value = select.value;
+      }
+    });
+  }
+</script>

@@ -1,0 +1,52 @@
+---
+title: Overview
+description: What STITCH++ does and how it works.
+---
+
+STITCH++ finds bugs in libraries by calling their API with generated inputs. It supports C/C++,
+Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C, and works the same way in each.
+
+## How it works
+
+You write **stubs**: small typed functions that each make one API call.
+
+```python
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256]) -> New[Store]:
+    return kvlib.load(text)
+
+@stitch.endpoint
+def remove(st: Borrow[Store], key: Str[16]):
+    st.remove(key)
+```
+
+The fuzzer **stitches** stubs into programs: it creates a store with `load`, passes that store to
+`remove`, and so on. It generates the arguments, keeps the programs that reach new code, and
+mutates them: changing arguments, and inserting, deleting and rewiring calls.
+
+It reports:
+
+- crashes and sanitizer reports (ASan, UBSan)
+- panics, traps and exceptions your stubs did not declare
+- failed `check`s: properties you assert, such as "dump then load gives the same store"
+- programs that run past a timeout
+
+For each bug, STITCH++ shows the calls that led to it, minimizes the program, and writes it as a
+standalone reproducer.
+
+## What you need
+
+- Docker with buildx
+- Python 3.9 or newer, for the `stitch` command
+
+The library, the harness and the fuzzer all build and run in Docker. You don't need the
+language's toolchain on your machine.
+
+## Where to go next
+
+- [Install](/STITCHplusplus/guide/install/) the `stitch` command.
+- Follow the [tutorial](/STITCHplusplus/guide/tutorial/library/). It fuzzes a small key-value store
+  in the language you pick, from a new project to a minimized reproducer.
+- [Concepts](/STITCHplusplus/guide/concepts/) explains objects, parameters, data types and
+  attributes in more depth.
+- The [CLI reference](/STITCHplusplus/reference/cli/) lists every command.

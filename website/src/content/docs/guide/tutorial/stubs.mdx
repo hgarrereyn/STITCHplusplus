@@ -1,0 +1,337 @@
+---
+title: 3. Write stubs
+description: Describe the store's API to the fuzzer with stubs.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+
+A **stub** is a small function that makes one API call. Its signature tells the fuzzer what the
+call needs and what it produces:
+
+- **Objects** are values that one call produces and later calls use. Here there is one kind of
+  object: a store. A stub can **borrow** an object (use it), **take** it (consume it), or return a
+  **new** one.
+- **Fuzzed parameters** are every other parameter: strings, numbers, choices. The fuzzer picks
+  their values.
+
+The fuzzer chains stubs into **programs**: `new_store`, then `put` on that store, then `remove`,
+and so on.
+
+## The first four stubs
+
+Replace the example in `harness/` with this file:
+
+<Lang id="python">
+`harness/stubs.py`
+
+```python
+import kvlib
+import stitch
+from stitch import Borrow, New, Str
+
+Store = stitch.object("Store")
+
+
+@stitch.endpoint
+def new_store() -> New[Store]:
+    return kvlib.Store()
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256]) -> New[Store]:
+    return kvlib.load(text)
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def put(st: Borrow[Store], key: Str[16], value: Str[32]):
+    st.put(key, value)
+
+
+@stitch.endpoint
+def remove(st: Borrow[Store], key: Str[16]):
+    st.remove(key)
+```
+
+`Str[16]` is a string of at most 16 bytes. `bails_on` lists the exceptions that mean "invalid
+input". Any other exception is a bug.
+</Lang>
+
+<Lang id="cpp">
+`harness/stubs.cpp` (delete the example files `init` created)
+
+```cpp
+#include <stitch.h>
+extern "C" {
+#include <kv.h>
+}
+
+STITCH_OBJECT(Store, kv_store*);
+STITCH_DROP(Store, [](kv_store* st) { kv_free(st); });
+
+New<Store> new_store() { return kv_new(); }
+STITCH_ENDPOINT(new_store);
+
+New<Store> load(Str<256> text) {
+    kv_store* st = kv_load(text.c_str());
+    stitch::require(st, "invalid text");
+    return st;
+}
+STITCH_ENDPOINT(load);
+
+void put(Borrow<Store> st, Str<16> key, Str<32> value) {
+    stitch::require(kv_put(st, key.c_str(), value.c_str()) == 0, "invalid key or value");
+}
+STITCH_ENDPOINT(put);
+
+void remove_key(Borrow<Store> st, Str<16> key) { kv_remove(st, key.c_str()); }
+STITCH_ENDPOINT(remove_key);
+```
+
+`Str<16>` is a string of at most 16 bytes. `STITCH_DROP` frees stores that are left over when a
+program ends. `stitch::require` stops the call when the library rejects the input. The last stub
+is named `remove_key` because `remove` is a libc function.
+</Lang>
+
+<Lang id="javascript">
+`harness/stubs.js`
+
+```js
+const stitch = require("stitch");
+const { Borrow, New, Str } = stitch;
+const kv = require("kvjs");
+
+const Store = stitch.object("Store");
+
+stitch.endpoint("new_store", {}, New(Store), () => new kv.Store());
+
+stitch.endpoint("load", { text: Str(256) }, New(Store), ({ text }) => kv.load(text),
+  { bailsOn: [RangeError] });
+
+stitch.endpoint("put", { st: Borrow(Store), key: Str(16), value: Str(32) }, null, ({ st, key, value }) => {
+  st.put(key, value);
+}, { bailsOn: [RangeError] });
+
+stitch.endpoint("remove", { st: Borrow(Store), key: Str(16) }, null, ({ st, key }) => st.remove(key));
+```
+
+The arguments are: name, parameters, what the stub returns, the function. `Str(16)` is a string
+of at most 16 bytes. `bailsOn` lists the exceptions that mean "invalid input". Any other exception
+is a bug.
+</Lang>
+
+<Lang id="java">
+`harness/Stubs.java`
+
+```java
+import demo.kv.Store;
+import stitch.*;
+
+public class Stubs {
+    @Endpoint
+    public static Store newStore() {
+        return new Store();
+    }
+
+    @Endpoint(bailsOn = {IllegalArgumentException.class})
+    public static Store load(@Str(max = 256) String text) {
+        return Store.load(text);
+    }
+
+    @Endpoint(bailsOn = {IllegalArgumentException.class})
+    public static void put(Store st, @Str(max = 16) String key, @Str(max = 32) String value) {
+        st.put(key, value);
+    }
+
+    @Endpoint
+    public static void remove(Store st, @Str(max = 16) String key) {
+        st.remove(key);
+    }
+}
+```
+
+A parameter of a class type is an object input; a return value is a new object. `@Str(max = 16)`
+is a string of at most 16 bytes. `bailsOn` lists the exceptions that mean "invalid input". Any
+other exception is a bug.
+</Lang>
+
+<Lang id="go">
+`harness/stubs.go`
+
+```go
+package harness
+
+import (
+	"example.com/kvgo"
+	"stitch"
+)
+
+func init() {
+	stitch.Object[*kvgo.Store]("Store", nil)
+	stitch.Endpoint("new_store", kvgo.New)
+	stitch.Endpoint("load", kvgo.Load, "text:max=256")
+	stitch.Endpoint("put", put, "st", "key:max=16", "value:max=32")
+	stitch.Endpoint("remove", remove, "st", "key:max=16")
+}
+
+func put(st *kvgo.Store, key, value string) error { return st.Put(key, value) }
+
+func remove(st *kvgo.Store, key string) { st.Remove(key) }
+```
+
+A parameter of a registered object type is an object input; a result is a new object. The specs
+after the function name its parameters: `"key:max=16"` is a string of at most 16 bytes. A non-nil
+`error` result means "invalid input". A panic is a bug.
+</Lang>
+
+<Lang id="rust">
+`harness/stubs.rs`
+
+```rust
+use stitch::*;
+
+object!(Store, kvrs::Store);
+
+endpoint! {
+    fn new_store() -> New<Store> {
+        New::new(kvrs::Store::new())
+    }
+}
+
+endpoint! {
+    fn load(text: Str<256>) -> Result<New<Store>, String> {
+        Ok(New::new(kvrs::load(&text)?))
+    }
+}
+
+endpoint! {
+    fn put(st: Borrow<Store>, key: Str<16>, value: Str<32>) -> Result<(), String> {
+        st.put(&key, &value)
+    }
+}
+
+endpoint! {
+    fn remove(st: Borrow<Store>, key: Str<16>) {
+        st.remove(&key);
+    }
+}
+```
+
+`Str<16>` is a string of at most 16 bytes. An `Err` result means "invalid input". A panic is a
+bug.
+</Lang>
+
+<Lang id="ruby">
+`harness/stubs.rb`
+
+```ruby
+require "stitch"
+require "kvrb"
+include Stitch::DSL
+
+Store = Stitch.object("Store")
+
+Stitch.endpoint :new_store, {}, New[Store] do
+  Kvrb::Store.new
+end
+
+Stitch.endpoint :load, { text: Str[256] }, New[Store], bails_on: [ArgumentError] do |text|
+  Kvrb.load(text)
+end
+
+Stitch.endpoint :put, { st: Borrow[Store], key: Str[16], value: Str[32] }, bails_on: [ArgumentError] do |st, key, value|
+  st.put(key, value)
+end
+
+Stitch.endpoint :remove, { st: Borrow[Store], key: Str[16] } do |st, key|
+  st.remove(key)
+end
+```
+
+The arguments are: name, parameters, outputs. `Str[16]` is a string of at most 16 bytes.
+`bails_on` lists the exceptions that mean "invalid input". Any other exception is a bug.
+</Lang>
+
+<Lang id="swift">
+`harness/stubs.swift`
+
+```swift
+import KVSwift
+import Stitch
+
+enum Store: StitchObject { typealias Handle = KVSwift.Store }
+
+let newStore = endpoint("new_store") { () -> New<Store> in
+    New(KVSwift.Store())
+}
+
+let load = endpoint("load") { (text: Str<256, Plain>) throws -> New<Store> in
+    New(try KVSwift.load(text.value))
+}
+
+let put = endpoint("put") { (st: Borrow<Store>, key: Str<16, Plain>, value: Str<32, Plain>) throws in
+    try st.value.put(key.value, value.value)
+}
+
+let remove = endpoint("remove") { (st: Borrow<Store>, key: Str<16, Plain>) in
+    st.value.remove(key.value)
+}
+```
+
+`Str<16, Plain>` is a string of at most 16 bytes. A thrown error means "invalid input". A trap
+(a failed force unwrap, an index out of range) is a bug.
+</Lang>
+
+<Lang id="objc">
+`harness/stubs.m`
+
+```objc
+#import <Stitch/Stitch.h>
+#import "KVStore.h"
+
+STITCH_OBJECT(Store, KVStore *);
+
+STITCH_ENDPOINT(New(Store), new_store) {
+    return [KVStore new];
+}
+
+STITCH_ENDPOINT(New(Store), load, Str(256) text) {
+    KVStore *st = [KVStore storeWithText:text error:NULL];
+    STRequire(st != nil, @"invalid text");
+    return st;
+}
+
+STITCH_ENDPOINT(void, put, Borrow(Store) st, Str(16) key, Str(32) value) {
+    STRequire([st putValue:value forKey:key error:NULL], @"invalid key or value");
+}
+
+STITCH_ENDPOINT(void, remove, Borrow(Store) st, Str(16) key) {
+    [st removeKey:key];
+}
+```
+
+`Str(16)` is a string of at most 16 bytes. `STRequire` stops the call when the library rejects the
+input. An exception that escapes a stub is a bug.
+</Lang>
+
+## Bails and bugs
+
+When a call fails in an expected way, such as `load` getting text without `=`, the call
+**bails**. A bail is not a bug. The call produces no store, and the calls that need that store are
+skipped.
+
+Everything else that goes wrong is a **bug**: a crash, a sanitizer report, an exception the stub
+did not declare, or a program that runs past the timeout.
+
+There are three ways to bail in every language:
+
+| Call | Meaning |
+|---|---|
+| `bail("reason")` | stop this call; not a bug |
+| `require(cond, "reason")` | bail unless `cond` holds |
+| `check(cond, "what")` | a bug if `cond` is false (used on page 5) |
+
+Keep bail reasons short and fixed (`"invalid text"`, not the text itself). Reports count bails by
+reason.
+
+Next, build the harness and run it.

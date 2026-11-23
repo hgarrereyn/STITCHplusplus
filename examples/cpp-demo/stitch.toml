@@ -1,0 +1,13 @@
+[project]
+name = "cpp-demo"
+
+[source]
+path = "lib"
+
+[build]
+cflags = ["-I/src"]
+ldflags = ["/src/libkv.a"]
+sanitizers = ["address"]
+
+[fuzz]
+timeout_ms = 2000

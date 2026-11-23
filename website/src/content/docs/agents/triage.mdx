@@ -1,0 +1,78 @@
+---
+title: Triage
+description: Decide for each crash whether the harness or the library is at fault, and make a reproducer.
+---
+
+## List the crashes
+
+```sh
+stitch crashes             # latest campaign other than probe
+stitch crashes probe       # the probe
+```
+
+```
+1 unique crash in 'probe':
+  c1   x3     heap-use-after-free WRITE  in patch
+         suffix_object cJSON.c:1948:16
+         add_item_to_array cJSON.c:1999:13
+         example (14 calls): .stitch/campaigns/probe/w0/crashes/41f9cd94c7dfe525.stp
+```
+
+- Crashes are grouped by kind and innermost library frames. One bug can still show as several
+  groups: fix or explain the first, then list again.
+- Ids are per campaign: `probe:c1` and `main:c1` are different crashes. A bare `c1` means the
+  latest campaign that is not `probe`. Commands print which one they used.
+- A crash marked `[flaky: crashed 2 of 5 runs]` does not reproduce every time.
+- A `timeout` is a program slower than `timeout_ms`. It is usually a real performance bug (a
+  quadratic loop, regex backtracking) unless the stub itself loops.
+
+## Classify each crash
+
+```sh
+stitch exec c1 --trace     # every call, its arguments, then the report
+stitch exec c1 --args      # the same, with long arguments in full
+```
+
+Read the trace and the library source at the top frames. Then decide:
+
+| Verdict | When | Next |
+|---|---|---|
+| harness bug | The stubs broke the API contract: a double free, wrong ownership, a missing init call, a documented precondition. | Fix the stub, `stitch build`, confirm `stitch exec c1` no longer crashes. |
+| library bug | Every call in the trace is valid use of the API. | Make a reproducer (below). |
+| unsure | You cannot tell from the trace. | Read the library's tests and docs for the functions in the trace. Decide before moving on. |
+
+Do not add a guard to make a crash go away unless the library documents the precondition.
+
+## Make a reproducer
+
+For each library bug:
+
+```sh
+stitch minimize c1               # fewer calls, smaller inputs; c1 then refers to the result
+stitch exec c1 --rev HEAD        # still crashes on the newest library code?
+stitch write c1                  # the crash as one source file in the harness language
+```
+
+Shrink a copy of the written file to plain library calls. Run `stitch try` after every edit, and
+keep only edits that print `SAME CRASH`:
+
+```sh
+cp .stitch/standalone/c1/repro.py .stitch/standalone/c1/min.py
+stitch try .stitch/standalone/c1/min.py
+```
+
+Optional:
+
+```sh
+stitch repro c1                  # self-contained Docker folder, verified from scratch
+stitch bisect c1                 # the commit that introduced it (needs a git source)
+stitch bisect c1 --fixed         # the commit that fixed it, if HEAD no longer crashes
+```
+
+The steps and pitfalls of shrinking are in
+[Reproducers](/STITCHplusplus/reference/languages/reproducers/) (`stitch guide reproducers`).
+
+## Done when
+
+Every crash is fixed in the harness, or is a library bug with a minimized reproducer and a known
+status at HEAD.

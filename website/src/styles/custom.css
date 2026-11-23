@@ -1,0 +1,54 @@
+/* A neutral accent on Starlight's default theme. */
+:root {
+  --sl-color-accent-low: #1b2433;
+  --sl-color-accent: #5b8def;
+  --sl-color-accent-high: #c9d8f5;
+  --sl-content-width: 48rem;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #dde7fa;
+  --sl-color-accent: #2f5fc4;
+  --sl-color-accent-high: #1a3470;
+}
+
+/* Tutorial language picker */
+.lang-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-2);
+}
+.lang-select select {
+  font: inherit;
+  color: var(--sl-color-white);
+  background: var(--sl-color-bg-nav);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Only the picked language is shown; Python until one is picked. */
+.lang-block {
+  display: none;
+}
+:root:not([data-stitch-lang]) .lang-block[data-for="python"],
+:root[data-stitch-lang="python"] .lang-block[data-for="python"],
+:root[data-stitch-lang="cpp"] .lang-block[data-for="cpp"],
+:root[data-stitch-lang="javascript"] .lang-block[data-for="javascript"],
+:root[data-stitch-lang="java"] .lang-block[data-for="java"],
+:root[data-stitch-lang="go"] .lang-block[data-for="go"],
+:root[data-stitch-lang="rust"] .lang-block[data-for="rust"],
+:root[data-stitch-lang="ruby"] .lang-block[data-for="ruby"],
+:root[data-stitch-lang="swift"] .lang-block[data-for="swift"],
+:root[data-stitch-lang="objc"] .lang-block[data-for="objc"] {
+  display: block;
+}
+/* Starlight spaces the children of a content block; keep that inside language blocks. */
+.sl-markdown-content .lang-block > :first-child {
+  margin-top: 0;
+}
+.sl-markdown-content .lang-block > * + * {
+  margin-top: 1rem;
+}

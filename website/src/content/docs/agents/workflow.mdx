@@ -1,0 +1,128 @@
+---
+title: Workflow
+description: The steps of a STITCH++ run, with the condition for moving on from each.
+---
+
+Copy this checklist and keep it updated as you work:
+
+```
+- [ ] 1. Project created
+- [ ] 2. Library image builds
+- [ ] 3. Stubs written
+- [ ] 4. Harness builds and `stitch check` is clean
+- [ ] 5. Probe report is clean
+- [ ] 6. Campaign running
+- [ ] 7. Every crash triaged
+- [ ] 8. Coverage reviewed
+- [ ] 9. Report written
+```
+
+## 1. Create the project
+
+```sh
+stitch init <dir> --lang <lang> --git <url> --rev <tag>    # or --path <local checkout>
+```
+
+This writes `stitch.toml`, a `Dockerfile` and `harness/`. Pin `--rev` to a release tag.
+
+## 2. Build the library image
+
+Edit the `Dockerfile` until this succeeds:
+
+```sh
+stitch build --image-only
+```
+
+The language page (`stitch guide <lang>`) shows the expected `Dockerfile` and `stitch.toml`. On
+failure, read the printed error and log path. Use `stitch shell` to try build commands in the
+image. For C, C++ and Objective-C, build a static library with `$CC`/`$CXX`.
+
+**Done when** the image builds.
+
+## 3. Write stubs
+
+Read the library's tests before its docs: tests show the real API contract and preconditions.
+Write stubs in this order:
+
+1. producers: constructors, parsers, `new`/`open` calls
+2. operations that use and change objects
+3. checks of properties that must hold (round trips, agreement between two APIs)
+
+Follow [Writing stubs](/STITCHplusplus/agents/stubs/). Group stubs in folders by component
+(`harness/parse/`, `harness/tree/`).
+
+## 4. Build and check
+
+```sh
+stitch build
+stitch check
+```
+
+`build` prints compile errors with file and line. `check` reports unreachable stubs, attributes
+read but never set, and data types with neither seeds nor a decoder.
+
+**Done when** both pass with no warnings. If not, fix and run both again.
+
+## 5. Probe
+
+```sh
+stitch probe --secs 60
+```
+
+Read the report with [Reading the probe report](/STITCHplusplus/agents/probe/). Fix the stubs it
+names, then run `stitch build` and `stitch probe` again. To probe only some stubs:
+`stitch probe 'parse,tree/*' --secs 30`.
+
+**Done when** no stub is listed under "never succeeds" or "often skipped", and calls bailing is
+below 50%. Crashes found during probing are triaged in step 7; fix harness bugs among them now.
+
+## 6. Fuzz
+
+```sh
+stitch fuzz --jobs 4                 # background campaign 'main'; resumes its corpus
+stitch status                        # progress and the health report
+```
+
+Leave it running while you triage. Use `--secs N` for a bounded run and `stitch status --wait`
+to block until it ends. `stitch stop` ends a campaign; `stitch fuzz --fresh` starts its corpus
+over.
+
+## 7. Triage
+
+```sh
+stitch crashes
+```
+
+Classify every crash with [Triage](/STITCHplusplus/agents/triage/). After each harness fix:
+`stitch build`, then `stitch crashes` again. Crashes caused by the fixed stub disappear.
+
+**Done when** every crash is either fixed in the harness or confirmed as a library bug with a
+reproducer.
+
+## 8. Coverage
+
+```sh
+stitch cov
+```
+
+The report lists library functions that were never called. Add stubs for the ones that matter,
+then go back to step 4. Uncovered branches are in `.stitch/cov/<campaign>/html/index.html`.
+
+## 9. Report
+
+For each library bug, use this structure:
+
+```markdown
+### <crash kind> in <function> (<campaign>:<id>)
+
+- **Location:** <file>:<line> (innermost library frame)
+- **Upstream:** crashes / fixed at HEAD (`stitch exec <id> --rev HEAD`)
+- **Introduced by:** <commit> (`stitch bisect <id>`), if known
+- **Reproducer:** <path to the minimized standalone file>
+
+<two or three sentences: what the library does wrong, and why the calls are valid use of the API>
+
+<the minimized reproducer>
+```
+
+Also list harness bugs you fixed and stubs you left out, with the reason.

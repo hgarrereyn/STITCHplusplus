@@ -1,0 +1,65 @@
+---
+title: 4. Build and probe
+description: Build the harness and run a short probe to see which stubs work.
+languages: true
+---
+
+The output on this page and the next ones comes from the Python store. Other languages print the
+same reports with their own numbers and error names.
+
+## Build
+
+```sh
+stitch build
+stitch check
+```
+
+```
+ok: 4 endpoints, 1 object types, 0 datatypes  [stitch-kv:local]
+4 endpoints, 1 object types, 0 datatypes
+  harness/: 4
+no issues
+```
+
+`stitch build` compiles the harness against the library image and prints compile errors with file
+and line. `stitch check` runs static checks: stubs that can never run because nothing produces
+their inputs, attributes that are read but never set, and data types with nothing to start from.
+
+## Probe
+
+A probe is a short run with one worker, followed by a report on the stubs that are not working.
+
+```sh
+stitch probe --secs 30
+```
+
+```
+probe: 30s, 279k execs (9.3k/s), 41 edges, corpus 12, calls bailing 49% (programs with a bail 98%), 0 crash/timeout programs saved
+depends on where an input came from (the stub that made or last used that object; the fuzzer learns these pairs. Act only when the low one should work: a different kind of object behind one type gets its own type):
+  put(st): ok 18% when st last came from put, 95% when from load
+often skipped because an input object was missing (1): its producer bailed or returned no object
+  remove  skipped 227692x, ran 156001x
+```
+
+The first line is the summary:
+
+- **279k execs**: programs run, about 9,300 per second.
+- **41 edges**: branches of the library reached so far.
+- **calls bailing 49%**: half of all calls were rejected as invalid input. That work is wasted.
+
+The other lines name stubs to look at:
+
+- **depends on where an input came from**: `put` succeeds more often on some stores than others.
+  This is normal: the fuzzer learns which calls to chain.
+- **often skipped**: `remove` was skipped 227k times because its store was missing. The store
+  comes from `new_store` or `load`, and `load` usually fails.
+
+`stitch status probe --json` has the numbers for each stub. For `load`:
+
+```json
+{ "name": "load", "invoked": 515646, "ok": 113016, "bail_rate": 0.781,
+  "bail_reasons": [{ "reason": "raised ValueError", "count": 402630 }] }
+```
+
+`load` bails on 78% of its calls. It is given random text, and random text rarely consists of
+`key=value` lines. The next page fixes this with a data type, and adds a check.
