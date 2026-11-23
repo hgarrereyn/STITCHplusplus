@@ -1,10 +1,6 @@
----
-title: Writing stubs
-description: Rules for stubs that the fuzzer can use well.
----
+# Writing stubs
 
-Examples are Python. The syntax for each language is in `stitch guide <lang>`; the rules are the
-same.
+Examples are Python. The syntax for each language is in its file ([python.md](python.md), [cpp.md](cpp.md), ...); the rules are the same.
 
 ## Signatures
 

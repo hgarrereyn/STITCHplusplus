@@ -10,21 +10,12 @@ import { LANGUAGES } from "./languages";
 </label>
 
 <script>
-  import { LANGUAGES } from "./languages";
+  import { currentLang, onLang, setLang } from "./lang-state";
 
-  const root = document.documentElement;
-  const current = () => root.dataset.stitchLang ?? LANGUAGES[0][0];
-
-  for (const select of document.querySelectorAll<HTMLSelectElement>(".lang-select select")) {
-    select.value = current();
-    select.addEventListener("change", () => {
-      root.dataset.stitchLang = select.value;
-      try {
-        localStorage.setItem("stitch-lang", select.value);
-      } catch {}
-      for (const other of document.querySelectorAll<HTMLSelectElement>(".lang-select select")) {
-        other.value = select.value;
-      }
-    });
+  const selects = document.querySelectorAll<HTMLSelectElement>(".lang-select select");
+  for (const select of selects) {
+    select.value = currentLang();
+    select.addEventListener("change", () => setLang(select.value));
   }
+  onLang((id) => selects.forEach((s) => (s.value = id)));
 </script>

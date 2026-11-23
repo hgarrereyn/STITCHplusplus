@@ -58,6 +58,7 @@ export default defineConfig({
       ],
       components: {
         PageTitle: "./src/components/PageTitle.astro",
+        Hero: "./src/components/Hero.astro",
       },
       sidebar: [
         {
@@ -83,11 +84,9 @@ export default defineConfig({
         {
           label: "For agents",
           items: [
-            { label: "Start here", slug: "agents" },
-            { label: "Workflow", slug: "agents/workflow" },
-            { label: "Writing stubs", slug: "agents/stubs" },
-            { label: "Reading the probe report", slug: "agents/probe" },
-            { label: "Triage", slug: "agents/triage" },
+            // Plain Markdown, for agents to read directly
+            { label: "overview.md", link: "/agents/overview.md" },
+            { label: "llms.txt", link: "/llms.txt" },
           ],
         },
         {

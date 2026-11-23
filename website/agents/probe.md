@@ -1,7 +1,4 @@
----
-title: Reading the probe report
-description: What each line of the probe report means and what to change.
----
+# Reading the probe report
 
 `stitch probe` runs one worker for a short time and reports stubs that are not working.
 `stitch status` prints the same report for a campaign. Run the probe after every harness change

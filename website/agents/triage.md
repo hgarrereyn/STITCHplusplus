@@ -1,7 +1,4 @@
----
-title: Triage
-description: Decide for each crash whether the harness or the library is at fault, and make a reproducer.
----
+# Triage
 
 ## List the crashes
 
@@ -70,7 +67,7 @@ stitch bisect c1 --fixed         # the commit that fixed it, if HEAD no longer c
 ```
 
 The steps and pitfalls of shrinking are in
-[Reproducers](/STITCHplusplus/reference/languages/reproducers/) (`stitch guide reproducers`).
+[Reproducers](reproducers.md) (`stitch guide reproducers`).
 
 ## Done when
 

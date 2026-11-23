@@ -1,0 +1,91 @@
+---
+// Home page hero (replaces Starlight's): a title whose last word cycles through the languages,
+// the tagline, a pointer for agents, the two actions, and a citation.
+import { LANGUAGES } from "./languages";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const agentGuide = new URL(`${base}/agents/overview.md`, Astro.site).href;
+const PAPER = "https://doi.org/10.1145/3830454.3846663";
+const BIBTEX = `@inproceedings{green2026stitching,
+  title     = {Automatic, Expressive, and Scalable Fuzzing with Stitching},
+  author    = {Green, Harrison and Brown, Fraser and Le Goues, Claire},
+  booktitle = {Proceedings of the 2026 ACM SIGSAC Conference on Computer and Communications Security},
+  series    = {CCS '26},
+  publisher = {ACM},
+  address   = {The Hague, Netherlands},
+  pages     = {1582--1596},
+  year      = {2026},
+  doi       = {10.1145/3830454.3846663}
+}`;
+const names = LANGUAGES.map(([, label]) => label);
+const order = ["cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc"];
+const words = order.map((id) => [id, LANGUAGES.find(([l]) => l === id)![1]]);
+---
+
+<div class="hero home-hero not-content">
+  <h1 id="_top" data-page-title aria-label={`Automatic, Expressive, and Scalable Fuzzing for ${names.join(", ")}`}>
+    <span aria-hidden="true">Automatic, Expressive, and Scalable Fuzzing for</span>
+    <span class="rotator" aria-hidden="true">
+      {words.map(([id, label], i) => (
+        <span class="word" data-lang={id} data-state={i === 0 ? "in" : "idle"}>{label}</span>
+      ))}
+    </span>
+  </h1>
+  <p class="tagline">
+    Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
+    endpoints, generates arguments, and finds crashes, exceptions, and failed checks.
+  </p>
+
+  <p class="agent-callout">
+    <span>Are you an agent? Read this guide:</span>
+    <a href={`${base}/agents/overview.md`}>{agentGuide}</a>
+  </p>
+
+  <div class="hero-actions">
+    <a class="hero-btn primary" href={`${base}/guide/#how-it-works`}>See how it works <span aria-hidden="true">›</span></a>
+    <a class="hero-btn secondary" href={PAPER}>Read the paper</a>
+    <span class="cite">
+      Useful? Cite our work :)
+      <button type="button" class="copy-bibtex" data-bibtex={BIBTEX}>copy bibtex</button>
+      <span class="copied" role="status" aria-live="polite"></span>
+    </span>
+  </div>
+</div>
+
+<script>
+  // Title: every few seconds the language moves down and out, and the next one drops in.
+  for (const rotator of document.querySelectorAll<HTMLElement>(".rotator")) {
+    const words = [...rotator.querySelectorAll<HTMLElement>(".word")];
+    let i = 0;
+    setInterval(() => {
+      if (document.hidden) return;
+      const prev = words[i];
+      i = (i + 1) % words.length;
+      prev.dataset.state = "out";
+      words[i].dataset.state = "in";
+      setTimeout(() => { if (prev.dataset.state === "out") prev.dataset.state = "idle"; }, 600);
+    }, 2600);
+  }
+
+  // Copy the BibTeX entry; fall back to selecting it where the clipboard is not available.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".copy-bibtex")) {
+    const status = button.parentElement!.querySelector<HTMLElement>(".copied")!;
+    button.addEventListener("click", async () => {
+      const text = button.dataset.bibtex!;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        try { document.execCommand("copy"); } catch {}
+        area.remove();
+      }
+      status.textContent = "copied";
+      setTimeout(() => (status.textContent = ""), 1800);
+    });
+  }
+</script>

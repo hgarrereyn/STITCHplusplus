@@ -1,0 +1,148 @@
+---
+// An animated program, drawn like Figure 3 of the paper: each call is a block; a store leaves a
+// block through a tab on its bottom and enters the next call that uses it through a tab on its
+// top. The fuzzer mutates the program: it inserts, deletes and rewires calls, and splices programs.
+---
+
+<figure class="stitch-graph" aria-label="The fuzzer stitches stubs into programs and mutates them">
+  <svg viewBox="0 0 340 340" role="img" aria-hidden="true"></svg>
+  <figcaption><span class="step-verb"></span> <span class="step-what"></span></figcaption>
+</figure>
+
+<script>
+  import { currentLang, onLang } from "./lang-state";
+
+  type Call = { key: string; stub: string; make?: "A" | "B"; use?: "A" | "B" };
+  // Each step is one mutation of the previous program. Store A comes from new_store, B from load.
+  const NS: Call = { key: "ns", stub: "new_store", make: "A" };
+  const LD: Call = { key: "ld", stub: "load", make: "B" };
+  const c = (key: string, stub: string, use: "A" | "B"): Call => ({ key, stub, use });
+  const STEPS: { verb: string; what: string; calls: Call[] }[] = [
+    { verb: "program", what: "", calls: [NS, c("p", "put", "A"), c("rm", "remove", "A"), c("rt", "roundtrip", "A")] },
+    { verb: "insert", what: "load", calls: [NS, LD, c("p", "put", "A"), c("rm", "remove", "A"), c("rt", "roundtrip", "A")] },
+    { verb: "rewire", what: "remove", calls: [NS, LD, c("p", "put", "A"), c("rm", "remove", "B"), c("rt", "roundtrip", "A")] },
+    { verb: "rewire", what: "roundtrip", calls: [NS, LD, c("p", "put", "A"), c("rm", "remove", "B"), c("rt", "roundtrip", "B")] },
+    { verb: "delete", what: "put", calls: [NS, LD, c("rm", "remove", "B"), c("rt", "roundtrip", "B")] },
+    { verb: "delete", what: "new_store", calls: [LD, c("rm", "remove", "B"), c("rt", "roundtrip", "B")] },
+    { verb: "insert", what: "put", calls: [LD, c("p", "put", "B"), c("rm", "remove", "B"), c("rt", "roundtrip", "B")] },
+    { verb: "splice", what: "another program", calls: [NS, c("p", "put", "A"), c("rm", "remove", "A"), c("rt", "roundtrip", "A")] },
+  ];
+  // Stub names that differ from the other languages
+  const RENAME: Record<string, Record<string, string>> = { java: { new_store: "newStore" }, cpp: { remove: "remove_key" } };
+  const label = (stub: string) => RENAME[currentLang()]?.[stub] ?? stub;
+
+  const SVG = "http://www.w3.org/2000/svg";
+  const BX = 70, BW = 200, BH = 30, PITCH = 72, TOP = 14, TAB_W = 18, TAB_H = 6;
+  const COL = { A: BX + 34, B: BX + 78 };            // where each store's tabs sit on a block
+  const LANE = { A: BX - 18, B: BX - 32 };           // where a wire that skips calls runs
+  const JOG = { A: 5, B: 11 };                       // leaving wires turn in the top of a gap, arriving ones in the bottom
+  const rowY = (i: number) => TOP + i * PITCH;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const el = (name: string, attrs: Record<string, string | number>, parent?: Element) => {
+    const e = document.createElementNS(SVG, name);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    parent?.append(e);
+    return e;
+  };
+
+  // A polyline with rounded corners
+  function path(pts: [number, number][], r = 6) {
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+      const a = Math.min(r, Math.hypot(x1 - x0, y1 - y0) / 2), b = Math.min(r, Math.hypot(x2 - x1, y2 - y1) / 2);
+      const ux = Math.sign(x1 - x0), uy = Math.sign(y1 - y0), vx = Math.sign(x2 - x1), vy = Math.sign(y2 - y1);
+      d += ` L${x1 - ux * a},${y1 - uy * a} Q${x1},${y1} ${x1 + vx * b},${y1 + vy * b}`;
+    }
+    const [xn, yn] = pts[pts.length - 1];
+    return d + ` L${xn},${yn}`;
+  }
+
+  for (const fig of document.querySelectorAll<HTMLElement>(".stitch-graph")) {
+    const svg = fig.querySelector("svg")!;
+    const verb = fig.querySelector<HTMLElement>(".step-verb")!;
+    const what = fig.querySelector<HTMLElement>(".step-what")!;
+    const wires = el("g", { class: "wires" }, svg);
+    const blocks = el("g", { class: "blocks" }, svg);
+    const live = new Map<string, SVGGElement>();
+    let step = 0;
+
+    function drawBlock(g: SVGGElement, call: Call) {
+      g.replaceChildren();
+      el("rect", { class: "block", x: BX, y: 0, width: BW, height: BH, rx: 4 }, g);
+      el("rect", { class: "bar", x: BX, y: 0, width: 4, height: BH, rx: 1.5 }, g);
+      const t = el("text", { class: "name", x: BX + 14, y: BH / 2 + 4 }, g);
+      t.textContent = label(call.stub);
+      t.dataset.stub = call.stub;
+      const obj = call.make ?? call.use!;
+      if (call.use) el("rect", { class: "tab", x: COL[obj] - TAB_W / 2, y: -TAB_H, width: TAB_W, height: TAB_H, rx: 1.5 }, g);
+      el("rect", { class: "tab", x: COL[obj] - TAB_W / 2, y: BH, width: TAB_W, height: TAB_H, rx: 1.5 }, g);
+    }
+
+    function render(first = false) {
+      const { calls, verb: v, what: w } = STEPS[step];
+      verb.textContent = v;
+      what.textContent = w && (w === "another program" ? w : label(w));
+      // blocks: move, enter, leave
+      const keys = new Set(calls.map((cl) => cl.key));
+      for (const [key, g] of live) {
+        if (keys.has(key)) continue;
+        g.classList.add("leaving");
+        live.delete(key);
+        setTimeout(() => g.remove(), 450);
+      }
+      calls.forEach((call, i) => {
+        let g = live.get(call.key);
+        const y = rowY(i);
+        if (!g) {
+          g = el("g", { class: "call entering" }) as SVGGElement;
+          g.style.transform = `translate(-14px, ${y}px)`;
+          blocks.append(g);
+          live.set(call.key, g);
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            g!.classList.remove("entering");
+            g!.style.transform = `translate(0px, ${y}px)`;
+          }));
+        } else {
+          g.style.transform = `translate(0px, ${y}px)`;
+        }
+        drawBlock(g, call);
+      });
+      // wires: from the last call that made or used a store to the next call that uses it
+      for (const old of [...wires.children]) {
+        old.classList.add("leaving");
+        setTimeout(() => old.remove(), 250);
+      }
+      const last: Record<string, number> = {};
+      const draw = () => calls.forEach((call, i) => {
+        if (call.use && last[call.use] !== undefined) {
+          const j = last[call.use], x = COL[call.use];
+          const y1 = rowY(j) + BH + TAB_H, y2 = rowY(i) - TAB_H;
+          const pts: [number, number][] = i === j + 1
+            ? [[x, y1], [x, y2]]
+            : [[x, y1], [x, y1 + JOG[call.use]], [LANE[call.use], y1 + JOG[call.use]],
+               [LANE[call.use], y2 - JOG[call.use]], [x, y2 - JOG[call.use]], [x, y2]];
+          const p = el("path", { class: "wire", d: path(pts), pathLength: 1 }, wires);
+          if (!first && !reduced) {
+            p.classList.add("drawing");
+            requestAnimationFrame(() => requestAnimationFrame(() => p.classList.remove("drawing")));
+          }
+        }
+        last[call.make ?? call.use!] = i;
+      });
+      if (first || reduced) draw();
+      else setTimeout(draw, 420);
+    }
+
+    render(true);
+    onLang(() => fig.querySelectorAll<SVGTextElement>("text.name").forEach((t) => (t.textContent = label(t.dataset.stub!))));
+    let visible = true;
+    new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(fig);
+    setInterval(() => {
+      if (!visible || document.hidden) return;
+      step = (step + 1) % STEPS.length;
+      render();
+    }, reduced ? 4000 : 2600);
+  }
+</script>

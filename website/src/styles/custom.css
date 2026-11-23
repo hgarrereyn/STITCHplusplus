@@ -34,6 +34,20 @@
   --stitch-surface-hover: #161a21;
   --stitch-pill: #1a1e26;
 
+  /* language colors (GitHub's linguist palette, adjusted for contrast) */
+  --lang-cpp: #f45d8c;
+  --lang-python: #5c9fd8;
+  --lang-javascript: #f1e05a;
+  --lang-java: #d9944a;
+  --lang-go: #00add8;
+  --lang-rust: #dea584;
+  --lang-ruby: #e5555b;
+  --lang-swift: #f26b50;
+  --lang-objc: #8f8cff;
+  /* the paper's block and wire color */
+  --stitch-indigo: #8d8ff7;
+  --stitch-orange: #f59e42;
+
   --sl-content-width: 46rem;
   --sl-sidebar-width: 17rem;
   --sl-text-h1: 2rem;
@@ -65,6 +79,17 @@
   --sl-color-hairline: #eceef2;
   --sl-color-hairline-light: #e3e6eb;
   --sl-color-hairline-shade: #eceef2;
+
+  --lang-cpp: #d6336c;
+  --lang-python: #3572a5;
+  --lang-javascript: #a88f00;
+  --lang-java: #b07219;
+  --lang-go: #0089ab;
+  --lang-rust: #a8622f;
+  --lang-ruby: #b81f27;
+  --lang-swift: #e0442a;
+  --lang-objc: #5452e0;
+  --stitch-indigo: #5452d6;
 
   --stitch-surface: #f7f8fa;
   --stitch-surface-hover: #f1f3f6;

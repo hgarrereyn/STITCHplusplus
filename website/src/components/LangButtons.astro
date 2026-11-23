@@ -1,0 +1,36 @@
+---
+// A row of connected buttons, one per language with its logo. Picks the tutorial language.
+import { LANGUAGES } from "./languages";
+import cpp from "../assets/icons/cplusplus.svg";
+import python from "../assets/icons/python.svg";
+import javascript from "../assets/icons/javascript.svg";
+import java from "../assets/icons/java.svg";
+import go from "../assets/icons/go.svg";
+import rust from "../assets/icons/rust.svg";
+import ruby from "../assets/icons/ruby.svg";
+import swift from "../assets/icons/swift.svg";
+import objc from "../assets/icons/objectivec.svg";
+
+const ICONS: Record<string, { src: string }> = { cpp, python, javascript, java, go, rust, ruby, swift, objc };
+const ORDER = ["cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc"];
+const items = ORDER.map((id) => ({ id, label: LANGUAGES.find(([l]) => l === id)![1], icon: ICONS[id].src }));
+---
+
+<div class="lang-buttons" role="group" aria-label="Language">
+  {items.map(({ id, label, icon }) => (
+    <button type="button" data-lang={id} aria-pressed="false">
+      <img src={icon} alt="" width="20" height="20" />
+      <span>{label}</span>
+    </button>
+  ))}
+</div>
+
+<script>
+  import { currentLang, onLang, setLang } from "./lang-state";
+
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".lang-buttons button");
+  const show = (id: string) => buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === id)));
+  show(currentLang());
+  buttons.forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang!)));
+  onLang(show);
+</script>

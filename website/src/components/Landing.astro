@@ -1,40 +1,32 @@
 ---
-// Home page body: a harness next to the program it produced (in the reader's language, recorded from
-// the tutorial run), the two guides, languages, install.
+// Home page body: the language picker, the tutorial harness (with notes) next to how the fuzzer
+// stitches its stubs and the crash it finds (recorded from the tutorial run), the guides, install.
 import { Code } from "@astrojs/starlight/components";
 import RunOutput from "./RunOutput.astro";
-import LangSelect from "./LangSelect.astro";
+import LangButtons from "./LangButtons.astro";
+import HarnessNotes from "./HarnessNotes.astro";
+import StitchGraph from "./StitchGraph.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const url = (path: string) => `${base}/${path}`;
-
-const languages = [
-  ["cpp", "C/C++"],
-  ["python", "Python"],
-  ["javascript", "JavaScript"],
-  ["java", "Java"],
-  ["go", "Go"],
-  ["rust", "Rust"],
-  ["ruby", "Ruby"],
-  ["swift", "Swift"],
-  ["objc", "Objective-C"],
-];
 ---
 
 <div class="landing not-content">
-  <div class="showcase-wrap">
-  <LangSelect />
-  <section class="showcase" aria-label="A harness and a crash it found">
-    <div class="pane">
-      <p class="pane-label">You write stubs</p>
-      <RunOutput name="harness" lang="source" />
-    </div>
-    <div class="pane">
-      <p class="pane-label">STITCH++ finds a program that breaks it</p>
-      <RunOutput name="trace-short" />
+  <section class="showcase-wrap" aria-label="A harness, the programs made from it, and a crash it found">
+    <LangButtons />
+    <div class="showcase">
+      <div class="pane">
+        <p class="pane-label">You write stubs <span class="pane-hint">hover the marked parts</span></p>
+        <HarnessNotes />
+      </div>
+      <div class="pane">
+        <p class="pane-label">STITCH++ stitches them into programs</p>
+        <StitchGraph />
+        <p class="pane-label">and finds one that breaks</p>
+        <RunOutput name="trace-short" />
+      </div>
     </div>
   </section>
-  </div>
 
   <section class="guides" aria-label="Guides">
     <a class="guide" href={url("guide/")}>
@@ -42,20 +34,11 @@ const languages = [
       <span class="guide-title">Tutorial and concepts</span>
       <span class="guide-text">Fuzz a small key-value store step by step, in the language you pick.</span>
     </a>
-    <a class="guide" href={url("agents/")}>
+    <a class="guide" href={url("agents/overview.md")}>
       <span class="guide-kicker">For agents</span>
-      <span class="guide-title">Workflow and rules</span>
-      <span class="guide-text">A checklist, the rules for good stubs, and how to triage crashes.</span>
+      <span class="guide-title">overview.md</span>
+      <span class="guide-text">A plain-text guide: the workflow, the rules for good stubs, and a file per language.</span>
     </a>
-  </section>
-
-  <section class="row" aria-label="Languages">
-    <h2 class="row-title">Languages</h2>
-    <ul class="langs">
-      {languages.map(([id, name]) => (
-        <li><a href={url(`reference/languages/${id}/`)}>{name}</a></li>
-      ))}
-    </ul>
   </section>
 
   <section class="row" aria-label="Install">
