@@ -19,7 +19,7 @@ Build: the pom targets Java 7, so the Dockerfile compiles `src/main/java` with `
 (same trick as org-json). The harness compiles against 1.30 and 2.6 (`SafeConstructor(new LoaderOptions())`,
 scanner/parser built by reflection), so `stitch exec --rev snakeyaml-2.6` works.
 
-Campaigns (1 worker, shared loaded machine, so execs/s is low): main 600 s 1.1M execs; run2 600 s 32k execs
+Campaigns (1 worker): main 600 s 1.1M execs; run2 600 s 32k execs
 (deep inputs are slow: 20 KB nested input takes ~2 s); run3 600 s 9.3k execs; 5.6k edges of the instrumented
 packages; `stitch cov`: 67% lines of org.yaml.snakeyaml (Emitter 87%, Scanner 94%, Parser 93%,
 SafeConstructor 77%; `Constructor` 0% because only SafeConstructor is harnessed on purpose).
@@ -52,7 +52,7 @@ SafeConstructor 77%; `Constructor` 0% because only SafeConstructor is harnessed 
    `DumperOptions` anchor generator is shared state: successive `dump()` calls number anchors id001, id002...
    (so dump output is not deterministic; harness normalises).
 9. Slow: load time of nested flow input grows super-linearly (4000 levels 1.2 s, 50000 levels 6.5 s); program
-   timeouts (3 s) under load.
+   timeouts (3 s).
 
 ## Harness notes
 

@@ -20,7 +20,7 @@ Campaigns (jobs 1, 10 min, load average 10-25 on the machine): `main` 7.3k execs
    `marked.parser(toks)` called twice on a loose task list (`- [ ] a\n\n- [x] b\n`) renders the
    checkbox twice the second time, because the parser unshifts `{type:"text", text: checkbox}` into
    `item.tokens`. Fixed at v18.2.1 (bisect: first fixed commit 7b192315b286 "only create tokens
-   inside tokenizers", #3755; bisect verdicts for the mid versions were non-monotone, see friction).
+   inside tokenizers", #3755; bisect verdicts for the versions in between were not monotone, so treat the commit as a lead).
 2. **Lexer `TypeError: Cannot read properties of undefined (reading 'trim')`** in `splitCells`
    for a table followed by a line holding only `\x0b` (`marked.lexer("| a |\n|---|\n\x0b")`,
    `bugs/table-ctrl/min.js`). 45 hits in campaign `two`. Not reproducible at v18.2.1.

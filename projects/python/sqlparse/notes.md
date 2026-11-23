@@ -9,9 +9,9 @@ Latest release checked: 0.6.1.
 - `format` options: `fmt_case`, `fmt_strip_comments`, `fmt_strip_whitespace`, `fmt_reindent` (indent_width, wrap_after, comma_first, ...), `fmt_reindent_aligned`, `fmt_misc` (output_format, truncate_strings), `fmt_all`, `fmt_bad_options` (error path: always SQLParseError, bails), idempotence checks `fmt_reindent_idem`, `fmt_case_idem`.
 - Token tree: `stmt_get_type`, `stmt_roundtrip`, `tree_consistency` (parent links), `stmt_flatten_types`, `tok_prev`, `tok_index_lookup`, `tok_matching`, `ident_names`, `ident_deep` (Identifier/Where/Comparison/Function/Case), `tok_methods`, `tok_edit` (insert whitespace tokens), `tok_group_ops`, `stmt_str_eq_after_format`.
 
-## Campaigns (jobs 1, 600 s, loaded machine)
+## Campaigns (1 worker)
 
-probe (60 s), main (600 s, 57k execs, 1935 edges), run2 (600 s, 37k execs), run3 (600 s, 84k execs, 1944 edges). Coverage (run2, `stitch cov`): never called: `get_token_at_offset`, `has_alias`, `is_child_of`, `Comment.is_multiline`, `RightMarginFilter` (right_margin option), `group_tzcasts`, `OutputFilter._process`, CLI. TODO stubs for these.
+probe (60 s), main (600 s, 57k execs, 1935 edges), run2 (600 s, 37k execs), run3 (600 s, 84k execs, 1944 edges). Coverage (run2, `stitch cov`): never called: `get_token_at_offset`, `has_alias`, `is_child_of`, `Comment.is_multiline`, `RightMarginFilter` (right_margin option), `group_tzcasts`, `OutputFilter._process`, CLI. No stubs for these yet.
 
 ## Library findings
 

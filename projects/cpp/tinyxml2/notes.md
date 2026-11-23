@@ -82,4 +82,4 @@ compare + `tok`).
 - Manual printer steps (`printer_attr`, `printer_text`...) mostly bail because the step they need must be the
   immediately preceding call on that printer; `printer_script` drives a whole balanced session from one
   `Src` and does the useful work.
-- `stitch bisect` was tried on bug 1 (see friction report); it is a long-standing bug present in all tags.
+- `stitch bisect` on bug 1 finds no good revision: it is present in every tag.

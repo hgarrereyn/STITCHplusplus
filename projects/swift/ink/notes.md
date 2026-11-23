@@ -1,7 +1,6 @@
 # Ink (JohnSundell/Ink) 0.5.0
 
 Pure-Swift Markdown parser. Pinned 0.5.0; latest is 0.6.0 (checked with `stitch exec --rev 0.6.0`).
-Note: the SwiftPM product is `Ink` (capital I); `stitch init` wrote `ink`.
 
 ## Stubs (14)
 - Objects: `Parser` (MarkdownParser, a struct), `Doc` (Markdown).
