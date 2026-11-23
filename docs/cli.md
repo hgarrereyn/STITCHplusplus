@@ -60,5 +60,7 @@ See [`skill/stitch/reference/reproducers.md`](../skill/stitch/reference/reproduc
 
 Run `bin/stitch` from a checkout, or `pip install -e .`. Tests are in [`tests/`](../tests/):
 `smoke.sh` runs the whole C/C++ pipeline (`STITCH_SMOKE_SECS` sets its fuzzing time), `languages.py` runs every command for each language.
+CI (`.github/workflows/ci.yml`) runs both on every pull request, one job per language, plus a package
+check; the `ci-ok` job passes only when all of them do.
 Pushing a `vX.Y.Z` tag publishes the images to GHCR and the package to PyPI
 (`.github/workflows/release.yml`).

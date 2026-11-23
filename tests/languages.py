@@ -5,7 +5,7 @@
     tests/languages.py python go        some of them
     tests/languages.py --secs 120 rust  longer fuzzing
 
-Per language: build, check, fuzz, crashes (a planted bug in the library), minimize, exec --trace,
+Per language: build, check, probe, fuzz, crashes (a planted bug in the library), minimize, exec --trace,
 write (the standalone file reproduces the crash; a program with a Val parameter replays), try (a file that does not crash is rejected),
 repro (a verified Docker folder) and cov (lcov with library lines).
 """
@@ -67,6 +67,11 @@ def test(lang, secs):
     d = js(run(p, "check"))
     if not d.get("ok") or not d.get("endpoints"):
         raise Fail(f"check: {d}")
+
+    step("probe")
+    d = js(run(p, "probe", "--secs", "10", timeout=600))
+    if not d.get("execs") or not d.get("edges_covered") or not isinstance(d.get("report"), list):
+        raise Fail(f"probe: {({k: d.get(k) for k in ('execs', 'edges_covered', 'corpus')})}")
 
     step(f"fuzz {secs}s")
     run(p, "fuzz", "--name", "lang-test", "--secs", str(secs), "--fresh", "--foreground", check=False,

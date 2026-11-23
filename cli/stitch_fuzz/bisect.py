@@ -22,6 +22,13 @@ def _git(repo, *args, check=True):
     return (r.stdout + r.stderr).strip()
 
 
+def _first_commit(out, term):
+    """The commit `git bisect` settled on, if it did: "<sha> is the first bad commit" (newer git
+    quotes the term: "<sha> is the first 'bad' commit")."""
+    m = re.search(rf"([0-9a-f]{{7,64}}) is the first '?{term}'? commit", out)
+    return m.group(1) if m else None
+
+
 def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbose=True, fixed=None):
     from .cli import in_project, run_repro
 
@@ -143,8 +150,8 @@ def bisect(p, crash: Path, good=None, bad=None, strict=False, max_auto=8, verbos
     steps = 0
     while steps < 64:
         steps += 1
-        if "is the first bad commit" in out:
-            first_bad = out.split(" is the first bad commit")[0].split()[-1]
+        first_bad = _first_commit(out, "bad")
+        if first_bad:
             break
         if "only 'skip'ped commits left" in out:
             break
@@ -184,8 +191,8 @@ def _bisect_fix(p, src, repo, bdir, broken_c, fixed_rev, test, log):
     steps = 0
     while steps < 64:
         steps += 1
-        if "is the first fixed commit" in out:
-            first = out.split(" is the first fixed commit")[0].split()[-1]
+        first = _first_commit(out, "fixed")
+        if first:
             break
         if "only 'skip'ped commits left" in out:
             break

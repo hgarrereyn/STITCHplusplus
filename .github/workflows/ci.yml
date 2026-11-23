@@ -1,10 +1,30 @@
-# Checks that the package installs and carries the same sources as the checkout (so the prebuilt
-# images it pulls match), and that the CLI starts.
+# CI for pull requests and main. Everything here is deterministic: no step calls an LLM or agent.
+#
+#   package     the package installs, carries the same sources as the checkout (so the prebuilt
+#               images it pulls match), and the CLI starts.
+#   engine      the fuzzer engine image, pulled if published for this source hash, otherwise built
+#               once and handed to the language jobs (so they do not each rebuild it).
+#               Built images (engine, and each language's base + toolchain) are kept in the Actions
+#               cache under their source hash, so only a PR that changes them rebuilds them.
+#   languages   the CLI flow on each language's demo project: tests/smoke.sh for C/C++ and
+#               tests/languages.py for the others (build, check, probe, fuzz, crashes, minimize,
+#               exec, write, try, repro, cov; C/C++ also bisects).
+#   ci-ok       a single status that passes only when every job above passed. Make this the one
+#               required check in the branch protection rule / ruleset for main.
 name: ci
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
@@ -20,11 +40,140 @@ jobs:
         working-directory: /tmp
         run: |
           /tmp/venv/bin/stitch --version
+          /tmp/venv/bin/stitch --help > /dev/null
           /tmp/venv/bin/stitch guide > /dev/null
-          /tmp/venv/bin/stitch guide cpp > /dev/null
+          for t in cpp python javascript java go rust ruby swift objc reproducers; do
+            /tmp/venv/bin/stitch guide $t > /dev/null || { echo "stitch guide $t failed"; exit 1; }
+          done
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
       - name: installed sources hash like the checkout
         run: |
           a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
           b=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
           echo "installed: $a  checkout: $b"; [ "$a" = "$b" ]
+      - name: stitch init scaffolds a project for every language
+        working-directory: /tmp
+        run: |
+          for l in cpp python javascript java go rust ruby swift objc; do
+            /tmp/venv/bin/stitch --json init /tmp/init-$l --lang $l --git https://example.com/lib.git --rev v1 > /dev/null \
+              || { echo "stitch init --lang $l failed"; exit 1; }
+            test -f /tmp/init-$l/stitch.toml && test -f /tmp/init-$l/Dockerfile && test -d /tmp/init-$l/harness \
+              || { echo "stitch init --lang $l: missing files"; ls -la /tmp/init-$l; exit 1; }
+          done
+
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      hash: ${{ steps.engine.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: engine hash
+        id: engine
+        run: echo "hash=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash())')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: engine.tar
+          key: stitch-engine-${{ steps.engine.outputs.hash }}
+      - name: pull or build the engine image
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.ensure_engine())' \
+            || { tail -100 ~/.cache/stitch/logs/engine.log 2>/dev/null; exit 1; }
+          docker save "stitch/engine:${{ steps.engine.outputs.hash }}" -o engine.tar
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: engine.tar
+          key: stitch-engine-${{ steps.engine.outputs.hash }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-image
+          path: engine.tar
+          retention-days: 1
+
+  languages:
+    needs: engine
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [cpp, python, javascript, java, go, rust, ruby, swift, objc]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    name: languages (${{ matrix.lang }})
+    env:
+      # fuzzing time per language; longer than the defaults so the planted bugs are found reliably
+      STITCH_SMOKE_SECS: "180"
+      STITCH_TEST_SECS: "120"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-image
+      - name: load the engine image
+        run: docker load -i engine.tar && rm engine.tar
+      - name: image hashes
+        id: img
+        run: |
+          PYTHONPATH=cli python -c "from stitch_fuzz import docker as d; L='${{ matrix.lang }}'; print(f'base={d.base_hash(L)}'); print(f'toolchain={d.toolchain_hash(L)}')" >> "$GITHUB_OUTPUT"
+      # the language images, cached per source hash: only a change to languages/<lang>/ or engine/
+      # (or no published image and no cache yet) rebuilds them
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: ~/stitch-images.tar.zst
+          key: stitch-${{ matrix.lang }}-${{ steps.img.outputs.base }}
+      - name: load the cached language images
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: set -o pipefail; zstd -dc ~/stitch-images.tar.zst | docker load && rm ~/stitch-images.tar.zst
+      - name: stitch setup
+        run: |
+          bin/stitch setup --lang ${{ matrix.lang }} \
+            && PYTHONPATH=cli python -c "from stitch_fuzz import docker; print(docker.ensure_toolchain('${{ matrix.lang }}'))" \
+            || { tail -100 ~/.cache/stitch/logs/*.log 2>/dev/null; exit 1; }
+      - name: save the language images
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
+          docker save "stitch/${{ matrix.lang }}:${{ steps.img.outputs.base }}" \
+            "stitch/${{ matrix.lang }}-toolchain:${{ steps.img.outputs.toolchain }}" | zstd -T0 -3 -q -o ~/stitch-images.tar.zst
+          ls -lh ~/stitch-images.tar.zst
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/stitch-images.tar.zst
+          key: stitch-${{ matrix.lang }}-${{ steps.img.outputs.base }}
+      - name: free the disk
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -f ~/stitch-images.tar.zst
+      - name: CLI flow (C/C++)
+        if: matrix.lang == 'cpp'
+        run: tests/smoke.sh
+      - name: CLI flow
+        if: matrix.lang != 'cpp'
+        run: python3 tests/languages.py --secs "$STITCH_TEST_SECS" ${{ matrix.lang }}
+      - name: logs on failure
+        if: failure()
+        run: |
+          for f in ~/.cache/stitch/logs/*.log examples/*/.stitch/campaigns/*/w*.log; do
+            [ -f "$f" ] && { echo "::group::$f"; tail -200 "$f"; echo "::endgroup::"; }
+          done
+          true
+
+  ci-ok:
+    if: always()
+    needs: [package, engine, languages]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every job passed
+        run: |
+          echo '${{ toJSON(needs) }}'
+          [ "${{ needs.package.result }}" = success ] && [ "${{ needs.engine.result }}" = success ] \
+            && [ "${{ needs.languages.result }}" = success ]
