@@ -84,9 +84,19 @@ export default defineConfig({
         {
           label: "For agents",
           items: [
-            // Plain Markdown, for agents to read directly
-            { label: "overview.md", link: "/agents/overview.md" },
-            { label: "llms.txt", link: "/llms.txt" },
+            // The plain-text guide (website/agents/ and src/agent-guide.ts), served as Markdown
+            ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "cli"].map((name) => ({
+              label: `${name}.md`,
+              link: `/agents/${name}.md`,
+            })),
+            {
+              label: "Languages",
+              collapsed: true,
+              items: ["cpp", "objc", "python", "javascript", "java", "go", "rust", "ruby", "swift"].map((name) => ({
+                label: `${name}.md`,
+                link: `/agents/${name}.md`,
+              })),
+            },
           ],
         },
         {

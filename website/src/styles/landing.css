@@ -74,13 +74,18 @@
   align-items: baseline;
   gap: 0.25rem 0.625rem;
   margin: 0;
-  padding: 0.5rem 0.875rem;
+  padding: 0.5rem 0.875rem 0.5rem 0.75rem;
   max-width: 100%;
   border: 1px solid var(--sl-color-hairline-light);
   border-radius: 0.625rem;
   background: var(--stitch-surface);
   font-size: var(--sl-text-sm);
   color: var(--sl-color-gray-2);
+}
+.agent-callout .robot {
+  flex: none;
+  align-self: center;
+  color: var(--sl-color-text-accent);
 }
 .agent-callout a {
   min-width: 0;
