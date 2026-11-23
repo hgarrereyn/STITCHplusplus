@@ -4,6 +4,8 @@
 #               images it pulls match), and the CLI starts.
 #   engine      the fuzzer engine image, pulled if published for this source hash, otherwise built
 #               once and handed to the language jobs (so they do not each rebuild it).
+#               Built images (engine, and each language's base + toolchain) are kept in the Actions
+#               cache under their source hash, so only a PR that changes them rebuilds them.
 #   languages   the CLI flow on each language's demo project: tests/smoke.sh for C/C++ and
 #               tests/languages.py for the others (build, check, probe, fuzz, crashes, minimize,
 #               exec, write, try, repro, cov; C/C++ also bisects).
@@ -69,14 +71,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: pull or build the engine image
+      - name: engine hash
         id: engine
+        run: echo "hash=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash())')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: engine.tar
+          key: stitch-engine-${{ steps.engine.outputs.hash }}
+      - name: pull or build the engine image
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          h=$(PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.engine_hash())')
-          echo "hash=$h" >> "$GITHUB_OUTPUT"
           PYTHONPATH=cli python -c 'from stitch_fuzz import docker; print(docker.ensure_engine())' \
-            || { cat ~/.cache/stitch/logs/engine.log 2>/dev/null | tail -100; exit 1; }
-          docker save "stitch/engine:$h" -o engine.tar
+            || { tail -100 ~/.cache/stitch/logs/engine.log 2>/dev/null; exit 1; }
+          docker save "stitch/engine:${{ steps.engine.outputs.hash }}" -o engine.tar
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: engine.tar
+          key: stitch-engine-${{ steps.engine.outputs.hash }}
       - uses: actions/upload-artifact@v4
         with:
           name: engine-image
@@ -106,10 +119,40 @@ jobs:
           name: engine-image
       - name: load the engine image
         run: docker load -i engine.tar && rm engine.tar
+      - name: image hashes
+        id: img
+        run: |
+          PYTHONPATH=cli python -c "from stitch_fuzz import docker as d; L='${{ matrix.lang }}'; print(f'base={d.base_hash(L)}'); print(f'toolchain={d.toolchain_hash(L)}')" >> "$GITHUB_OUTPUT"
+      # the language images, cached per source hash: only a change to languages/<lang>/ or engine/
+      # (or no published image and no cache yet) rebuilds them
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: ~/stitch-images.tar.zst
+          key: stitch-${{ matrix.lang }}-${{ steps.img.outputs.base }}
+      - name: load the cached language images
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: set -o pipefail; zstd -dc ~/stitch-images.tar.zst | docker load && rm ~/stitch-images.tar.zst
       - name: stitch setup
         run: |
           bin/stitch setup --lang ${{ matrix.lang }} \
+            && PYTHONPATH=cli python -c "from stitch_fuzz import docker; print(docker.ensure_toolchain('${{ matrix.lang }}'))" \
             || { tail -100 ~/.cache/stitch/logs/*.log 2>/dev/null; exit 1; }
+      - name: save the language images
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
+          docker save "stitch/${{ matrix.lang }}:${{ steps.img.outputs.base }}" \
+            "stitch/${{ matrix.lang }}-toolchain:${{ steps.img.outputs.toolchain }}" | zstd -T0 -3 -q -o ~/stitch-images.tar.zst
+          ls -lh ~/stitch-images.tar.zst
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/stitch-images.tar.zst
+          key: stitch-${{ matrix.lang }}-${{ steps.img.outputs.base }}
+      - name: free the disk
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -f ~/stitch-images.tar.zst
       - name: CLI flow (C/C++)
         if: matrix.lang == 'cpp'
         run: tests/smoke.sh
