@@ -36,9 +36,34 @@ def die(msg, code=1):
 # =============================================================================================
 # build
 # =============================================================================================
-def build(project, rev=None, image_only=False, harness_only=False, no_cache=False, out_dir=None, target="all",
-          quiet=False, rebuild_base=False):
-    """Build base + project image + harness. Returns dict(image, ident, commit, result)."""
+_BUILD_DEPTH = 0
+
+
+def build(project, **kw):
+    """Build base + project image + harness. Returns dict(image, ident, commit, result). One stitch
+    process at a time builds a project: two (`exec` while `crashes` runs) would write
+    .stitch/build at the same time and one of them would see a half-written harness."""
+    global _BUILD_DEPTH
+    if _BUILD_DEPTH:
+        return _build(project, **kw)
+    import fcntl
+    project.state_dir.mkdir(parents=True, exist_ok=True)
+    with open(project.state_dir / "build.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            if not kw.get("quiet"):
+                print("[stitch] waiting for another stitch command to finish building this project", file=sys.stderr, flush=True)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        _BUILD_DEPTH += 1
+        try:
+            return _build(project, **kw)
+        finally:
+            _BUILD_DEPTH -= 1
+
+
+def _build(project, rev=None, image_only=False, harness_only=False, no_cache=False, out_dir=None, target="all",
+           quiet=False, rebuild_base=False):
     docker.check_docker()
     st = project.load_state()
     base_tag = docker.base_tag(project.language, project.sanitizers)
@@ -59,8 +84,10 @@ def build(project, rev=None, image_only=False, harness_only=False, no_cache=Fals
     if out_dir:
         cmd += ["--out", out_dir]
     r = docker.run(project, image, cmd, capture=True)
+    echoed = ""
     if r.stderr and not quiet:
         sys.stderr.write(r.stderr)
+        echoed = r.stderr
     try:
         res = json.loads(r.stdout.strip().splitlines()[-1])
     except (json.JSONDecodeError, IndexError):
@@ -70,6 +97,7 @@ def build(project, rev=None, image_only=False, harness_only=False, no_cache=Fals
         res.setdefault("errors", []).append({"file": "stitch-build", "output": ((r.stdout or "") + (r.stderr or ""))[-3000:]
                                              or f"stitch-build exited with {r.returncode} and printed nothing"})
     info["result"] = res
+    info["echoed"] = echoed  # build output already shown (callers need not print it again)
     return info
 
 
@@ -88,6 +116,8 @@ def cmd_build(a):
             print(f"ok: {res.get('endpoints')} endpoints, {res.get('objects')} object types, {res.get('datatypes')} datatypes  [{what}]")
     else:
         for e in res.get("errors", []):
+            if (e.get("output") or "").strip() and e["output"].strip() in info.get("echoed", ""):
+                continue  # the compiler output above
             sys.stderr.write(f"--- {e.get('file', 'build')} ---\n{e.get('output', '').rstrip()}\n")
         sys.stderr.write("build failed\n")
     sys.exit(0 if res.get("ok", True) else 1)
@@ -141,6 +171,11 @@ def cmd_check(a):
 # =============================================================================================
 # campaigns
 # =============================================================================================
+def programs(d: Path, pattern=""):
+    """Program files (.stp) in d (or d/<pattern>), without the fuzzer's .<name>.stp metadata files."""
+    return [f for f in d.glob(f"{pattern}/*.stp" if pattern else "*.stp") if not f.name.startswith(".")]
+
+
 def container_name(p, name):
     return f"stitch-{p.name}-{name}"
 
@@ -161,11 +196,22 @@ def start_campaign(p, name, secs=None, jobs=1, only=None, fresh=False, detach=Tr
     if fresh and cdir.exists():
         shutil.rmtree(cdir)
     elif cdir.exists() and name != "probe":
-        kept = len({f.name for f in cdir.glob("w*/corpus/*.stp")})  # workers share programs: count each once
-        crashes = len({f.name for f in cdir.glob("w*/crashes/*.stp")})
+        kept = len({f.name for f in programs(cdir, "w*/corpus")})  # workers share programs: count each once
+        crashes = len({f.name for f in programs(cdir, "w*/crashes")})
         if kept or crashes:
-            print(f"[stitch] resuming campaign '{name}': keeping {kept} corpus programs and {crashes} crash programs "
-                  "(`--fresh` starts over)", file=sys.stderr, flush=True)
+            print(f"[stitch] resuming campaign '{name}': {kept} saved corpus programs (rerun first; the corpus keeps the"
+                  f" ones that still add coverage) and {crashes} crash programs. Time and execs start from 0"
+                  " (`--fresh` starts over)", file=sys.stderr, flush=True)
+    old = cdir / "bin"
+    if old.is_dir() and not (all(_same_file(p.build_dir / t, old / t) for t in ("fuzzer", "repro", "manifest.json"))
+                             and _tree_print(p.build_dir / "app") == _tree_print(old / "app")):
+        # resuming with a changed harness: saved crashes are rerun with it at the next triage, so
+        # buckets the current stubs no longer produce go away
+        for c in cdir.glob("w*/triage-cache.json"):
+            c.unlink()
+        if not fresh and any(programs(cdir, "w*/crashes")):
+            print("[stitch] the harness changed: saved crashes are rerun with it by `stitch crashes`",
+                  file=sys.stderr, flush=True)
     (cdir / "bin").mkdir(parents=True, exist_ok=True)
     for t in ("fuzzer", "repro", "manifest.json"):
         shutil.copy2(p.build_dir / t, cdir / "bin" / t)
@@ -266,10 +312,15 @@ def health_report(s, limit=15):
     def reasons(e):
         rs = ", ".join(f'"{r["reason"]}" x{r["count"]}' for r in e["bail_reasons"][:3])
         ms = ", ".join(f"'{m['key']}'" for m in e["missing_attr_reads"][:3])
-        return rs + (f"; read missing attr {ms}" if ms else "")
+        bad = e.get("crashes", 0) + e.get("timeouts", 0)
+        # a stub that crashes on every call is usually a harness bug (a typo, a wrong argument)
+        cr = (f"crashed {e['crashes']}x" if e.get("crashes") else "") + \
+             (f"{', ' if e.get('crashes') else ''}timed out {e['timeouts']}x" if e.get("timeouts") else "")
+        out = rs + (f"; read missing attr {ms}" if ms else "")
+        return (out + "; " if out else "") + cr + " (see `stitch crashes`)" if bad else out
 
     if never:
-        lines.append(f"never succeeds ({len(never)}): the fuzzer stops picking these")
+        lines.append(f"never succeeds ({len(never)}, 20+ calls and none ok so far): the fuzzer picks these less and less")
         for e in sorted(never, key=lambda e: -e["invoked"])[:limit]:
             lines.append(f"  {e['name']}  [{e['invoked']} calls] {reasons(e)}")
     if high:
@@ -284,9 +335,12 @@ def health_report(s, limit=15):
             if hi["ok_rate"] - lo["ok_rate"] >= 0.5:
                 dep.append((e, lo, hi))
     if dep:
-        lines.append("outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):")
+        lines.append("depends on where an input came from (the stub that made or last used that object; the fuzzer"
+                     " learns these pairs. Act only when the low one should work: a different kind of object behind"
+                     " one type gets its own type):")
         for e, lo, hi in dep[:limit]:
-            lines.append(f"  {e['name']}.{lo['input']}: ok {reports.pct(lo['ok_rate'])} after {lo['after']} vs {reports.pct(hi['ok_rate'])} after {hi['after']}")
+            lines.append(f"  {e['name']}({lo['input']}): ok {reports.pct(lo['ok_rate'])} when {lo['input']} last came from"
+                         f" {lo['after']}, {reports.pct(hi['ok_rate'])} when from {hi['after']}")
     if skipped:
         lines.append(f"often skipped because an input object was missing ({len(skipped)}): its producer bailed or returned no object")
         for e in skipped[:limit]:
@@ -296,9 +350,16 @@ def health_report(s, limit=15):
     return lines
 
 
+def _edges(s):
+    # worker languages (all but C/C++, Rust, Swift) number edges as they are first seen: the total
+    # is the size of the coverage map, not the number of edges in the library
+    t = s.get("edges_total") or 0
+    return f"{s['edges_covered']}/{t} edges" if 0 < t < 65536 else f"{s['edges_covered']} edges"
+
+
 def summary_line(s):
     return (f"{s['elapsed_secs']:.0f}s, {reports.human(s['execs'])} execs ({reports.human(s['execs_per_sec'])}/s), "
-            f"{s['edges_covered']}/{s['edges_total']} edges, corpus {s['corpus']}, calls bailing {reports.pct(s.get('call_bail_rate', 0))} "
+            f"{_edges(s)}, corpus {s['corpus']}, calls bailing {reports.pct(s.get('call_bail_rate', 0))} "
             f"(programs with a bail {reports.pct(s['exec_bail_rate'])}), "
             f"{s['crashes_saved']} crash/timeout programs saved")
 
@@ -332,8 +393,9 @@ def cmd_probe(a):
     p = find_project(a.project)
     name = "probe"
     if not JSON:
-        print(f"[stitch] probing for {a.secs}s...", flush=True)
-    start_campaign(p, name, secs=a.secs, jobs=1, only=a.only, fresh=True, detach=False)
+        print(f"[stitch] probing for {a.secs}s of fuzzing" + (f" with {a.jobs} workers" if a.jobs > 1 else "")
+              + " (plus the harness build and worker start-up)...", flush=True)
+    start_campaign(p, name, secs=a.secs, jobs=a.jobs, only=a.only, fresh=True, detach=False)
     s = merged_stats(p.campaign_dir(name))
     if not s:
         die("probe produced no statistics (see .stitch/campaigns/probe/w0.log)")
@@ -349,6 +411,8 @@ def cmd_probe(a):
 
 def resolve_campaign(p, name):
     if name:
+        if not (p.campaign_dir(name) / "campaign.json").exists():
+            die(f"no campaign '{name}' (campaigns: {', '.join(p.campaigns()) or 'none yet: stitch fuzz'})")
         return name
     cs = [c for c in p.campaigns() if c != "probe"] or p.campaigns()
     if not cs:
@@ -363,6 +427,14 @@ def cmd_status(a):
     meta = json.loads((cdir / "campaign.json").read_text())
     stc = docker.container_state(meta["container"])
     running = bool(stc and stc.get("Running"))
+    if running and a.wait:
+        if not JSON:
+            print(f"[stitch] waiting for campaign '{name}' to stop" + (f" (--secs {meta['secs']})" if meta.get("secs") else
+                  " (it has no --secs limit: `stitch stop` ends it)"), file=sys.stderr, flush=True)
+        while running:
+            time.sleep(5)
+            stc = docker.container_state(meta["container"])
+            running = bool(stc and stc.get("Running"))
     s = merged_stats(cdir)
     if JSON:
         reports.dump({"campaign": name, "running": running, "meta": meta, "stats": s, "report": health_report(s, 1000) if s else []})
@@ -456,7 +528,7 @@ def triage(p, name):
     meta = refresh_campaign_bin(p, name, json.loads((cdir / "campaign.json").read_text()))
     image = meta["image"] if docker.image_exists(meta["image"]) else p.load_state().get("image")
     buckets = {}
-    dirs = [w for w in worker_dirs(cdir) if (w / "crashes").exists() and any((w / "crashes").glob("*.stp"))]
+    dirs = [w for w in worker_dirs(cdir) if (w / "crashes").exists() and any(programs(w / "crashes"))]
     # all workers' crash directories in one container, at the same time
     jobs = int(os.environ.get("STITCH_TRIAGE_JOBS") or 0) or max(1, min(8, (os.cpu_count() or 4) // max(1, len(dirs))))
     tmp = p.state_dir / "tmp"
@@ -468,6 +540,15 @@ def triage(p, name):
                      f"--hang-ms {hang_ms(p, name)} > .stitch/tmp/triage-{name}-{w.name}.json 2> .stitch/tmp/triage-{name}-{w.name}.log &")
     lines.append("wait")
     if dirs:
+        def cached(w):
+            try:
+                return set(json.loads((w / "triage-cache.json").read_text()))
+            except (OSError, ValueError):
+                return set()
+        n = sum(len({f.name for f in programs(w / "crashes")} - cached(w)) for w in dirs)
+        if not JSON and n:
+            print(f"[stitch] rerunning {n} new crash program{'s' if n != 1 else ''} of '{name}' to group them (timeouts take"
+                  " their full timeout; slower while a campaign runs)", file=sys.stderr, flush=True)
         (tmp / f"triage-{name}.sh").write_text("\n".join(lines) + "\n")
         docker.run(p, image, ["sh", f".stitch/tmp/triage-{name}.sh"], capture=True)
     for w in dirs:
@@ -478,6 +559,14 @@ def triage(p, name):
             log = tmp / f"triage-{name}-{w.name}.log"
             die(f"triage of {rel} failed: {log.read_text(errors='replace')[-2000:] if log.exists() else 'no output'}")
         for b in bs:
+            # <x>.min.stp files are `stitch minimize` outputs next to the crash they reduce: they are
+            # not crashes of their own (resolve_crash runs them in place of <x>.stp)
+            files = b.get("files") or []
+            mins = [f for f in files if f.endswith(".min.stp") and f[:-len(".min.stp")] + ".stp" in files]
+            if mins and len(mins) < len(files):
+                b["count"] -= len(mins)
+            if b["example"].endswith(".min.stp") and (w / "crashes" / (b["example"][:-len(".min.stp")] + ".stp")).exists():
+                b["example"] = b["example"][:-len(".min.stp")] + ".stp"
             b["example"] = f"{rel}/crashes/{b['example']}"
             t = buckets.get(b["signature"])
             if not t:
@@ -486,6 +575,7 @@ def triage(p, name):
                 t["count"] += b["count"]
                 if b["example_nodes"] < t["example_nodes"]:
                     t["example"], t["example_nodes"] = b["example"], b["example_nodes"]
+                    t["reproduced"] = b.get("reproduced")
     bl = sorted(buckets.values(), key=lambda b: -b["count"])
     # ids stay the same across calls (and while a campaign runs): signature -> id, new ones appended
     ids_f = cdir / "triage-ids.json"
@@ -506,7 +596,16 @@ def triage(p, name):
         b.pop("files", None)
     bl.sort(key=lambda b: int(b["id"][1:]))
     ids_f.write_text(json.dumps(ids, indent=1))
-    (cdir / "triage.json").write_text(json.dumps(bl, indent=1))
+    tj = cdir / "triage.json"
+    try:
+        before = [b["id"] for b in json.loads(tj.read_text())]
+    except (OSError, ValueError, KeyError, TypeError):
+        before = []
+    gone = [i for i in before if i not in {b["id"] for b in bl}]
+    if gone and not JSON:
+        print(f"[stitch] {', '.join(gone)} no longer crash{'es' if len(gone) == 1 else ''} with the current harness "
+              "(fixed stubs, or a crash that does not reproduce)", file=sys.stderr, flush=True)
+    tj.write_text(json.dumps(bl, indent=1))
     return bl
 
 
@@ -514,19 +613,41 @@ def cmd_crashes(a):
     p = find_project(a.project)
     name = resolve_campaign(p, a.name)
     bl = triage(p, name)
+    gone = not_reproduced(p, name)
+    note = (f"{gone} saved crash program{'s do' if gone != 1 else ' does'} not crash when rerun (flaky, or fixed"
+            " by a harness change): not listed") if gone else ""
     if JSON:
-        reports.dump({"campaign": name, "buckets": bl})
+        reports.dump({"campaign": name, "buckets": bl, "not_reproduced": gone})
         return
     if not bl:
-        print(f"no reproducible crashes in '{name}'")
+        print(f"no reproducible crashes in '{name}'" + (f"; {note}" if note else ""))
         return
     print(f"{len(bl)} unique crash{'es' if len(bl) != 1 else ''} in '{name}':")
     for b in bl:
-        print(f"  {b['id']:4s} x{b['count']:<5d} {b['kind']}  in {b.get('endpoint') or '?'}")
+        rp = b.get("reproduced")
+        flaky = f"  [flaky: crashed {rp[0]} of {rp[1]} runs]" if rp and rp[0] < rp[1] else ""
+        print(f"  {b['id']:4s} x{b['count']:<5d} {b['kind']}  in {b.get('endpoint') or '?'}{flaky}")
         for f in b["frames"][:3]:
             print(f"         {f}")
+        if not b["frames"] and b.get("summary") and "no error report" in b["kind"]:
+            print(f"         last output: {b['summary'][:200]}")
         print(f"         example ({b['example_nodes']} calls): {b['example']}")
+    if note:
+        print(note)
     print("next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>")
+
+
+def not_reproduced(p, name):
+    """Saved crash programs whose last triage run did not crash."""
+    n = 0
+    for w in worker_dirs(p.campaign_dir(name)):
+        try:
+            cache = json.loads((w / "triage-cache.json").read_text())
+        except (OSError, ValueError):
+            continue
+        n += sum(1 for k, r in cache.items() if k != "__binary__" and isinstance(r, dict) and not r.get("crashed")
+                 and not k.endswith(".min.stp") and (w / "crashes" / k).exists())
+    return n
 
 
 CRASH_REF = "a .stp file, or a crash id: c3 (latest campaign), probe:c3 or probe/c3"
@@ -555,10 +676,15 @@ def resolve_crash(p, ref, campaign=None, minimized=True):
         if b["id"] == cid:
             f = (p.root / b["example"]).resolve()
             mn = f.with_name(f.stem + ".min.stp")
-            if minimized and mn.exists() and not f.stem.endswith(".min"):
-                if not JSON:
-                    print(f"[stitch] {camp}:{cid}: running the minimized program {p.rel(mn)}", file=sys.stderr)
+            use_min = minimized and mn.exists() and not f.stem.endswith(".min")
+            if use_min:
                 f = mn
+            if not JSON and (use_min or not m.group(1)):
+                # a bare id is ambiguous when there are several campaigns (each numbers its crashes from c1)
+                other = [c for c in p.campaigns() if c != camp] if not m.group(1) and not campaign else []
+                note = f" (latest campaign; also: {', '.join(other)})" if other else ""
+                print(f"[stitch] {camp}:{cid}{note}" + (f": running the minimized program {p.rel(mn)}" if use_min else ""),
+                      file=sys.stderr)
             return f, {**b, "campaign": camp}
     die(f"unknown crash '{cid}' in campaign '{camp}' (see `stitch crashes {camp}`)")
 
@@ -601,7 +727,7 @@ def build_repro_at(p, rev):
     outdir = f".stitch/rev/{ident}"
     r = docker.run(p, image, ["stitch-build", "--json", "--target", "repro", "--out", outdir], capture=True)
     if r.returncode != 0:
-        die(f"the harness does not build against {rev} ({ident}):\n{(r.stderr or '')[-2000:]}")
+        die(f"the harness does not build against {rev} ({ident}):\n{docker.build_errors(r)}")
     return image, f"{outdir}/repro", commit
 
 
@@ -638,7 +764,10 @@ def format_plan(plan: Path):
 
 def cmd_exec(a):
     p = find_project(a.project)
-    f, _ = resolve_crash(p, a.program, campaign=a.campaign)
+    f, b = resolve_crash(p, a.program, campaign=a.campaign)
+    limit_ms = hang_ms(p, b["campaign"]) if b else int(p.cfg["fuzz"]["timeout_ms"])
+    if a.timeout is None:  # long enough for a slow start (JVM, Swift), short enough for a hang
+        a.timeout = max(10, 5 * limit_ms // 1000)
     if a.rev:
         image, binary, commit = build_repro_at(p, a.rev)
         if not JSON:
@@ -657,37 +786,92 @@ def cmd_exec(a):
                                  extra=f"--plan {p.rel(plan)}" if plan else "")
     elapsed = getattr(run_repro, "elapsed_ms", None)
     rep = reports.parse_report(output, code, to)
+    # (startup included: a JVM or a Swift binary takes a while to start, so only well past the limit)
+    slow = (not rep["crashed"] and elapsed is not None and elapsed > 2 * limit_ms)
+    if to and not JSON:
+        print(f"[stitch] killed after {a.timeout}s (--timeout); the campaign's timeout is {limit_ms} ms", file=sys.stderr)
     if JSON:
-        reports.dump({**rep, "elapsed_ms": elapsed, "output": output[-20000:]}
+        reports.dump({**rep, "elapsed_ms": elapsed, "slow": slow, "output": output[-20000:]}
                      | ({"calls": format_plan(plan)} if plan and plan.exists() else {}))
     elif plan:
         print(format_plan(plan) if plan.exists() else "(no plan written)")
-        rep_lines = [l for l in output.splitlines() if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
+        rep_lines = [l for l in _drop_abort_report(output.splitlines(), rep) if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
         print("\n".join(rep_lines[-200:]))
-        took = f" ({elapsed} ms)" if elapsed is not None else ""
-        print(f"\nresult: {'CRASH ' + rep['signature'] if rep['crashed'] else 'no crash'}{took}")
+        print(_exec_result(rep, elapsed, slow, limit_ms, b))
     else:
-        lines = output.splitlines()
+        lines = _drop_abort_report(output.splitlines(), rep)
         if not a.trace:
             lines = [l for l in lines if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
         print("\n".join(lines[-400:]))
-        took = f" ({elapsed} ms)" if elapsed is not None else ""
-        print(f"\nresult: {'CRASH ' + rep['signature'] if rep['crashed'] else 'no crash'}{took}")
+        print(_exec_result(rep, elapsed, slow, limit_ms, b))
+
+
+def _drop_abort_report(lines, rep):
+    """A failed check (or an uncaught exception) aborts the process, and AddressSanitizer reports
+    the abort with a stack and registers: noise after the real report."""
+    if not rep["kind"].startswith(("check failed", "uncaught")):
+        return lines
+    for i, l in enumerate(lines):
+        if "AddressSanitizer:DEADLYSIGNAL" in l or "ERROR: AddressSanitizer: ABRT" in l:
+            return lines[:i] + ["(AddressSanitizer's report of the abort that follows is left out)"]
+    return lines
+
+
+def _exec_result(rep, elapsed, slow, limit_ms, bucket=None):
+    took = f" ({elapsed} ms)" if elapsed is not None else ""
+    differs = ""
+    if bucket and rep["crashed"] and rep["kind"] != bucket.get("kind"):
+        differs = (f"\n(bucket {bucket['campaign']}:{bucket['id']} is '{bucket['kind']}': this run ended differently. A timeout"
+                   " that depends on load, or a flaky crash; `stitch crashes` shows how often it reproduces)")
+    if rep["crashed"]:
+        return f"\nresult: CRASH {rep['signature']}{took}{differs}"
+    if bucket and not slow:
+        rp = bucket.get("reproduced")
+        if rp and rp[0] < rp[1]:
+            return f"\nresult: no crash{took} (bucket {bucket['campaign']}:{bucket['id']} is flaky: crashed {rp[0]} of {rp[1]} runs)"
+    if slow:
+        return (f"\nresult: no crash, but it took {elapsed} ms, far over the campaign's timeout ({limit_ms} ms): the"
+                " fuzzer counts that as a timeout (unless the machine is just busy)")
+    return f"\nresult: no crash{took}"
 
 
 def cmd_minimize(a):
     p = find_project(a.project)
     f, b = resolve_crash(p, a.crash, campaign=a.campaign, minimized=False)
     name = b["campaign"] if b else None
-    st = p.load_state()
+    if name:
+        # the same harness `stitch exec` runs: the current build, once the campaign has stopped
+        meta = refresh_campaign_bin(p, name, json.loads((p.campaign_dir(name) / "campaign.json").read_text()))
+        image = meta["image"] if docker.image_exists(meta["image"]) else p.load_state().get("image")
+    else:
+        image = build(p, harness_only=True, quiet=True)["image"]
     binrel = f".stitch/campaigns/{name}/bin/fuzzer" if name else ".stitch/build/fuzzer"
-    dst = Path(a.output) if a.output else f.with_name(f.stem + ".min.stp")
-    r = docker.run(p, st["image"], [binrel, "minimize", in_project(p, f), "-o", p.rel(dst.resolve()) if str(dst.resolve()).startswith(str(p.root)) else in_project(p, dst), "--secs", str(a.secs), "--hang-ms", str(hang_ms(p, name))], capture=True)
+    if not JSON:
+        print(f"[stitch] minimizing {p.rel(f)} (up to {a.secs}s; --secs to change)", file=sys.stderr, flush=True)
+    # minimizing a minimized program again reduces it in place (not <x>.min.min.stp)
+    dst = Path(a.output) if a.output else (f if f.stem.endswith(".min") else f.with_name(f.stem + ".min.stp"))
+    existed = dst.exists()
+    r = docker.run(p, image, [binrel, "minimize", in_project(p, f), "-o", p.rel(dst.resolve()) if str(dst.resolve()).startswith(str(p.root)) else in_project(p, dst), "--secs", str(a.secs), "--hang-ms", str(hang_ms(p, name))], capture=True)
     try:
         res = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception:
         die(f"minimize failed: {r.stderr[-2000:]}")
-    out(res, f"{res['calls_before']} -> {res['calls_after']} calls, still crashes: {res['crashes']} ({res['signature']})\n  {res['output']}")
+    if not res["crashes"]:
+        # nothing to minimize: do not leave a .min.stp that crash ids would then run
+        if dst != f and not existed:
+            dst.unlink(missing_ok=True)
+        rp = (b or {}).get("reproduced")
+        if rp and rp[0] < rp[1]:
+            die(f"{p.rel(f)} did not crash in 3 runs; it is flaky (crashed {rp[0]} of {rp[1]} runs at triage): try again")
+        die(f"{p.rel(f)} did not crash in 3 runs with the current harness (`stitch exec {a.crash}`): nothing to minimize"
+            + (" (a timeout that does not reproduce may just be slow under load)" if b and b.get("kind") == "timeout" else ""))
+    notes = []
+    if res.get("flaky"):
+        notes.append("the program crashes only on some runs (flaky): each candidate got two tries")
+    if res.get("out_of_time"):
+        notes.append(f"stopped by the time budget (--secs {a.secs}): running again may reduce it further")
+    out(res, f"{res['calls_before']} -> {res['calls_after']} calls, still crashes: {res['crashes']} ({res['signature']})\n  {res['output']}"
+        + "".join(f"\n  ({n})" for n in notes))
 
 
 def cmd_sample(a):
@@ -816,10 +1000,10 @@ def cov_programs(p, inputs, crashes=False):
         if not os.path.exists(x) and p.campaign_dir(x).is_dir():
             cdir = p.campaign_dir(x)
             dirs = [w / "corpus" for w in worker_dirs(cdir)] + ([w / "crashes" for w in worker_dirs(cdir)] if crashes else [])
-            files = [f for d in dirs if d.is_dir() for f in d.glob("*.stp")]
+            files = [f for d in dirs if d.is_dir() for f in programs(d)]
             labels.append(x)
         elif os.path.isdir(x):
-            files = list(Path(x).resolve().rglob("*.stp"))
+            files = [f for f in Path(x).resolve().rglob("*.stp") if not f.name.startswith(".")]
             labels.append(Path(x).resolve().name)
         elif os.path.exists(x):
             files = [Path(x).resolve()]
@@ -879,6 +1063,9 @@ def _print_verdict(v, expected, name, show=False):
     exp = (expected["kind"] + (f" in {expected['frame']}" if expected.get("frame") else "")) if expected.get("kind") else "no crash"
     if v["status"] == "same":
         print(f"{head}: {name} -> {exp}")
+        if v.get("matched") == "own check":
+            print("  (the file failed in its own code, with no library frame: it is taken as your check of the same"
+                  " property; --show prints its output)")
     elif v["status"] == "different":
         got = v["got"]["kind"] + (f" in {v['got']['frame']}" if v["got"].get("frame") else "")
         print(f"{head}: {name}\n  expected: {exp}\n  got:      {got}")
@@ -903,10 +1090,22 @@ def cmd_try(a):
     f = Path(a.file).resolve()
     if not f.exists():
         die(f"{a.file} not found")
+    orig = f
     try:
         rel = f.relative_to(p.root.resolve())
     except ValueError:
-        die(f"{a.file} must be inside the project directory")
+        # it runs in the project's container, which only sees the project: copy it in, with the
+        # runtime stand-in that may be next to it (expected.json is still looked up next to the original)
+        d = p.state_dir / "tmp" / "try"
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+        for x in [f] + [f.parent / n for n in ("stitch.js", "stitch.py", "stitch.rb", "stitch_standalone.h")]:
+            if x.is_file():
+                shutil.copy2(x, d / x.name)
+        f = d / f.name
+        rel = f.relative_to(p.root.resolve())
+        if not JSON:
+            print(f"[stitch] {a.file} is outside the project: running a copy, {p.rel(f)}", file=sys.stderr)
     if a.crash:
         _, b = resolve_crash(p, a.crash, campaign=a.campaign)
         if b is None:
@@ -918,7 +1117,7 @@ def cmd_try(a):
         e = e / "expected.json" if e.is_dir() else e
         expected = json.loads(e.read_text())
     else:
-        expected = standalone.find_expected(f)
+        expected = standalone.find_expected(orig)
     if a.rev:
         image = build(p, rev=a.rev, image_only=True, quiet=True)["image"]
     else:
@@ -947,11 +1146,11 @@ def cmd_try(a):
                     print("  " + l.replace("/project/", ""))
         sys.exit(2 if t["status"] == "compile_error" else 0)
     t = standalone.try_file(p, image, str(rel), timeout=a.timeout, leaks="leak" in expected["kind"])
-    v = standalone.verdict(expected, t)
     text = f.read_text(errors="replace")
+    shimmed = standalone.uses_shim(p.language, text)
+    v = standalone.verdict(expected, t, plain=not shimmed)
     v["lines"] = standalone.code_lines(text)
-    shim = standalone.shim_name(p.language)
-    v["uses_shim"] = shim in text or (shim.endswith(".py") and re.search(r"^\s*(import stitch|from stitch )", text, re.M) is not None)
+    v["uses_shim"] = shimmed
     if JSON:
         reports.dump({**v, "expected": expected, "output": v["output"][-8000:]})
     else:
@@ -1007,24 +1206,27 @@ def main(argv=None):
     s.add_argument("--full", action="store_true", help="also rebuild the project image")
     s.set_defaults(fn=cmd_check)
 
-    s = sp.add_parser("probe", help="short fuzzing run + report of what blocks progress")
+    s = sp.add_parser("probe", help="short fuzzing run + report of what blocks progress (campaign 'probe', restarted each time)")
     s.add_argument("only", nargs="?", help="endpoint names/globs to focus on, comma separated (e.g. 'tree/*,parse')")
     s.add_argument("--secs", type=int, default=60)
+    s.add_argument("--jobs", type=int, default=1, help="parallel workers (default 1)")
     s.set_defaults(fn=cmd_probe)
 
     s = sp.add_parser("fuzz", help="start a campaign in the background")
-    s.add_argument("--name", default="main")
-    s.add_argument("--secs", type=int)
-    s.add_argument("--jobs", type=int)
-    s.add_argument("--only")
-    s.add_argument("--fresh", action="store_true", help="discard the existing corpus")
-    s.add_argument("--foreground", action="store_true")
+    s.add_argument("--name", default="main", help="campaign name (default: main). Running it again resumes its corpus and "
+                   "crashes; each campaign numbers its crashes from c1 (refer to others as NAME:c3)")
+    s.add_argument("--secs", type=int, help="stop after this many seconds (default: run until `stitch stop`)")
+    s.add_argument("--jobs", type=int, help="parallel workers (default: [fuzz] jobs in stitch.toml)")
+    s.add_argument("--only", help="only these stubs and the stubs that produce their inputs: names/globs, comma separated")
+    s.add_argument("--fresh", action="store_true", help="start the campaign over: discard its corpus and crashes")
+    s.add_argument("--foreground", action="store_true", help="run in this terminal and print the final stats")
     s.set_defaults(fn=cmd_fuzz)
 
     s = sp.add_parser("status", help="campaign progress and health report")
     s.add_argument("name", nargs="?")
     s.add_argument("--limit", type=int, default=15)
     s.add_argument("--mutations", action="store_true", help="also show which mutation operators find new coverage")
+    s.add_argument("--wait", action="store_true", help="wait until the campaign stops (after --secs), then print the status")
     s.set_defaults(fn=cmd_status)
 
     s = sp.add_parser("stop", help="stop a campaign")
@@ -1040,7 +1242,7 @@ def main(argv=None):
     s.add_argument("--campaign", help="campaign for a crash id like c3 (default: the latest; or write CAMPAIGN:c3)")
     s.add_argument("--args", action="store_true", help="print every call with its arguments in full (--trace shortens long values)")
     s.add_argument("--trace", action="store_true", help="print every call with its arguments")
-    s.add_argument("--timeout", type=int, default=60)
+    s.add_argument("--timeout", type=int, default=None, help="kill it after this many seconds (default: 5x the campaign's timeout_ms, at least 10)")
     s.add_argument("--rev", help="run against the library at this revision (e.g. HEAD: is it fixed upstream?)")
     s.set_defaults(fn=cmd_exec)
 
@@ -1048,7 +1250,7 @@ def main(argv=None):
     s.add_argument("crash", help=CRASH_REF)
     s.add_argument("--campaign", help="campaign for a crash id like c3 (default: the latest; or write CAMPAIGN:c3)")
     s.add_argument("-o", "--output")
-    s.add_argument("--secs", type=int, default=120)
+    s.add_argument("--secs", type=int, default=120, help="time budget (default 120); it stops earlier when nothing more can be removed")
     s.set_defaults(fn=cmd_minimize)
 
     s = sp.add_parser("repro", help="write a self-contained dockerized reproducer")
@@ -1078,14 +1280,14 @@ def main(argv=None):
     s.set_defaults(fn=cmd_write)
 
     s = sp.add_parser("try", help="build + run a standalone reproducer and compare its crash with the original")
-    s.add_argument("file", help="reproducer file inside the project (expected.json is found next to it)")
+    s.add_argument("file", help="reproducer file (expected.json is found next to it); a file outside the project runs from a copy")
     s.add_argument("crash", nargs="?", help="compare with this crash instead of expected.json (c3, probe:c3); "
                    "with neither, just run the file and report what happens")
     s.add_argument("--campaign", help="campaign for a crash id like c3 (default: the latest; or write CAMPAIGN:c3)")
     s.add_argument("--expect", help="expected.json (or its directory) from `stitch write`")
     s.add_argument("--rev", help="build against the library at this revision")
     s.add_argument("--timeout", type=int, default=60)
-    s.add_argument("--show", action="store_true", help="print the program output")
+    s.add_argument("--show", action="store_true", help="print the program's output (shown anyway when the crash differs or is missing)")
     s.set_defaults(fn=cmd_try)
 
     s = sp.add_parser("bisect", help="find the library commit that introduced a crash")
@@ -1134,6 +1336,12 @@ def main(argv=None):
         die(str(e))
     except KeyboardInterrupt:
         die("interrupted", 130)
+    except BrokenPipeError:  # output piped into `head` and the like
+        try:
+            sys.stdout = open(os.devnull, "w")
+        except OSError:
+            pass
+        sys.exit(0)
 
 
 if __name__ == "__main__":

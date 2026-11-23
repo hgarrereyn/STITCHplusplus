@@ -14,11 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir "coverage>=7.6,<8"
 ENV PATH=/stitch/bin:/opt/venv/bin:$PATH \
     VIRTUAL_ENV=/opt/venv \
-    PYTHONPATH=/stitch/python \
     PYTHONDONTWRITEBYTECODE=1 \
     STITCH_LANGUAGE=python \
     STITCH_HOME=/stitch
 COPY runtime /stitch/python
+# the runtime is on the venv's path through a .pth file, not PYTHONPATH, so a project Dockerfile
+# can set PYTHONPATH (ENV PYTHONPATH=/src) without losing it
+RUN echo /stitch/python > "$(/opt/venv/bin/python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/stitch-runtime.pth"
 COPY bin /stitch/bin
 RUN chmod +x /stitch/bin/*
 

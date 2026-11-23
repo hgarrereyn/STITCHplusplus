@@ -123,7 +123,9 @@ def _buildx(args, log: Path, what: str, quiet=False):
     with open(log, "w") as f:
         r = _run(["docker", "buildx", "build", "--progress=plain", "--load", *args], stdout=f, stderr=subprocess.STDOUT)
     if r.returncode != 0:
-        tail = log.read_text(errors="replace").splitlines()[-60:]
+        # STITCH_BASE has no default (the CLI always passes it): Docker's warning about that is noise
+        tail = [l for l in log.read_text(errors="replace").splitlines()
+                if "InvalidDefaultArgInFrom" not in l and "warning found (use docker --debug" not in l][-60:]
         raise DockerError(f"building {what} failed (full log: {log}):\n" + "\n".join(tail))
 
 
@@ -267,6 +269,21 @@ def run_args(project, image, *, name=None, detach=False, tty=False, extra_mounts
     if project.cfg["docker"].get("platform"):
         args += ["--platform", project.cfg["docker"]["platform"]]
     return args + [image]
+
+
+def build_errors(r, limit=3000) -> str:
+    """Why a captured `stitch-build --json` run failed: the compiler output from its JSON result
+    (stdout), else whatever it printed."""
+    lines = (r.stdout or "").strip().splitlines()
+    try:
+        res = json.loads(lines[-1]) if lines else {}
+    except json.JSONDecodeError:
+        res = {}
+    text = "\n".join(f"--- {e.get('file', 'build')} ---\n{(e.get('output') or '').rstrip()}"
+                     for e in res.get("errors", []) if (e.get("output") or "").strip())
+    if not text:
+        text = ((r.stderr or "") + (r.stdout or "")).strip() or f"stitch-build exited with {r.returncode} and printed nothing"
+    return text[-limit:]
 
 
 def run(project, image, cmd, *, capture=False, check=False, timeout=None, **kw):

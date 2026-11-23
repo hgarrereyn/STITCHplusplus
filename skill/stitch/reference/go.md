@@ -316,7 +316,7 @@ func fromEntries(es []Entry) *Doc { ... }
 | `Str(max)`, `Bytes(max)` | text or bytes of at most `max` bytes |
 | `Fixed(n)` | exactly n bytes |
 | `Rest()` | every byte that is left |
-| `Token()` | a token from the data type's `.dict` files |
+| `Token()` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `stitch.Draw[T](s, name)` | a value from data type `name`'s decoder |
 
 Choices must replay the same way: sort map keys before `stitch.Pick`.

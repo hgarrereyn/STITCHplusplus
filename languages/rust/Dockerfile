@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/llvm-symbolizer-18 /usr/local/bin/llvm-symbolizer \
     && ln -sf /usr/bin/llvm-cxxfilt-18 /usr/local/bin/llvm-cxxfilt
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/stitch/bin:/opt/cargo/bin:$PATH
-RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain ${RUST_NIGHTLY} \
+RUN curl -sSf -o /tmp/rustup.sh https://sh.rustup.rs && sh /tmp/rustup.sh -y --profile minimal --default-toolchain ${RUST_NIGHTLY} \
     && rustup component add llvm-tools \
     && rustc --version && chmod -R a+rwX /opt/cargo /opt/rustup
 ENV STITCH_LANGUAGE=rust \

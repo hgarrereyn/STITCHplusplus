@@ -1,0 +1,7 @@
+{
+ "kind": "AssertionError",
+ "frame": "",
+ "signature": "AssertionError | Stubs.dump_all_roundtrip (stub)",
+ "from": ".stitch/campaigns/run3/w0/crashes/21c206b879e41a93.min.stp",
+ "crash_id": "run3-c6"
+}

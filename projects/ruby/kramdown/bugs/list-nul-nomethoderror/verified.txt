@@ -1,0 +1,2 @@
+verified: same crash
+NoMethodError | block in Kramdown::Parser::Kramdown#parse_list list.rb:136 | Array#each list.rb | Kramdown::Parser::Kramdown#parse_list list.rb

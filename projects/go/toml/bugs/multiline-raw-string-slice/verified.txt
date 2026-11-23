@@ -1,0 +1,2 @@
+verified: same crash
+slice bounds out of range | toml.lexer.current lex.go:115 | toml.lexer.emit lex.go | toml.lexMultilineRawString lex.go

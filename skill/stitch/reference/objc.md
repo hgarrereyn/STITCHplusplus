@@ -337,7 +337,7 @@ STITCH_ENDPOINT(void, put_all, Borrow(Store) st, Val(Pairs, 256) kvs) {
 | `str:max`, `bytes:max` | `NSString` or `NSData` of at most `max` bytes |
 | `fixed:n` | exactly n bytes |
 | `rest` | every byte that is left |
-| `token` | a token from the data type's `.dict` files |
+| `token` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw:@"Tag"` (`STDraw(s, Tag)`) | a value from data type `Tag`'s decoder |
 
 Running out of choices is fine: later draws return zeros and `more` returns `NO`.

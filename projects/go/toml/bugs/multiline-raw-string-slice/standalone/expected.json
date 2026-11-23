@@ -1,0 +1,7 @@
+{
+ "kind": "check failed: typed encoder output decodes",
+ "frame": "",
+ "signature": "check failed: typed encoder output decodes | in encode_typed",
+ "from": ".stitch/campaigns/probe/w0/crashes/ac5e1d6815319cae.stp",
+ "crash_id": "c5"
+}

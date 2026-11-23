@@ -138,7 +138,8 @@ FROM ${{STITCH_BASE}}
 COPY --from=source . /src
 WORKDIR /src
 # TypeScript or bundled packages: RUN npm install --ignore-scripts && npm run build
-RUN npm install --omit=dev --ignore-scripts
+# the library's runtime dependencies (--legacy-peer-deps: devDependency peer conflicts don't block it)
+RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund
 RUN cd /opt && npm install /src
 """
 
@@ -220,8 +221,8 @@ language = "go"
 {source}
 
 [go]
-module = "example.com/{module}"    # import path of the library (its source is at /src)
-# instrument = ["example.com/{module}/..."]   # packages to instrument (default: all but std)
+module = "{gomod}"    # import path of the library: the `module` line of its go.mod (source at /src)
+# instrument = ["{gomod}/..."]   # packages to instrument (default: all but std)
 # race = true                       # build with the race detector
 
 [fuzz]
@@ -270,7 +271,8 @@ language = "rust"
 {source}
 
 [rust.dependencies]                 # the harness crate's dependencies (the library is at /src)
-{module} = {{ path = "/src" }}      # rename to the library's crate name (`name` in /src/Cargo.toml)
+{module} = {{ path = "/src" }}      # rename to the library's crate name (`name` in /src/Cargo.toml);
+                                    # a workspace: path = "/src/<crate>"; default-features = false if needed
 
 [fuzz]
 timeout_ms = 2000
@@ -316,7 +318,7 @@ language = "ruby"
 {source}
 
 [ruby]
-include = []     # gem names (or path prefixes) of the code under test, e.g. ["rexml"] (empty: all but the standard library)
+include = ["/src/lib"]   # code under test: path prefixes, or gem names of installed gems (empty: all but the standard library)
 
 [fuzz]
 timeout_ms = 2000
@@ -324,13 +326,15 @@ max_nodes = 24
 jobs = 1
 """
 
-RB_DOCKERFILE = """# Installs the library under test as a gem into the image's Ruby 3.4.
+RB_DOCKERFILE = """# The library under test from its source tree (/src/lib on the load path), on the image's Ruby 3.4.
 #   STITCH_BASE  Ruby + the STITCH++ runtime
 #   source       build context with the library source at the requested version
 ARG STITCH_BASE
 FROM ${{STITCH_BASE}}
 COPY --from=source . /src
-RUN cd /src && gem build *.gemspec && gem install --local ./*.gem
+# its dependencies: from the gemspec when the repository has one (else: RUN gem install dep1 dep2)
+RUN cd /src && if ls *.gemspec >/dev/null 2>&1; then gem build *.gemspec && gem install ./*.gem; fi
+ENV RUBYLIB=/src/lib
 """
 
 RB_EXAMPLE = """# Stubs: one Stitch.endpoint per API call. The specs hash is the signature.
@@ -363,7 +367,7 @@ language = "swift"
 
 [swift]
 dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness
-products = ['.product(name: "{name}", package: "src")']             # the library products it imports
+products = ['.product(name: "{swift_product}", package: "src")']    # library products it imports: `.library(name:` in /src/Package.swift (case matters)
 
 [fuzz]
 timeout_ms = 2000
@@ -482,7 +486,7 @@ LANGS = {
                        "write stubs in harness/*.java, then `stitch build` and `stitch probe`"]},
     "go": {"toml": GO_TOML, "dockerfile": GO_DOCKERFILE, "files": {"harness/stubs.go": GO_EXAMPLE},
            "steps": ["edit Dockerfile until `stitch build --image-only` works",
-                     "set [go] module in stitch.toml to the library's module path",
+                     "check [go] module in stitch.toml: the `module` line of the library's go.mod",
                      "write stubs in harness/*.go (package harness), then `stitch build` and `stitch probe`"]},
     "swift": {"toml": SWIFT_TOML, "dockerfile": SWIFT_DOCKERFILE, "files": {"harness/stubs.swift": SWIFT_EXAMPLE},
               "steps": ["edit Dockerfile until `stitch build --image-only` works (the package source in /src)",
@@ -490,7 +494,7 @@ LANGS = {
                         "write stubs in harness/*.swift, then `stitch build` and `stitch probe`"]},
     "ruby": {"toml": RB_TOML, "dockerfile": RB_DOCKERFILE, "files": {"harness/stubs.rb": RB_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works (the library must gem install)",
-                       "optional: set [ruby] include in stitch.toml to the library's gem name (narrower instrumentation and coverage)",
+                       "if the library's code is not under /src/lib, change RUBYLIB in the Dockerfile and [ruby] include in stitch.toml",
                        "write stubs in harness/*.rb, then `stitch build` and `stitch probe`"]},
     "objc": {"toml": OBJC_TOML, "dockerfile": OBJC_DOCKERFILE, "files": {"harness/stubs.m": OBJC_EXAMPLE},
              "steps": ["edit Dockerfile until `stitch build --image-only` works",
@@ -501,6 +505,36 @@ LANGS = {
                        "in stitch.toml [rust.dependencies], name the library dependency after its crate",
                        "write stubs in harness/*.rs, then `stitch build` and `stitch probe`"]},
 }
+
+
+def _go_module(git, path, fallback):
+    """The library's Go module path: from go.mod in a local checkout, else guessed from the git URL
+    (github.com/owner/repo; a major version >= 2 adds /vN, so check go.mod)."""
+    import re
+    if path:
+        gm = Path(path).expanduser() / "go.mod"
+        if gm.is_file():
+            m = re.search(r"^module\s+(\S+)", gm.read_text(errors="replace"), re.M)
+            if m:
+                return m.group(1)
+    m = re.match(r"(?:https?://|git@)([^/:]+)[/:]([^/]+)/([^/]+?)(?:\.git)?/?$", git or "")
+    if m:
+        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    return f"example.com/{fallback}"
+
+
+def _swift_product(git, path, fallback):
+    """The package's first library product: from Package.swift of a local checkout, else the
+    repository's name (SwiftPM names are case-sensitive: Ink, not ink)."""
+    import re
+    if path:
+        ps = Path(path).expanduser() / "Package.swift"
+        if ps.is_file():
+            m = re.search(r'\.library\(\s*name:\s*"([^"]+)"', ps.read_text(errors="replace"))
+            if m:
+                return m.group(1)
+    m = re.search(r"/([^/]+?)(?:\.git)?/?$", git or "")
+    return m.group(1) if m else fallback
 
 
 def init_project(root: Path, name=None, git=None, rev=None, path=None, language="cpp") -> str:
@@ -518,7 +552,9 @@ def init_project(root: Path, name=None, git=None, rev=None, path=None, language=
         source = f'git = "{git}"\nrev = "{rev or "HEAD"}"   # branch, tag or commit; `stitch build --rev X` overrides it'
     else:
         source = f'path = "{path}"   # local checkout, used as-is (uncommitted changes included)'
-    (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module))
+    (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module,
+                                                       gomod=_go_module(git, path, module),
+                                                       swift_product=_swift_product(git, path, name)))
     (root / "Dockerfile").write_text(t["dockerfile"].format(name=name))
     (root / ".dockerignore").write_text(".stitch\n")
     (root / ".gitignore").write_text(".stitch/\n")

@@ -8,7 +8,7 @@ LIVENESS_KEYS = {"alive", "freed", "dead", "destroyed", "valid", "live", "delete
 # stitch::set (C++), stitch.set (Python, JS), Stitch.set (Java, Ruby), stitch.Set (Go), STSetInt (Objective-C)
 _API = r"\b[Ss]titch(?:::|\.)"
 _ATTR_RE = re.compile(_API + r"(set|get|get_str|getStr|get_obj|getObj|getLong|getString|has|del|delete|Set|Get|GetStr|GetObj|GetInt|GetString|Has|Del)"
-                      r"(?:\s*<[^>]*>|\[[^\]]*\])?\s*\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*[\"']([^\"']+)[\"']")
+                      r"(?:\s*<[^>]*>|\[[^\]]*\])?\s*\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*[\"']([^\"'\n]+)[\"']")
 _GLOBAL_RE = re.compile(_API + r"(global_set|global_set_str|global_get|global_get_str|global_has|globalSet|globalGet"
                         r"|globalHas|GlobalSet|GlobalGet|GlobalHas)\s*\(\s*[\"']([^\"']+)[\"']")
 # Objective-C: STSetInt(obj, @"key", v), STGetStr(obj, @"key"), STGetObj(obj, @"key", T), STGlobalGet(@"key")
@@ -18,9 +18,34 @@ _SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".h", ".c", ".py", ".js", ".mjs", ".
              ".m", ".mm"}
 
 
+def _strip_hash_comments(src):
+    """Python/Ruby: drop '#' comments, but not a '#' inside a string ("att#{n}", "a#b")."""
+    out, i, n, quote = [], 0, len(src), None
+    while i < n:
+        c = src[i]
+        if quote:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 1
+            elif c == quote or c == "\n":
+                quote = None
+        elif c in "\"'":
+            quote = c
+            out.append(c)
+        elif c == "#":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def strip_comments(src, suffix=".cpp"):
     if suffix in (".py", ".rb"):
-        return re.sub(r"#[^\n]*", "", src)
+        return _strip_hash_comments(src)
     src = re.sub(r"//[^\n]*", "", src)
     return re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)
 
@@ -34,6 +59,8 @@ def attr_lints(project):
         code = strip_comments(f.read_text(errors="replace"), f.suffix)
         for m in _ATTR_RE.finditer(code):
             op, key = m.group(1).lower(), m.group(3)
+            if re.search(r"#\{|\$\{|%[sd]", key):  # built at run time ("att#{n}"): not checkable
+                continue
             line = code.count("\n", 0, m.start()) + 1
             loc = f"{project.rel(f)}:{line}"
             (sets if op == "set" else gets)[key].append(loc)

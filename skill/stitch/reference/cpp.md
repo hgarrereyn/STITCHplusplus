@@ -289,8 +289,55 @@ void print_item(Borrow<Item> it) {
 STITCH_ENDPOINT(print_item);
 ```
 
-The link target must already exist when you set it: an input of the call (`Borrow`/`Take`).
-A link to another output of the same call does not work and reads as missing.
+The link target must already exist when you set it: an input of the call (`Borrow`/`Take`), or
+a raw handle of an object in the pool (it finds that object). A link to another output of the same
+call does not work and reads as missing.
+
+### Handles that die with their owner
+
+DOM nodes, iterators and views are borrowed pointers into an owner object. A call on the owner
+can free them (`DeleteChildren`, `Clear`, a reparse) while their objects are still in the pool,
+and the next stub that uses one reads freed memory: a harness bug, not a library bug. Link each
+such object to its owner and stamp it with the owner's *generation*; calls that free them bump
+the generation, and stubs bail on stale objects:
+
+```cpp
+STITCH_OBJECT(Doc, XMLDocument*);
+STITCH_OBJECT(Node, XMLNode*);
+
+static void adopt(New<Node>& n, XMLDocument* d) {       // a node made now
+    stitch::set(n, "doc", d);                            // link to the owner (a raw handle works)
+    stitch::set(n, "gen", stitch::get(d, "gen", 0));     // the owner's state when it was made
+}
+static XMLNode* live(Borrow<Node>& n) {                 // the node, or a bail if it may be freed
+    XMLDocument** d = stitch::get_obj<Doc>(n, "doc");
+    stitch::require(d != nullptr, "document is gone");
+    stitch::require(stitch::get(n, "gen") == stitch::get(*d, "gen", 0), "node may have been freed");
+    return n;
+}
+
+New<Node> first_child(Borrow<Node> parent) {
+    XMLNode* p = live(parent);
+    stitch::require(p->FirstChild(), "no children");
+    New<Node> n(p->FirstChild());
+    adopt(n, p->GetDocument());
+    return n;
+}
+STITCH_ENDPOINT(first_child);
+
+void delete_children(Borrow<Node> parent) {
+    XMLNode* p = live(parent);
+    p->DeleteChildren();
+    XMLDocument* d = p->GetDocument();
+    stitch::set(d, "gen", stitch::get(d, "gen", 0) + 1);       // every node made before may be gone
+    stitch::set(parent, "gen", stitch::get(d, "gen", 0));      // except the parent: re-stamp it
+}
+STITCH_ENDPOINT(delete_children);
+```
+
+Every stub that takes a `Node` starts with `live(n)`. This is coarse (a deletion retires every
+older node of the document) but never lets a freed node through; re-stamp the objects a call is
+known to keep. Without it, this harness finds its own use-after-free within a minute.
 
 ## Data types and decoders
 
@@ -366,7 +413,7 @@ STITCH_ENDPOINT(fill);
 | `str(max)`, `bytes(max)` | text or bytes of at most `max` bytes |
 | `fixed(n)` | exactly n bytes |
 | `rest()` | every byte that is left |
-| `token()` | a token from the data type's `.dict` files |
+| `token()` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw<Tag>()` | a value from data type `Tag`'s decoder |
 
 Running out of choices is fine: later draws return zeros and `more()` returns false.

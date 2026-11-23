@@ -9,7 +9,7 @@ FROM ${STITCH_ENGINE} AS engine
 
 FROM ubuntu:24.04 AS toolchain
 ARG TARGETARCH
-ARG NODE_VERSION=22.11.0
+ARG NODE_VERSION=22.21.0
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl xz-utils git python3 build-essential \

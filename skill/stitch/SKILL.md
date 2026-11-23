@@ -267,6 +267,7 @@ stitch fuzz --jobs 4    # campaign 'main' in the background; resumes its corpus
 stitch fuzz --fresh     # start the corpus over
 stitch fuzz --secs 900 --foreground     # wait, then print the final stats
 stitch status           # progress and the report
+stitch status --wait    # block until a campaign started with --secs ends, then report
 stitch stop
 ```
 
@@ -274,11 +275,11 @@ A probe report:
 
 ```
 probe: 20s, 42.8k execs (2.1k/s), 733/3298 edges, corpus 461, calls bailing 13% (programs with a bail 66%), 0 crash/timeout programs saved
-never succeeds (1): the fuzzer stops picking these
+never succeeds (1, 20+ calls and none ok so far): the fuzzer picks these less and less
   item_string  [600 calls] "root is gone" x600; read missing attr 'root'
-outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):
-  add_item.obj: ok 2% after parse vs 100% after new_object
-  delete_key.obj: ok 0% after parse vs 79% after print_opts
+depends on where an input came from (the stub that made or last used that object; the fuzzer learns these pairs. Act only when the low one should work: a different kind of object behind one type gets its own type):
+  add_item(obj): ok 2% when obj last came from parse, 100% when from new_object
+  delete_key(obj): ok 0% when obj last came from parse, 79% when from print_opts
 often skipped because an input object was missing (1): its producer bailed or returned no object
   item_string  skipped 13797x, ran 600x
 ```
@@ -291,7 +292,7 @@ succeeds on objects, and `parse` often returns arrays or numbers: that is expect
 |---|---|
 | never succeeds | The stub always bails or always crashes. Read its reasons: a missing producer, an attribute nobody sets (`read missing attr 'x'`), or something missing in the environment (a server, a file). Fix the stub or add a producer. |
 | mostly bails | Use `Range`/`OneOf` instead of rejecting values. Bails from parse errors on fuzzed input are fine. |
-| outcome depends on the previous call | Usually normal: the fuzzer learns these pairs. Investigate only if the stub should accept both. |
+| depends on where an input came from | Usually normal: the fuzzer learns these pairs. Investigate only if the stub should accept both; if one type holds different kinds of objects (a parsed value that may be an array or a number), split it into types with one producer each. |
 | often skipped | The producer of one of its inputs usually fails. Fix the producer. |
 | never called | No producer makes one of its inputs, or the run was too short. |
 | calls bailing above 50% | Most work is wasted. Fix the stubs that bail most. |
@@ -342,13 +343,14 @@ stitch exec c1 --rev HEAD  # does it still crash on the newest library code?
 ```
 
 Crashes are grouped by kind and innermost library frames. The stub named in the list comes from
-one example program; other programs in the group may crash in another stub. One bug can show as
-several groups (a stack overflow ends in different frames): fix or explain the first, then run
-`stitch crashes` again.
+one example program; other programs in the group may crash in another stub. A stack overflow
+is grouped by its stub instead of its frames (it ends wherever the stack runs out). One bug can
+still show as several groups: fix or explain the first, then run `stitch crashes` again.
 
-Crash ids: `c1` is in the latest campaign that is not `probe` (or in `probe` if there is no
-other). Use `probe:c1` or `--campaign probe` for another campaign. Ids stay the same while a
-campaign runs. After you change the harness, `stitch crashes` reruns the crashes with the new
+Crash ids: each campaign numbers its crashes from `c1`, so `probe:c1` and `main:c1` are
+different crashes. A bare `c1` is in the latest campaign that is not `probe` (or in `probe` if
+there is no other); commands print which one they used. Use `probe:c1` or `--campaign probe` for
+another campaign. Ids stay the same while a campaign runs. After you change the harness, `stitch crashes` reruns the crashes with the new
 build, so crashes caused by fixed stubs disappear.
 
 Decide for each crash:
@@ -412,7 +414,7 @@ Steps and pitfalls: `stitch guide reproducers`.
 | `stitch check` | build + static checks |
 | `stitch probe [STUBS] [--secs N]` | short run + report (`STUBS`: `'parse,tree/*'`) |
 | `stitch fuzz [--jobs N] [--secs N] [--name NAME] [--only STUBS] [--fresh] [--foreground]` | campaign, in the background by default |
-| `stitch status [NAME]`, `stitch stop [NAME]` | campaign progress; stop it |
+| `stitch status [NAME] [--wait]`, `stitch stop [NAME]` | campaign progress (`--wait`: until it ends); stop it |
 | `stitch crashes [NAME]` | unique crashes |
 | `stitch exec ID [--trace\|--args] [--rev REV]` | run a crash or a `.stp` program file |
 | `stitch minimize ID` | shrink a crashing program |
@@ -420,7 +422,7 @@ Steps and pitfalls: `stitch guide reproducers`.
 | `stitch repro ID` | Docker reproducer folder |
 | `stitch write ID` | standalone source file of a crash |
 | `stitch try FILE [ID] [--rev REV] [--show]` | build and run a standalone file, compare with the crash |
-| `stitch bisect ID [--good REV] [--fixed]` | the commit that introduced (or fixed) a crash |
+| `stitch bisect ID [--good REV] [--fixed [--fixed-at REV]]` | the commit that introduced a crash, or (`--fixed`) the one that fixed it |
 | `stitch sample TYPE [-n N]` | values a data type's decoder makes |
 | `stitch shell` | shell in the project image |
 | `stitch guide [TOPIC]` | this guide; topics: a language name, `reproducers` |

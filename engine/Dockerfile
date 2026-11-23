@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
-RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.93.1
+RUN curl -sSf -o /tmp/rustup.sh https://sh.rustup.rs && sh /tmp/rustup.sh -y --profile minimal --default-toolchain 1.93.1
 COPY . /src/engine
 RUN --mount=type=cache,target=/opt/cargo/registry \
     --mount=type=cache,target=/src/engine/target \

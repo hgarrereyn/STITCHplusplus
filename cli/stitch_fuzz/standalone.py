@@ -768,11 +768,20 @@ def _top_loc(signature: str) -> str:
     return top.rsplit(" ", 1)[-1] if " " in top else ""
 
 
+def _same_function(a: str, b: str) -> bool:
+    """Frame names that differ only in qualification: runtimes name a method `Class.method` but a
+    plain traceback may show `method` (Python's co_name), or a namespace may be dropped."""
+    if a == b:
+        return True
+    short, full = sorted((a, b), key=len)
+    return any(full.endswith(sep + short) for sep in (".", "::", "#", " "))
+
+
 def compare(expected: dict, got: dict) -> str:
     """'same' | 'different'"""
     if expected["kind"] != got["kind"]:
         return "different"
-    if expected["frame"] and got["frame"] and expected["frame"] != got["frame"]:
+    if expected["frame"] and got["frame"] and not _same_function(expected["frame"], got["frame"]):
         # a frame without a name (a function inlined where the backtrace cannot name it) still has
         # its file and line
         if got["frame"] == "<panic>" or expected["frame"] == "<panic>":
@@ -809,6 +818,8 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
     if minimized.exists() and crash.suffix == ".stp" and not crash.stem.endswith(".min"):
         crash = minimized
     rid = (bucket["id"] if bucket else crash.stem[:16]).replace(":", "-")
+    if bucket and bucket.get("campaign") not in (None, "main"):  # ids are per campaign: probe:c3 is not main:c3
+        rid = f"{bucket['campaign']}-{rid}"
     d = (outdir or (p.state_dir / "standalone" / rid)).resolve()
     try:
         rel = d.relative_to(p.root.resolve())
@@ -834,7 +845,14 @@ def write(p, crash: Path, bucket, outdir: Path = None, run_check=True, verbose=T
                    + (f" (bucket {rid} was found with an older harness build, or is flaky; `stitch crashes` lists "
                       "the buckets that still reproduce)" if bucket else ""))
     elif bucket and rep["signature"] != bucket.get("signature"):
-        warning = (f"{p.rel(crash)} now crashes differently from bucket {rid} ({rep['kind']} instead of {bucket.get('kind')}); "
+        if rep["kind"] != bucket.get("kind"):
+            diff = f"{rep['kind']} instead of {bucket.get('kind')}"
+        else:  # same kind: say where they differ (the location, or the stub)
+            a, b = rep["signature"].split(" | "), (bucket.get("signature") or "").split(" | ")
+            i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+            diff = (f"{rep['kind']} at {a[i] if i < len(a) else '(no frame)'} instead of "
+                    f"{b[i] if i < len(b) else '(no frame)'}")
+        warning = (f"{p.rel(crash)} now crashes differently from bucket {rid} ({diff}); "
                    "the reproducer expects the new crash")
     if p.language != "cpp":
         res = _write_lang(p, image, d, rel, rid, title, crash, expected, run_check)
@@ -936,7 +954,25 @@ def shim_name(language):
     return writers.get(language).SHIM
 
 
-def verdict(expected, t):
+# The program failed before it could reproduce anything: the library (or a name in it) did not load.
+# Common at another --rev, where the library changed its module format or API.
+LOAD_FAILURE = re.compile(
+    r"ERR_REQUIRE_ESM|ERR_MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find module|is not a function|"
+    r"is not a constructor|ModuleNotFoundError|ImportError|cannot import name|has no attribute|"
+    r"LoadError|cannot load such file|uninitialized constant|undefined method|NoClassDefFoundError|"
+    r"ClassNotFoundException|NoSuchMethodError|NoSuchFieldError|SyntaxError|ReferenceError: \w+ is not defined|"
+    r"NameError: name")
+
+
+def uses_shim(language, text) -> bool:
+    """Does a standalone file still use the stitch runtime stand-in (not plain library code)?"""
+    shim = shim_name(language)
+    return shim in text or re.search(r"^\s*(import stitch\b|from stitch |.*require(_relative)?\(?\s*[\"'](\./)?stitch[\"'])",
+                                     text, re.M) is not None
+
+
+def verdict(expected, t, plain=False):
+    """`plain`: the file is plain library code (no shim), which may detect a failed check its own way."""
     v = {"status": t["status"]}
     if not expected.get("kind"):  # the original program did not crash
         if t["status"] in ("no_crash", "crash"):
@@ -961,7 +997,9 @@ def verdict(expected, t):
             same = True
         # ... or a failure the reproducer raises in its own code (abort, assert, an exception with no
         # library frame): the plain program detects the same wrong behavior the oracle checked
-        if what and not same and not got["frame"] and t["report"].get("kind") != "timeout":
+        # (not when it failed before reaching the library: a module that does not load, a missing name)
+        if what and plain and not same and not got["frame"] and t["report"].get("kind") != "timeout" \
+                and not LOAD_FAILURE.search(t["output"]):
             same = True
             v["matched"] = "own check"
         v["status"] = "same" if same else "different"

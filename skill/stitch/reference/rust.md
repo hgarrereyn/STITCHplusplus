@@ -32,7 +32,7 @@ git = "https://github.com/dtolnay/semver"
 rev = "1.0.0"
 
 [rust.dependencies]          # the harness crate's dependencies, as in Cargo.toml
-semver = { path = "/src" }
+semver = { path = "/src" }   # key = the crate's `name` in its Cargo.toml (dashes allowed)
 # serde_json = "1"
 
 [rust]
@@ -41,6 +41,21 @@ semver = { path = "/src" }
 [fuzz]
 timeout_ms = 2000
 ```
+
+The dependency is an ordinary Cargo dependency: add `default-features = false` (and
+`features = [...]`) when the library's default features pull in things you don't fuzz, such as a
+command-line binary's dependencies.
+
+If the library is a Cargo workspace, point `path` at the crate's folder (`/src/<crate>`). When the
+layout changes between versions (a crate that moved into a workspace later), `--rev` builds fail
+with "found a virtual manifest". Give the crate a fixed path in the `Dockerfile` instead:
+
+```dockerfile
+COPY --from=source . /src
+RUN if [ -f /src/mycrate/Cargo.toml ]; then ln -s /src/mycrate /lib-src; else ln -s /src /lib-src; fi
+```
+
+and depend on `mycrate = { path = "/lib-src" }`.
 
 ## Files
 
@@ -117,6 +132,21 @@ object!(Req, VersionReq, drop = |r: VersionReq| log(&format!("drop {}", r)));   
 | `-> Result<R, E>` | `Err` is a bail; `R` is any of the above or `()` |
 
 Plain values (`bool`, `String`) are not valid return types.
+
+Handles are `'static`: a library type that borrows its input (`Parser<'a>` over a `&'a str`)
+can't be an object. Make the object own the input (the text and the options) and build the
+borrowing value inside each stub that needs it:
+
+```rust
+pub struct Doc { pub text: String, pub opts: Options }
+object!(MdDoc, Doc);
+
+endpoint! {
+    fn events(d: Borrow<MdDoc>) {
+        for ev in Parser::new_ext(&d.text, d.opts) { /* ... */ }
+    }
+}
+```
 
 ```rust
 endpoint! {
@@ -317,7 +347,7 @@ endpoint! {
 | `str(max) -> String`, `bytes(max) -> Vec<u8>` | text or bytes of at most `max` bytes |
 | `fixed(n) -> Vec<u8>` | exactly n bytes |
 | `rest() -> Vec<u8>` | every byte that is left |
-| `token() -> String` | a token from the data type's `.dict` files |
+| `token() -> String` | often a token from the data type's `.dict` files; otherwise (and once mutated) any string, like `str`: check it when the input must be one of the tokens (or use `pick`) |
 | `draw::<Tag>()` | a value from data type `Tag`'s decoder |
 
 ## Reproducers

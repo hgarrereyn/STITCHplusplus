@@ -1,7 +1,8 @@
 # libxml2 v2.11.0 (large project)
 
 GNOME libxml2, built from source with CMake as a static library (no Python, zlib, LZMA, ICU, HTTP,
-FTP or threads) and ASan. 27 stubs over documents (`Doc`, freed with `xmlFreeDoc`) and element
+FTP or threads) and ASan. 27 stubs (the campaign below; `harness/ext/` has since added 226 more:
+reader, writer, URIs, containers, XPath axes, more tree calls) over documents (`Doc`, freed with `xmlFreeDoc`) and element
 views (`Node`, never freed: unlinked subtrees leak by design so every handle stays valid).
 
 ## Harness

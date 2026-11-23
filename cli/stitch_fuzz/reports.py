@@ -238,12 +238,21 @@ def _rust_panic(output):
 TIMEOUT_LINE = "[stitch] TIMEOUT"  # printed by reproducer scripts that stop a slow program
 
 
+_OVERFLOW = ("stack-overflow", "StackOverflowError", "RecursionError", "SystemStackError", "stack overflow",
+             "overflowed its stack", "stack exceeds")
+
+
+def is_stack_overflow(kind: str, summary: str) -> bool:
+    """Stack exhaustion, as each language reports it (engine/src/triage.rs has the same list)."""
+    return any(k in kind for k in _OVERFLOW) or "Maximum call stack size exceeded" in summary
+
+
 def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     timed_out = timed_out or TIMEOUT_LINE in output
     kind, summary, frames, endpoint, node = "", "", [], None, None
     in_stack = stack_done = False
     lang_exception = False  # a runtime's EXCEPTION report (Objective-C aborts after it: ASan's ABRT follows)
-    py = None
+    py = died = None
     if "[stitch] EXCEPTION in " not in output and "[stitch] CHECK FAILED" not in output:
         py = (_python_traceback(output) or _java_stack(output) or _go_panic(output) or _rust_panic(output)
               or _js_stack(output) or _ruby_backtrace(output))
@@ -266,6 +275,10 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
         m = re.match(r"\[stitch\] #(\d+) ([\w:]+)", l)
         if m:
             node, endpoint = int(m.group(1)), m.group(2)
+            continue
+        if l.startswith("[stitch] WORKER DIED ("):
+            # if nothing else explains it; named as below for a process that exits without a report
+            died = "crash (" + l[len("[stitch] WORKER DIED ("):].rstrip(")") + ", no error report)"
             continue
         if l.startswith("[stitch] CHECK FAILED: "):
             kind = "check failed: " + l[len("[stitch] CHECK FAILED: "):].rsplit(" (node", 1)[0]
@@ -340,19 +353,23 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
                     frames.append(f"{name} {loc.rsplit('/', 1)[-1].split(' ')[0]}")
             elif not l and frames:
                 stack_done = True
+    if died and not kind:
+        kind = died
     if swift_failure and (not kind or kind.startswith(("TRAP", "ILL")) or kind == "ABRT"):
         kind = swift_failure
     crashed = timed_out or exit_code != 0 or bool(kind)
     if timed_out:
         kind = "timeout"
     elif crashed and not kind:
-        kind = f"crash (exit {exit_code}, no sanitizer report)"
+        kind = f"crash (exit {exit_code}, no error report)"
+    # a stack overflow is bucketed by the stub, not by where the stack ran out (as in the engine)
+    overflow = is_stack_overflow(kind, summary)
     sig_fn = kind
-    if kind.startswith(("check failed", "uncaught")) or kind == "timeout" or not frames:
+    if kind.startswith(("check failed", "uncaught")) or kind == "timeout" or not frames or overflow:
         if endpoint:
             sig_fn += f" | in {endpoint}"
     sig = sig_fn
-    for i, f in enumerate(frames[:3]):
+    for i, f in enumerate([] if overflow else frames[:3]):
         nopos = re.sub(r"(?<!:):\d+(:\d+)?$", "", f)  # function names may contain "::"
         if i == 0:
             m = re.match(r"(.*[^:]):(\d+):\d+$", f)
