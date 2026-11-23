@@ -335,9 +335,12 @@ def health_report(s, limit=15):
             if hi["ok_rate"] - lo["ok_rate"] >= 0.5:
                 dep.append((e, lo, hi))
     if dep:
-        lines.append("outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):")
+        lines.append("depends on where an input came from (the stub that made or last used that object; the fuzzer"
+                     " learns these pairs. Act only when the low one should work: a different kind of object behind"
+                     " one type gets its own type):")
         for e, lo, hi in dep[:limit]:
-            lines.append(f"  {e['name']}.{lo['input']}: ok {reports.pct(lo['ok_rate'])} after {lo['after']} vs {reports.pct(hi['ok_rate'])} after {hi['after']}")
+            lines.append(f"  {e['name']}({lo['input']}): ok {reports.pct(lo['ok_rate'])} when {lo['input']} last came from"
+                         f" {lo['after']}, {reports.pct(hi['ok_rate'])} when from {hi['after']}")
     if skipped:
         lines.append(f"often skipped because an input object was missing ({len(skipped)}): its producer bailed or returned no object")
         for e in skipped[:limit]:
@@ -390,8 +393,9 @@ def cmd_probe(a):
     p = find_project(a.project)
     name = "probe"
     if not JSON:
-        print(f"[stitch] probing for {a.secs}s...", flush=True)
-    start_campaign(p, name, secs=a.secs, jobs=1, only=a.only, fresh=True, detach=False)
+        print(f"[stitch] probing for {a.secs}s of fuzzing" + (f" with {a.jobs} workers" if a.jobs > 1 else "")
+              + " (plus the harness build and worker start-up)...", flush=True)
+    start_campaign(p, name, secs=a.secs, jobs=a.jobs, only=a.only, fresh=True, detach=False)
     s = merged_stats(p.campaign_dir(name))
     if not s:
         die("probe produced no statistics (see .stitch/campaigns/probe/w0.log)")
@@ -407,6 +411,8 @@ def cmd_probe(a):
 
 def resolve_campaign(p, name):
     if name:
+        if not (p.campaign_dir(name) / "campaign.json").exists():
+            die(f"no campaign '{name}' (campaigns: {', '.join(p.campaigns()) or 'none yet: stitch fuzz'})")
         return name
     cs = [c for c in p.campaigns() if c != "probe"] or p.campaigns()
     if not cs:
@@ -569,6 +575,7 @@ def triage(p, name):
                 t["count"] += b["count"]
                 if b["example_nodes"] < t["example_nodes"]:
                     t["example"], t["example_nodes"] = b["example"], b["example_nodes"]
+                    t["reproduced"] = b.get("reproduced")
     bl = sorted(buckets.values(), key=lambda b: -b["count"])
     # ids stay the same across calls (and while a campaign runs): signature -> id, new ones appended
     ids_f = cdir / "triage-ids.json"
@@ -606,19 +613,41 @@ def cmd_crashes(a):
     p = find_project(a.project)
     name = resolve_campaign(p, a.name)
     bl = triage(p, name)
+    gone = not_reproduced(p, name)
+    note = (f"{gone} saved crash program{'s do' if gone != 1 else ' does'} not crash when rerun (flaky, or fixed"
+            " by a harness change): not listed") if gone else ""
     if JSON:
-        reports.dump({"campaign": name, "buckets": bl})
+        reports.dump({"campaign": name, "buckets": bl, "not_reproduced": gone})
         return
     if not bl:
-        print(f"no reproducible crashes in '{name}'")
+        print(f"no reproducible crashes in '{name}'" + (f"; {note}" if note else ""))
         return
     print(f"{len(bl)} unique crash{'es' if len(bl) != 1 else ''} in '{name}':")
     for b in bl:
-        print(f"  {b['id']:4s} x{b['count']:<5d} {b['kind']}  in {b.get('endpoint') or '?'}")
+        rp = b.get("reproduced")
+        flaky = f"  [flaky: crashed {rp[0]} of {rp[1]} runs]" if rp and rp[0] < rp[1] else ""
+        print(f"  {b['id']:4s} x{b['count']:<5d} {b['kind']}  in {b.get('endpoint') or '?'}{flaky}")
         for f in b["frames"][:3]:
             print(f"         {f}")
+        if not b["frames"] and b.get("summary") and "no error report" in b["kind"]:
+            print(f"         last output: {b['summary'][:200]}")
         print(f"         example ({b['example_nodes']} calls): {b['example']}")
+    if note:
+        print(note)
     print("next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>")
+
+
+def not_reproduced(p, name):
+    """Saved crash programs whose last triage run did not crash."""
+    n = 0
+    for w in worker_dirs(p.campaign_dir(name)):
+        try:
+            cache = json.loads((w / "triage-cache.json").read_text())
+        except (OSError, ValueError):
+            continue
+        n += sum(1 for k, r in cache.items() if k != "__binary__" and isinstance(r, dict) and not r.get("crashed")
+                 and not k.endswith(".min.stp") and (w / "crashes" / k).exists())
+    return n
 
 
 CRASH_REF = "a .stp file, or a crash id: c3 (latest campaign), probe:c3 or probe/c3"
@@ -768,13 +797,13 @@ def cmd_exec(a):
         print(format_plan(plan) if plan.exists() else "(no plan written)")
         rep_lines = [l for l in _drop_abort_report(output.splitlines(), rep) if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
         print("\n".join(rep_lines[-200:]))
-        print(_exec_result(rep, elapsed, slow, limit_ms))
+        print(_exec_result(rep, elapsed, slow, limit_ms, b))
     else:
         lines = _drop_abort_report(output.splitlines(), rep)
         if not a.trace:
             lines = [l for l in lines if not l.startswith("[stitch] ") or "CHECK FAILED" in l or "UNCAUGHT" in l]
         print("\n".join(lines[-400:]))
-        print(_exec_result(rep, elapsed, slow, limit_ms))
+        print(_exec_result(rep, elapsed, slow, limit_ms, b))
 
 
 def _drop_abort_report(lines, rep):
@@ -788,10 +817,18 @@ def _drop_abort_report(lines, rep):
     return lines
 
 
-def _exec_result(rep, elapsed, slow, limit_ms):
+def _exec_result(rep, elapsed, slow, limit_ms, bucket=None):
     took = f" ({elapsed} ms)" if elapsed is not None else ""
+    differs = ""
+    if bucket and rep["crashed"] and rep["kind"] != bucket.get("kind"):
+        differs = (f"\n(bucket {bucket['campaign']}:{bucket['id']} is '{bucket['kind']}': this run ended differently. A timeout"
+                   " that depends on load, or a flaky crash; `stitch crashes` shows how often it reproduces)")
     if rep["crashed"]:
-        return f"\nresult: CRASH {rep['signature']}{took}"
+        return f"\nresult: CRASH {rep['signature']}{took}{differs}"
+    if bucket and not slow:
+        rp = bucket.get("reproduced")
+        if rp and rp[0] < rp[1]:
+            return f"\nresult: no crash{took} (bucket {bucket['campaign']}:{bucket['id']} is flaky: crashed {rp[0]} of {rp[1]} runs)"
     if slow:
         return (f"\nresult: no crash, but it took {elapsed} ms, far over the campaign's timeout ({limit_ms} ms): the"
                 " fuzzer counts that as a timeout (unless the machine is just busy)")
@@ -823,9 +860,18 @@ def cmd_minimize(a):
         # nothing to minimize: do not leave a .min.stp that crash ids would then run
         if dst != f and not existed:
             dst.unlink(missing_ok=True)
-        die(f"{p.rel(f)} does not crash with the current harness (`stitch exec {a.crash}`): nothing to minimize"
+        rp = (b or {}).get("reproduced")
+        if rp and rp[0] < rp[1]:
+            die(f"{p.rel(f)} did not crash in 3 runs; it is flaky (crashed {rp[0]} of {rp[1]} runs at triage): try again")
+        die(f"{p.rel(f)} did not crash in 3 runs with the current harness (`stitch exec {a.crash}`): nothing to minimize"
             + (" (a timeout that does not reproduce may just be slow under load)" if b and b.get("kind") == "timeout" else ""))
-    out(res, f"{res['calls_before']} -> {res['calls_after']} calls, still crashes: {res['crashes']} ({res['signature']})\n  {res['output']}")
+    notes = []
+    if res.get("flaky"):
+        notes.append("the program crashes only on some runs (flaky): each candidate got two tries")
+    if res.get("out_of_time"):
+        notes.append(f"stopped by the time budget (--secs {a.secs}): running again may reduce it further")
+    out(res, f"{res['calls_before']} -> {res['calls_after']} calls, still crashes: {res['crashes']} ({res['signature']})\n  {res['output']}"
+        + "".join(f"\n  ({n})" for n in notes))
 
 
 def cmd_sample(a):
@@ -1163,6 +1209,7 @@ def main(argv=None):
     s = sp.add_parser("probe", help="short fuzzing run + report of what blocks progress (campaign 'probe', restarted each time)")
     s.add_argument("only", nargs="?", help="endpoint names/globs to focus on, comma separated (e.g. 'tree/*,parse')")
     s.add_argument("--secs", type=int, default=60)
+    s.add_argument("--jobs", type=int, default=1, help="parallel workers (default 1)")
     s.set_defaults(fn=cmd_probe)
 
     s = sp.add_parser("fuzz", help="start a campaign in the background")

@@ -318,7 +318,16 @@ impl Client {
                 // exit (the library called exit(0)) is not a crash, as with the fork executor.
                 match self.reap_dead() {
                     Some(st) if st.success() => Outcome::Ok,
-                    _ => Outcome::Died,
+                    st => {
+                        if flags & FLAG_TRACE != 0 {
+                            // exec / triage: say how the worker ended (it printed no report)
+                            use std::os::unix::process::ExitStatusExt;
+                            // a signal as a shell reports it (128 + N), like `stitch exec` and the reproducers
+                            let code = st.and_then(|s| s.code().or_else(|| s.signal().map(|n| 128 + n)));
+                            eprintln!("[stitch] WORKER DIED (exit {})", code.map(|c| c.to_string()).unwrap_or("?".into()));
+                        }
+                        Outcome::Died
+                    }
                 }
             }
         }

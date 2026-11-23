@@ -225,11 +225,15 @@ fn real_main(args: Vec<String>) -> Result<i32, String> {
             let secs = arg_val(rest, "--secs").and_then(|v| v.parse().ok()).unwrap_or(120);
             let t = arg_val(rest, "--timeout-ms").and_then(|v| v.parse().ok()).unwrap_or(10000);
             let hang = arg_val(rest, "--hang-ms").and_then(|v| v.parse().ok()).map(Duration::from_millis);
-            let (min, rep) = triage::minimize(&prog, Duration::from_millis(t), hang, Duration::from_secs(secs));
-            std::fs::write(&out, min.serialize()).map_err(|e| e.to_string())?;
+            let (min, rep, info) = triage::minimize(&prog, Duration::from_millis(t), hang, Duration::from_secs(secs));
+            if rep.crashed {
+                std::fs::write(&out, min.serialize()).map_err(|e| e.to_string())?;
+            }
             println!(
                 "{}",
-                serde_json::json!({"crashes": rep.crashed, "signature": rep.signature, "calls_before": prog.nodes.len(), "calls_after": min.nodes.len(), "output": out})
+                serde_json::json!({"crashes": rep.crashed, "signature": rep.signature, "calls_before": prog.nodes.len(),
+                                   "calls_after": min.nodes.len(), "output": out, "flaky": info.flaky,
+                                   "out_of_time": info.out_of_time})
             );
             Ok(0)
         }

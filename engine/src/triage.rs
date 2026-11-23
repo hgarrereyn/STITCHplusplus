@@ -153,6 +153,7 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
     let mut node = None;
     let mut in_stack = false;
     let mut stack_done = false;
+    let mut died: Option<String> = None;
     // Swift: "Fatal error: <message>" (fatalError, -Onone checks) or a trap frame named
     // "Swift runtime failure: <message>" (-O checks): the message is the kind
     let mut swift_failure: Option<String> = None;
@@ -176,6 +177,13 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
                     endpoint = Some(name);
                 }
             }
+            continue;
+        }
+        if let Some(rest) = l.strip_prefix("[stitch] WORKER DIED (") {
+            // a worker language's process ended (exit(), a fatal signal): used below when nothing
+            // else explains it (a Go panic is also a worker that died)
+            // "exit N)": named like a reproducer that exits without a report, so both agree
+            died = Some(format!("crash ({}, no error report)", rest.trim_end_matches(')')));
             continue;
         }
         if let Some(rest) = l.strip_prefix("[stitch] CHECK FAILED: ") {
@@ -272,6 +280,11 @@ pub fn parse_report(output: &str, status_crashed: bool, timed_out: bool) -> Repo
         if let Some((k, f)) = go_runtime_report(output) {
             kind = k;
             frames = f;
+        }
+    }
+    if kind.is_empty() {
+        if let Some(d) = died {
+            kind = d;
         }
     }
     if let Some(f) = swift_failure {
@@ -376,6 +389,23 @@ pub fn run_file(file: &Path, timeout: Duration) -> Report {
         out.truncate(200_000);
     }
     let mut r = parse_report(&out, crashed && !timed_out, timed_out);
+    if r.kind.starts_with("crash (") && r.kind.ends_with("no error report)") {
+        // say how it ended (an exit status, or a signal as the shell reports it: 128 + N, as the
+        // CLI's parser does) and keep the last lines it printed: a worker killed for memory, or an
+        // exit() in the library, otherwise leaves nothing to go on
+        use std::os::unix::process::ExitStatusExt;
+        let code = status.and_then(|s| s.code().or_else(|| s.signal().map(|n| 128 + n)));
+        if let (Some(c), true) = (code, r.kind == "crash (no error report)") {
+            let kind = format!("crash (exit {c}, no error report)");
+            r.signature = r.signature.replacen(&r.kind, &kind, 1);
+            r.signature_fn = r.signature_fn.replacen(&r.kind, &kind, 1);
+            r.kind = kind;
+        }
+        let tail: Vec<&str> = out.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("[stitch]")).collect();
+        if !tail.is_empty() {
+            r.summary = tail[tail.len().saturating_sub(3)..].join(" | ").chars().take(300).collect();
+        }
+    }
     r.elapsed_ms = start.elapsed().as_millis() as u64;
     r
 }
@@ -424,6 +454,10 @@ pub struct Bucket {
     pub example: String,
     pub example_nodes: usize,
     pub files: Vec<String>,
+    /// [runs that crashed the same way, runs] for the example (3 runs; not for timeouts, which
+    /// depend on load): fewer than all means the crash is flaky
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reproduced: Option<[u32; 2]>,
 }
 
 /// Bucket every program in `crash_dir` by signature. Results are cached per file in
@@ -493,6 +527,7 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration, hang: Option<Duration>) -
             example: key.clone(),
             example_nodes: usize::MAX,
             files: vec![],
+            reproduced: None,
         });
         b.count += 1;
         b.files.push(key.clone());
@@ -501,14 +536,57 @@ pub fn triage_dir(crash_dir: &Path, timeout: Duration, hang: Option<Duration>) -
             b.example = key.clone();
         }
     }
+    // run each bucket's example twice more: a crash that does not come back every time is flaky
+    // (the result is cached with the file, under "confirm")
+    let unconfirmed: Vec<String> = buckets
+        .values()
+        .filter(|b| b.kind != "timeout" && cache.get(&b.example).map(|r| r.get("confirm").is_none()).unwrap_or(false))
+        .map(|b| b.example.clone())
+        .collect();
+    if !unconfirmed.is_empty() {
+        let h = hang.map(|h| (h, *startup.get_or_insert_with(startup_time)));
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let results = std::sync::Mutex::new(Vec::new());
+        let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(8);
+        std::thread::scope(|sc| {
+            for _ in 0..jobs.min(unconfirmed.len()) {
+                sc.spawn(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(k) = unconfirmed.get(i) else { break };
+                    let sigs: Vec<String> =
+                        (0..2).map(|_| run_file_hang(&crash_dir.join(k), timeout, h)).map(|r| if r.crashed { r.signature } else { String::new() }).collect();
+                    results.lock().unwrap().push((k.clone(), sigs));
+                });
+            }
+        });
+        for (k, sigs) in results.into_inner().unwrap() {
+            if let Some(serde_json::Value::Object(m)) = cache.get_mut(&k) {
+                m.insert("confirm".into(), serde_json::json!(sigs));
+            }
+        }
+    }
+    for b in buckets.values_mut() {
+        if let Some(c) = cache.get(&b.example).and_then(|r| r.get("confirm")).and_then(|c| c.as_array()) {
+            let same = c.iter().filter(|x| x.as_str() == Some(b.signature.as_str())).count() as u32;
+            b.reproduced = Some([1 + same, 1 + c.len() as u32]);
+        }
+    }
     let _ = std::fs::write(&cache_path, serde_json::to_vec(&cache).unwrap());
     let mut v: Vec<Bucket> = buckets.into_values().collect();
     v.sort_by(|a, b| b.count.cmp(&a.count));
     v
 }
 
+/// How a minimization went, besides the program and its final report.
+pub struct MinInfo {
+    /// the program crashed on some runs only: candidates got two tries each
+    pub flaky: bool,
+    /// stopped by the time budget (otherwise: nothing more could be removed)
+    pub out_of_time: bool,
+}
+
 /// Greedy reduction keeping the same crash signature.
-pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budget: Duration) -> (Program, Report) {
+pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budget: Duration) -> (Program, Report, MinInfo) {
     let tmp = std::env::temp_dir().join(format!("stitch-min-{}.stp", std::process::id()));
     let _ = std::fs::write(&tmp, prog.serialize());
     // a slow program (see run_file_hang) is minimized as a timeout at the campaign's limit
@@ -524,11 +602,36 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
         let _ = std::fs::write(&tmp, p.serialize());
         run_file(&tmp, timeout)
     };
-    let base = test(prog);
+    let mut base = test(prog);
     let mut cur = prog.clone();
+    // a program that crashes only sometimes (hash order, timing): look for the crash a few times,
+    // then give every candidate a second chance so flakiness does not stop the reduction
+    let mut flaky = false;
     if !base.crashed {
-        return (cur, base);
+        for _ in 0..2 {
+            let r = test(prog);
+            if r.crashed {
+                base = r;
+                flaky = true;
+                break;
+            }
+        }
     }
+    if !base.crashed {
+        let _ = std::fs::remove_file(&tmp);
+        return (cur, base, MinInfo { flaky: false, out_of_time: false });
+    }
+    let attempts = if flaky { 2 } else { 1 };
+    let run_n = |p: &Program, n: usize| -> Report {
+        let mut r = test(p);
+        for _ in 1..n {
+            if r.crashed {
+                break;
+            }
+            r = test(p);
+        }
+        r
+    };
     let start = Instant::now();
     let same = |r: &Report| r.crashed && r.signature == base.signature;
     let mut changed = true;
@@ -546,7 +649,7 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
             if cand.nodes.is_empty() {
                 continue;
             }
-            if same(&test(&cand)) {
+            if same(&run_n(&cand, attempts)) {
                 cur = cand;
                 changed = true;
             }
@@ -582,7 +685,7 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
                 for t in tries {
                     let mut cand = cur.clone();
                     cand.nodes[n].params[k].bytes = t;
-                    if same(&test(&cand)) {
+                    if same(&run_n(&cand, attempts)) {
                         cur = cand;
                         changed = true;
                         shrunk = true;
@@ -602,7 +705,7 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
                             t.extend_from_slice(&b[end..]);
                             let mut cand = cur.clone();
                             cand.nodes[n].params[k].bytes = t;
-                            if same(&test(&cand)) {
+                            if same(&run_n(&cand, attempts)) {
                                 cur = cand; // retry the same position: the next chunk moved here
                                 changed = true;
                             } else {
@@ -615,7 +718,8 @@ pub fn minimize(prog: &Program, timeout: Duration, hang: Option<Duration>, budge
             }
         }
     }
-    let fin = test(&cur);
+    let out_of_time = start.elapsed() >= budget;
+    let fin = run_n(&cur, if flaky { 3 } else { 1 });
     let _ = std::fs::remove_file(&tmp);
-    (cur, fin)
+    (cur, fin, MinInfo { flaky, out_of_time })
 }

@@ -263,11 +263,16 @@ public final class Main {
         int ai = argv.indexOf("--app");
         Path app = Path.of(ai >= 0 ? argv.get(ai + 1) : ".");
         int code;
-        if (argv.contains("worker")) {
-            worker(app);
-            code = 0;
-        } else {
-            code = repro(app, argv);
+        try {
+            if (argv.contains("worker")) {
+                worker(app);
+                code = 0;
+            } else {
+                code = repro(app, argv);
+            }
+        } catch (Registry.HarnessError e) {
+            System.err.println("[stitch] error in the harness: " + e.getMessage());
+            code = 2;
         }
         System.out.flush();
         System.err.flush();

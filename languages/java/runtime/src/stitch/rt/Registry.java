@@ -140,10 +140,11 @@ final class Registry {
                 }
             }
             if (m.getReturnType() != void.class) {
-                need(!Param.isData(m.getReturnType()), m, "a stub returns an object (or void), not a " + m.getReturnType().getSimpleName());
+                need(!Param.isData(m.getReturnType()), m, "a stub returns an object (or void), not a " + m.getReturnType().getSimpleName()
+                        + ": check the result inside the stub (Stitch.check), or return an object that holds it");
                 s.output = object(typeName(m.getReturnType(), m.getAnnotation(Obj.class)));
             }
-            if (byName.containsKey(s.name)) throw new IllegalStateException("duplicate stub name '" + s.name + "' (" + c.getName() + ")");
+            if (byName.containsKey(s.name)) throw new HarnessError("duplicate stub name '" + s.name + "' (" + c.getName() + ")");
             stubs.add(s);
             byName.put(s.name, s);
         }
@@ -156,8 +157,13 @@ final class Registry {
         }
     }
 
+    /** A mistake in the harness's stubs (reported without a Java stack trace). */
+    public static final class HarnessError extends IllegalStateException {
+        HarnessError(String msg) { super(msg); }
+    }
+
     private static void need(boolean ok, Method m, String msg) {
-        if (!ok) throw new IllegalStateException(m.getDeclaringClass().getName() + "." + m.getName() + ": " + msg);
+        if (!ok) throw new HarnessError(m.getDeclaringClass().getName() + "." + m.getName() + ": " + msg);
     }
 
     String manifest() {

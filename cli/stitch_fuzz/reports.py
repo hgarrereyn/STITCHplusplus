@@ -239,7 +239,7 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
     timed_out = timed_out or TIMEOUT_LINE in output
     kind, summary, frames, endpoint, node = "", "", [], None, None
     in_stack = stack_done = False
-    py = None
+    py = died = None
     if "[stitch] EXCEPTION in " not in output and "[stitch] CHECK FAILED" not in output:
         py = (_python_traceback(output) or _java_stack(output) or _go_panic(output) or _rust_panic(output)
               or _js_stack(output) or _ruby_backtrace(output))
@@ -262,6 +262,10 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
         m = re.match(r"\[stitch\] #(\d+) ([\w:]+)", l)
         if m:
             node, endpoint = int(m.group(1)), m.group(2)
+            continue
+        if l.startswith("[stitch] WORKER DIED ("):
+            # if nothing else explains it; named as below for a process that exits without a report
+            died = "crash (" + l[len("[stitch] WORKER DIED ("):].rstrip(")") + ", no error report)"
             continue
         if l.startswith("[stitch] CHECK FAILED: "):
             kind = "check failed: " + l[len("[stitch] CHECK FAILED: "):].rsplit(" (node", 1)[0]
@@ -328,6 +332,8 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
                     frames.append(f"{func.split('(')[0]} {loc.rsplit('/', 1)[-1].split(' ')[0]}")
             elif not l and frames:
                 stack_done = True
+    if died and not kind:
+        kind = died
     if swift_failure and (not kind or kind.startswith(("TRAP", "ILL")) or kind == "ABRT"):
         kind = swift_failure
     crashed = timed_out or exit_code != 0 or bool(kind)

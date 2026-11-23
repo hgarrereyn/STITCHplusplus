@@ -277,9 +277,9 @@ A probe report:
 probe: 20s, 42.8k execs (2.1k/s), 733/3298 edges, corpus 461, calls bailing 13% (programs with a bail 66%), 0 crash/timeout programs saved
 never succeeds (1, 20+ calls and none ok so far): the fuzzer picks these less and less
   item_string  [600 calls] "root is gone" x600; read missing attr 'root'
-outcome depends on the previous call on an input (engine learns this; fix the stub if unexpected):
-  add_item.obj: ok 2% after parse vs 100% after new_object
-  delete_key.obj: ok 0% after parse vs 79% after print_opts
+depends on where an input came from (the stub that made or last used that object; the fuzzer learns these pairs. Act only when the low one should work: a different kind of object behind one type gets its own type):
+  add_item(obj): ok 2% when obj last came from parse, 100% when from new_object
+  delete_key(obj): ok 0% when obj last came from parse, 79% when from print_opts
 often skipped because an input object was missing (1): its producer bailed or returned no object
   item_string  skipped 13797x, ran 600x
 ```
@@ -292,7 +292,7 @@ succeeds on objects, and `parse` often returns arrays or numbers: that is expect
 |---|---|
 | never succeeds | The stub always bails or always crashes. Read its reasons: a missing producer, an attribute nobody sets (`read missing attr 'x'`), or something missing in the environment (a server, a file). Fix the stub or add a producer. |
 | mostly bails | Use `Range`/`OneOf` instead of rejecting values. Bails from parse errors on fuzzed input are fine. |
-| outcome depends on the previous call | Usually normal: the fuzzer learns these pairs. Investigate only if the stub should accept both. |
+| depends on where an input came from | Usually normal: the fuzzer learns these pairs. Investigate only if the stub should accept both; if one type holds different kinds of objects (a parsed value that may be an array or a number), split it into types with one producer each. |
 | often skipped | The producer of one of its inputs usually fails. Fix the producer. |
 | never called | No producer makes one of its inputs, or the run was too short. |
 | calls bailing above 50% | Most work is wasted. Fix the stubs that bail most. |

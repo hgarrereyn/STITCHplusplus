@@ -27,6 +27,9 @@ RUN mvn -q -B -DskipTests -Drat.skip=true -Dmaven.javadoc.skip=true package \
 - Copy only the main jar, not `-sources.jar` or `-tests.jar`.
 - Apache projects run license checks during `package`: `-Drat.skip=true` turns them off.
 - Gradle: `RUN ./gradlew jar && cp build/libs/*.jar /deps/`.
+- `--rev` and `stitch bisect` compile the same stubs against another version. When a constructor
+  changed between major versions, write the call in a form both versions accept, or make it by
+  reflection, so the harness compiles at every revision you check.
 - The image has JDK 21, which rejects `<source>`/`<target>` 7 and older. Pass a newer one
   (`-Dmaven.compiler.source=8 -Dmaven.compiler.target=8`), or for a library without dependencies
   compile the sources directly:
@@ -126,6 +129,25 @@ public class Stubs {
 
 A stub returns at most one object. When the kind of result depends on the input, write one stub
 per kind (`next_record` and `next_record_with_header`).
+
+Object types do not follow Java subtyping: an object of type `ArrayList` is not passed where a
+stub takes `List` or `Object`. Name the types with `@Obj`, and when one Java value should serve
+two object types (a list you build that is also a loaded document value), add a stub that hands
+out the same instance under the other type:
+
+```java
+@Endpoint @Obj("List")
+public static List<Object> new_list() { return new ArrayList<>(); }
+
+@Endpoint @Obj("Data")                        // the same list, as a value for load/dump stubs
+public static Object list_as_data(@Obj("List") List<Object> l) { return l; }
+
+@Endpoint
+public static void dump(Yaml y, @Obj("Data") Object data) { /* ... */ }
+```
+
+Both objects are the same Java value: a change through one shows in the other, and consuming one
+does not consume the other.
 
 ```java
 @Endpoint(bailsOn = {IllegalStateException.class})
