@@ -3,7 +3,7 @@
 // and notes on hover (mouse) or tap. Anchors are in showcase.ts; a missing one fails the build.
 import { Code } from "@astrojs/starlight/components";
 import { LANGUAGES } from "./languages";
-import { ENDPOINTS, LANGS, nameOf, TYPE_NOTES, PART_NOTES } from "./showcase";
+import { ENDPOINTS, LANGS, nameOf, PART_NOTES } from "./showcase";
 import { glyph, BOX_H } from "./glyph";
 
 const files = import.meta.glob<string>("../showcase/*/harness.txt", { query: "?raw", import: "default", eager: true });
@@ -30,10 +30,11 @@ const blocks = LANGUAGES.map(([lang]) => {
     return { id: e.id, name, line: lineOf(L.at[e.id]), svg: g.svg, w: g.extent + PAD_X * 2, h: PAD_TOP + BOX_H + 20, cy: PAD_TOP + BOX_H / 2, note: e.note, summary };
   });
   const marks = [
-    ...Object.entries(L.types).map(([t, at]) => ({ at, kind: `type-${t === "Store" ? "store" : "snap"}`, title: t, note: TYPE_NOTES[t as "Store"] })),
-    { at: L.decoder, kind: "decoder", title: "KvText decoder", note: PART_NOTES.decoder },
-    ...L.bail.map((at) => ({ at, kind: "bail", title: "Expected error", note: PART_NOTES.bail })),
-    { at: L.check, kind: "check", title: "Check", note: PART_NOTES.check },
+    // both object types make one note: either one lights both
+    ...Object.entries(L.types).map(([t, at]) => ({ at, kind: `type-${t === "Store" ? "store" : "snap"}`, group: "objects", ...PART_NOTES.objects })),
+    { at: L.decoder, kind: "decoder", ...PART_NOTES.decoder },
+    ...L.bail.map((at) => ({ at, kind: "bail", ...PART_NOTES.bail })),
+    { at: L.check, kind: "check", ...PART_NOTES.check },
   ];
   for (const m of marks) lineOf(m.at);
   return { lang, text, glyphs, marks };
@@ -63,7 +64,7 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
 <script>
   import { currentLang, onLang } from "./lang-state";
 
-  type Mark = { at: string; kind: string; title: string; note: string };
+  type Mark = { at: string; kind: string; title: string; note: string; group?: string };
   const MARKS: Record<string, Mark[]> = JSON.parse(document.getElementById("spec-marks")!.textContent!);
   const spec = document.querySelector<HTMLElement>(".spec");
 
@@ -93,6 +94,7 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
       span.setAttribute("role", "button");
       span.dataset.title = m.title;
       span.dataset.note = m.note;
+      if (m.group) span.dataset.group = m.group;
       span.append(range.extractContents());
       range.insertNode(span);
     }
@@ -175,6 +177,15 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
         covered = [target, ...lines];
       } else {
         covered = [target, target.closest(".ec-line") ?? target];
+        // the other parts of its group light up too; the note keeps clear of those on screen
+        if (target.dataset.group) {
+          for (const m of block.querySelectorAll<HTMLElement>(`.spec-mark[data-group="${target.dataset.group}"]`)) {
+            if (m === target) continue;
+            m.classList.add("active");
+            const r = m.getBoundingClientRect();
+            if (r.bottom > 0 && r.top < innerHeight) covered.push(m, m.closest(".ec-line") ?? m);
+          }
+        }
       }
       const rects = covered.map((e) => e.getBoundingClientRect());
       const top = Math.min(...rects.map((r) => r.top)), bottom = Math.max(...rects.map((r) => r.bottom));
@@ -193,6 +204,7 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
     }
     function hide() {
       current?.classList.remove("active");
+      spec!.querySelectorAll(".spec-mark.active").forEach((e) => e.classList.remove("active"));
       spec!.querySelectorAll(".focus").forEach((e) => e.classList.remove("focus"));
       spec!.querySelectorAll(".lit").forEach((e) => e.classList.remove("lit"));
       current = null;

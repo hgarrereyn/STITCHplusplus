@@ -18,8 +18,10 @@ const url = (path: string) => `${base}/${path}`;
       <div class="example-spec">
         <div class="example-head">
           <h3>A STITCH++ spec</h3>
-          <p>Each endpoint wraps one library call. In its shape, objects go in at the top and come out at
-            the bottom; fuzzed values come in from the right. Hover or tap a shape or an underlined word.</p>
+          <p>A STITCH++ spec is written in the target language and consists of endpoint stubs and object
+            definitions. Each stub describes what inputs are required to invoke library functions and what
+            outputs they produce. Specs can also contain generators for structured datatypes, such as custom
+            text formats.</p>
         </div>
         <HarnessSpec />
       </div>
@@ -27,14 +29,16 @@ const url = (path: string) => `${base}/${path}`;
         <div class="example-card">
           <div class="example-head">
             <h3>Programs</h3>
-            <p>The fuzzer stitches endpoints into programs, wiring each input to an earlier output of the same type. Each block is one call, written out as code beside it.</p>
+            <p>The fuzzer stitches together (millions of) different combinations of endpoints into graphs
+              (left) and executes them dynamically. Each program graph is equivalent to a specific sequential
+              program (right).</p>
           </div>
           <StitchGraph />
         </div>
         <div class="example-card">
           <div class="example-head">
-            <h3>A crash it found</h3>
-            <p>A real run of this spec, minimized to the calls that matter.</p>
+            <h3>Example crash</h3>
+            <p>When the fuzzer finds a crashing testcase, it minimizes it and generates an external reproducer.</p>
           </div>
           <CrashCard />
         </div>

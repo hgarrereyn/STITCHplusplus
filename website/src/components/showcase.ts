@@ -24,15 +24,12 @@ export const ENDPOINTS: Endpoint[] = [
     note: "A check: dumping the Store to text and loading it back must give the same entries. If not, STITCH++ reports a bug." },
 ];
 
-export const TYPE_NOTES: Record<ObjType, string> = {
-  Store: "An object type. A Store is made by one call and passed to later ones; the fuzzer only wires a Store into an input that takes a Store.",
-  Snapshot: "A second object type, a copy of a Store. Different types are different colors; wires only join ports of the same color.",
-};
-
+/** What to say about each underlined part of the harness. */
 export const PART_NOTES = {
-  decoder: "A decoder: it turns the fuzzer's random choices into text that looks like key=value lines, so mutated inputs keep that shape.",
-  bail: "Invalid input is not a bug. This marks the call as rejected (a bail): the program goes on without its result. Any other error is a bug.",
-  check: "The property being tested. When it is false, STITCH++ reports a bug.",
+  objects: { title: "Objects", note: "Our target library defines two different semantic types: a Store, representing a KV store, and a Snapshot, representing a saved copy of a KV store. We define them here." },
+  decoder: { title: "Decoder", note: 'Loading a Store from a string expects a specific text grammar to succeed (i.e. "a=b\\nc=d\\n..."). We can improve our fuzzer performance by writing a custom generator function here which uses seeded random values from a Source.' },
+  bail: { title: "Conditional execution", note: "Target function invocations don't always succeed, but ignoring errors would lead to lots of false positive crashes through API misuse. In STITCH, we can mark certain conditions as required, allowing the fuzzer to cleanly exit early when we encounter (acceptable) errors, such as failing to load a Store from a malformed string." },
+  check: { title: "Property testing", note: "In STITCH, we can also incorporate property-testing concepts into our specification by defining invariants, for example the concept that dumping and loading a Store from a string should return the same sized store. The fuzzer will treat violations of this property as bugs." },
 };
 
 type Lang = {
