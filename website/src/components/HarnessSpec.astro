@@ -183,23 +183,30 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
     }
     const targetOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>(".spec-glyph, .spec-mark");
 
-    // Mouse: hover. Touch and pen: tap to open, tap again or elsewhere to close. Keyboard: focus.
-    spec.addEventListener("pointerover", (e) => { if (e.pointerType === "mouse") { const t = targetOf(e); if (t && t !== current) show(t); } });
-    spec.addEventListener("pointerout", (e) => {
+    // Mouse: the note shows while the pointer is over a shape or underlined part. This checks what is
+    // under the pointer on every move instead of trusting pointerout (whose relatedTarget some browsers
+    // report unreliably over SVG), and closes on scroll, since the page then moves under the pointer.
+    // Touch and pen: tap to open, tap again or elsewhere to close. Keyboard: focus.
+    let byMouse = false;
+    document.addEventListener("pointermove", (e) => {
       if (e.pointerType !== "mouse") return;
-      const t = targetOf(e), to = (e.relatedTarget as HTMLElement | null)?.closest?.(".spec-glyph, .spec-mark");
-      if (t && to !== t) hide();
-    });
+      const t = targetOf(e);
+      if (t && spec!.contains(t)) {
+        if (t !== current) { show(t); byMouse = true; }
+      } else if (current && byMouse) hide();
+    }, { passive: true });
+    document.addEventListener("pointerleave", () => { if (byMouse) hide(); });
+    addEventListener("scroll", () => { if (current && byMouse) hide(); }, { passive: true });
     let lastPointer = "";   // the kind of the last press: "mouse", "touch", "pen", or "" for a key
     spec.addEventListener("pointerdown", (e) => (lastPointer = e.pointerType));
     spec.addEventListener("keydown", () => (lastPointer = ""));
     spec.addEventListener("click", (e) => {
       const t = targetOf(e);
       if (!t) return;
-      if (lastPointer === "mouse") { if (t !== current) show(t); return; }
-      if (t === current) hide(); else show(t);
+      if (lastPointer === "mouse") { if (t !== current) { show(t); byMouse = true; } return; }
+      if (t === current) hide(); else { show(t); byMouse = false; }
     });
-    spec.addEventListener("focusin", (e) => { const t = targetOf(e); if (t && t.matches(":focus-visible")) show(t); });
+    spec.addEventListener("focusin", (e) => { const t = targetOf(e); if (t && t.matches(":focus-visible")) { show(t); byMouse = false; } });
     spec.addEventListener("focusout", (e) => { if (targetOf(e) === current) hide(); });
     document.addEventListener("click", (e) => { if (current && !targetOf(e)) hide(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
