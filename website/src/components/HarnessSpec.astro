@@ -165,14 +165,28 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
       popText.textContent = target.dataset.note!;
       pop.hidden = false;
       target.classList.add("active");
+      // What the note must not cover: a shape and its endpoint's lines, or an underlined word's line.
+      const block = target.closest<HTMLElement>(".spec-block")!;
+      let covered: Element[];
       if (target.classList.contains("spec-glyph")) {
-        target.closest(".spec-block")!.classList.add("focus");
-        endpointLines(target).forEach((l) => l.classList.add("lit"));
+        block.classList.add("focus");
+        const lines = endpointLines(target);
+        lines.forEach((l) => l.classList.add("lit"));
+        covered = [target, ...lines];
+      } else {
+        covered = [target, target.closest(".ec-line") ?? target];
       }
-      const r = target.getBoundingClientRect(), box = spec!.getBoundingClientRect();
-      const left = Math.min(Math.max(r.left - box.left, 0), box.width - pop.offsetWidth);
-      pop.style.left = `${left}px`;
-      pop.style.top = `${r.bottom - box.top + 8}px`;
+      const rects = covered.map((e) => e.getBoundingClientRect());
+      const top = Math.min(...rects.map((r) => r.top)), bottom = Math.max(...rects.map((r) => r.bottom));
+      const box = spec!.getBoundingClientRect();
+      const anchor = target.classList.contains("spec-glyph")
+        ? block.querySelector(".spec-code")!.getBoundingClientRect().left
+        : target.getBoundingClientRect().left;
+      // below the highlight, or above it when there is no room below on screen
+      const h = pop.offsetHeight, nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sl-nav-height")) * 16 || 64;
+      const below = bottom + 8 + h <= innerHeight || top - 8 - h < nav;
+      pop.style.top = `${(below ? bottom + 8 : top - 8 - h) - box.top}px`;
+      pop.style.left = `${Math.min(Math.max(anchor - box.left, 0), box.width - pop.offsetWidth)}px`;
     }
     function hide() {
       current?.classList.remove("active");
