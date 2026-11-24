@@ -1,0 +1,7 @@
+$ stitch write c5
+[stitch] main:c5 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/4141d2e5c3d584be.min.stp
+warning: .stitch/campaigns/main/w0/crashes/4141d2e5c3d584be.min.stp now crashes differently from bucket c5 (KeyError at roundtrip (stub) instead of roundtrip stubs.py); the reproducer expects the new crash
+wrote .stitch/standalone/c5/repro.py (71 lines, 3 calls, crash in call #2)
+  expected: KeyError in Store.items
+SAME CRASH: .stitch/standalone/c5/repro.py -> KeyError in Store.items
+next: cp .stitch/standalone/c5/repro.py .stitch/standalone/c5/min.py, shrink it, and run `stitch try .stitch/standalone/c5/min.py` after each edit

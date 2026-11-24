@@ -1,0 +1,22 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/55e9caf49141a982.stp (up to 30s; --secs to change)
+4 -> 3 calls, still crashes: True (StringIndexOutOfBoundsException | String.checkBoundsBeginEnd String.java:4855 | String.substring String.java | Store.load Store.java)
+  .stitch/campaigns/main/w0/crashes/55e9caf49141a982.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/55e9caf49141a982.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/55e9caf49141a982.min.stp
+[stitch] #0 load(text=Str[0,decoded]"")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[1]"\x13", value=Str[2]"#!")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] EXCEPTION in roundtrip: StringIndexOutOfBoundsException: Range [2, -1) out of bounds for length 2
+    #0 0x0 in String.checkBoundsBeginEnd /java/lang/String.java:4855
+    #1 0x0 in String.substring /java/lang/String.java:2823
+    #2 0x0 in Store.load /demo/kv/Store.java:40
+    #3 0x0 in Stubs.roundtrip /project/harness/Stubs.java:34
+
+
+result: CRASH StringIndexOutOfBoundsException | String.checkBoundsBeginEnd String.java:4855 | String.substring String.java | Store.load Store.java (136 ms)

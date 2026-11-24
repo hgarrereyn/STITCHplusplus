@@ -1,0 +1,6 @@
+$ stitch sample KvText -n 5
+"=)\n#!=\ufffdt\ufffd\ufffd\ufffd\ufffd\\\ufffd\ufffdpF\ufffd\n8q1A ax!2Wp`%=<y\nEew!Wb#7=L[Zp>}-"
+""
+""
+"GE=&n(Fsx6J/2b\\\n4>VH-J88=^0&C4Aq0\nad*ZDNdV=$LZQ,"
+"LO,=*IQ0FOsywD+;\ny$(s-k7=kAF\"B\n=*B\ufffdIx~ =JU]d%I=HE\n{n-k[LJ<=@`\ufffd\ufffd\nc;\ufffd\bj\ufffdis=.O"

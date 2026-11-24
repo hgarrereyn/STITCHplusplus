@@ -1,0 +1,67 @@
+---
+// Home page body: the language picker, then the example spec beside the programs built from it and
+// a crash it found (recorded from a real run), the guides, install.
+import { Code } from "@astrojs/starlight/components";
+import LangButtons from "./LangButtons.astro";
+import HarnessSpec from "./HarnessSpec.astro";
+import CrashCard from "./CrashCard.astro";
+import StitchGraph from "./StitchGraph.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const url = (path: string) => `${base}/${path}`;
+---
+
+<div class="landing not-content">
+  <section class="showcase-wrap" aria-label="A harness, the programs made from it, and a crash it found">
+    <LangButtons />
+    <div class="example">
+      <div class="example-spec">
+        <div class="example-head">
+          <h3>A STITCH++ spec</h3>
+          <p>A STITCH++ spec is written in the target language and consists of endpoint stubs and object
+            definitions. Each stub describes what inputs are required to invoke library functions and what
+            outputs they produce. Specs can also contain generators for structured datatypes, such as custom
+            text formats.</p>
+        </div>
+        <HarnessSpec />
+      </div>
+      <div class="example-side">
+        <div class="example-card">
+          <div class="example-head">
+            <h3>Programs</h3>
+            <p>The fuzzer stitches together (millions of) different combinations of endpoints into graphs
+              (left) and executes them dynamically. Each program graph is equivalent to a specific sequential
+              program (right).</p>
+          </div>
+          <StitchGraph />
+        </div>
+        <div class="example-card">
+          <div class="example-head">
+            <h3>Example crash</h3>
+            <p>When the fuzzer finds a crashing testcase, it minimizes it and generates an external reproducer.</p>
+          </div>
+          <CrashCard />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="guides" aria-label="Guides">
+    <a class="guide" href={url("guide/")}>
+      <span class="guide-kicker">For humans</span>
+      <span class="guide-title">Tutorial and concepts</span>
+      <span class="guide-text">Quick tutorial for harnessing a simple kv-store library</span>
+    </a>
+    <a class="guide" href={url("agents/overview.md")}>
+      <span class="guide-kicker">For agents</span>
+      <span class="guide-title">overview.md</span>
+      <span class="guide-text">Plaintext guide and workflow</span>
+    </a>
+  </section>
+
+  <section class="row" aria-label="Install">
+    <h2 class="row-title">Install</h2>
+    <Code code={"pip install stitch-fuzz\nstitch setup --lang python"} lang="sh" frame="none" />
+    <p class="row-note">Requires Docker. The library, the harness and the fuzzer run in containers.</p>
+  </section>
+</div>

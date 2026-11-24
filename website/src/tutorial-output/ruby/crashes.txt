@@ -1,0 +1,21 @@
+$ stitch crashes
+[stitch] rerunning 48 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+4 unique crashes in 'main':
+  c1   x19    NoMethodError  in roundtrip
+         block in Kvrb.load kvrb.rb:39
+         Array#each kvrb.rb:34
+         Kvrb.load kvrb.rb:34
+         example (1 calls): .stitch/campaigns/main/w1/crashes/408db8d52f543f03.stp
+  c2   x10    ArgumentError  in roundtrip
+         Kvrb::Store#put kvrb.rb:12
+         block in Kvrb.load kvrb.rb:40
+         Array#each kvrb.rb:34
+         example (3 calls): .stitch/campaigns/main/w1/crashes/4fba5b247d509f0f.stp
+  c3   x10    check failed: dump/load roundtrip  in roundtrip
+         example (3 calls): .stitch/campaigns/main/w1/crashes/afd3b7724dcb64af.stp
+  c4   x9     KeyError  in roundtrip
+         Hash#fetch kvrb.rb:27
+         block in Kvrb::Store#items kvrb.rb:27
+         Array#map kvrb.rb:27
+         example (3 calls): .stitch/campaigns/main/w1/crashes/b1548eecfaf69d0d.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

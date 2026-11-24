@@ -1,0 +1,74 @@
+---
+title: 4. Build and probe
+description: Build the harness and run a short probe to see which stubs work.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
+
+The output on this page and the next ones was recorded by running this tutorial in the language
+you picked. Fuzzing is random, so your numbers and crash ids will differ.
+
+## Build
+
+<RunOutput name="build" />
+
+`stitch build` compiles the harness against the library image and prints compile errors with file
+and line. `stitch check` runs static checks: stubs that can never run because nothing produces
+their inputs, attributes that are read but never set, and data types with nothing to start from.
+
+## Probe
+
+A probe is a short run with one worker, followed by a report on the stubs that are not working.
+
+<RunOutput name="probe-1" />
+
+The first line is the summary:
+
+- **execs**: programs run, and how many per second.
+- **edges**: branches of the library reached so far.
+- **calls bailing**: the share of calls rejected as invalid input. That work is wasted.
+- **crash/timeout programs saved**: programs that found a bug. If there are some already, leave
+  them for page 6.
+
+The lines below the summary name stubs to look at, such as stubs that never succeed or that are
+often skipped because their input object is missing.
+
+`stitch status probe --json` has the numbers for each stub. The entry for `load`:
+
+<RunOutput name="load-1" lang="json" />
+
+{/* gen:load */}
+<Lang id="python">
+`load` bailed on 34% of its calls.
+</Lang>
+<Lang id="cpp">
+`load` bailed on 51% of its calls.
+</Lang>
+<Lang id="javascript">
+`load` bailed on 41% of its calls.
+</Lang>
+<Lang id="java">
+`load` bailed on 52% of its calls.
+</Lang>
+<Lang id="go">
+`load` bailed on 70% of its calls.
+</Lang>
+<Lang id="rust">
+`load` bailed on 37% of its calls.
+</Lang>
+<Lang id="ruby">
+`load` bailed on 37% of its calls.
+</Lang>
+<Lang id="swift">
+`load` bailed on 61% of its calls.
+</Lang>
+<Lang id="objc">
+`load` bailed on 57% of its calls.
+</Lang>
+{/* /gen:load */}
+
+`load` is given random text. Random text rarely consists of `key=value` lines, so `load` rejects
+much of it and reads few entries from the rest. The next page fixes this with a data type, and adds
+a check.

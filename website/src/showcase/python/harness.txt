@@ -1,0 +1,52 @@
+import kvlib
+import stitch
+from stitch import Borrow, New, Str, Take
+
+Store = stitch.object("Store")
+Snapshot = stitch.object("Snapshot")
+KvText = stitch.datatype("KvText")
+
+
+@stitch.decoder(KvText)
+def kv_text(s):
+    lines = []
+    while s.more():
+        key = s.token() if s.coin(0.3) else s.str(8)
+        lines.append(f"{key}={s.str(12)}")
+    return "\n".join(lines)
+
+
+@stitch.endpoint
+def new_store() -> New[Store]:
+    return kvlib.Store()
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256, KvText]) -> New[Store]:
+    return kvlib.load(text)
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def put(st: Borrow[Store], key: Str[16], value: Str[32]):
+    st.put(key, value)
+
+
+@stitch.endpoint
+def remove(st: Borrow[Store], key: Str[16]):
+    st.remove(key)
+
+
+@stitch.endpoint(bails_on=(ValueError,))
+def snapshot(st: Borrow[Store]) -> New[Snapshot]:
+    return kvlib.load(st.dump())
+
+
+@stitch.endpoint
+def merge(st: Borrow[Store], snap: Take[Snapshot]):
+    st.merge(snap)
+
+
+@stitch.endpoint
+def roundtrip(st: Borrow[Store]):
+    again = kvlib.load(st.dump())
+    stitch.check(dict(again.items()) == dict(st.items()), "dump/load roundtrip")

@@ -1,0 +1,57 @@
+package harness
+
+import (
+	"example.com/kvgo"
+	"stitch"
+)
+
+type Snapshot struct{ *kvgo.Store }
+
+func init() {
+	stitch.Object[*kvgo.Store]("Store", nil)
+	stitch.Object[*Snapshot]("Snapshot", nil)
+	stitch.Decoder("KvText", kvText)
+	stitch.Endpoint("new_store", newStore)
+	stitch.Endpoint("load", load, "text:max=256,type=KvText")
+	stitch.Endpoint("put", put, "st", "key:max=16", "value:max=32")
+	stitch.Endpoint("remove", remove, "st", "key:max=16")
+	stitch.Endpoint("snapshot", snapshot, "st")
+	stitch.Endpoint("merge", merge, "st", "snap:take")
+	stitch.Endpoint("roundtrip", roundtrip, "st")
+}
+
+func kvText(s *stitch.Source) string {
+	out := ""
+	for s.More() {
+		k := s.Str(8)
+		if s.Coin(0.3) {
+			k = s.Token()
+		}
+		out += k + "=" + s.Str(12) + "\n"
+	}
+	return out
+}
+
+func newStore() *kvgo.Store { return kvgo.New() }
+
+func load(text string) (*kvgo.Store, error) { return kvgo.Load(text) }
+
+func put(st *kvgo.Store, key, value string) error { return st.Put(key, value) }
+
+func remove(st *kvgo.Store, key string) { st.Remove(key) }
+
+func snapshot(st *kvgo.Store) (*Snapshot, error) {
+	copy, err := kvgo.Load(st.Dump())
+	if err != nil {
+		return nil, err
+	}
+	return &Snapshot{copy}, nil
+}
+
+func merge(st *kvgo.Store, snap *Snapshot) error { return st.Merge(snap.Store) }
+
+func roundtrip(st *kvgo.Store) {
+	again, err := kvgo.Load(st.Dump())
+	stitch.Require(err == nil, "dump did not load")
+	stitch.Check(again.Len() == st.Len(), "dump/load roundtrip")
+}

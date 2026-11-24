@@ -1,0 +1,18 @@
+$ stitch minimize c3 --secs 30
+[stitch] main:c3 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/39dd9707ed5669f4.stp (up to 30s; --secs to change)
+4 -> 3 calls, still crashes: True (check failed: dump/load roundtrip | in roundtrip | stub_roundtrip stubs.m:35)
+  .stitch/campaigns/main/w0/crashes/39dd9707ed5669f4.min.stp
+$ stitch exec c3 --trace
+[stitch] main:c3 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/39dd9707ed5669f4.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/39dd9707ed5669f4.min.stp
+[stitch] #0 load(text=Str[0,decoded]"")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[1]"=", value=Str[0]"")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] CHECK FAILED: dump/load roundtrip (node 2)
+(AddressSanitizer's report of the abort that follows is left out)
+
+result: CRASH check failed: dump/load roundtrip | in roundtrip | stub_roundtrip stubs.m:35 (101 ms)

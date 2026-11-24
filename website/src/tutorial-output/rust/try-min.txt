@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c2/min.rs
+SAME CRASH: .stitch/standalone/c2/min.rs -> called `Option::unwrap()` on a `None` value in kvrs::Store::dump::{{closure}}
+  6 code lines, plain library code

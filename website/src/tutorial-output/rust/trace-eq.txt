@@ -1,0 +1,19 @@
+$ stitch minimize c3 --secs 30
+[stitch] main:c3 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/5e5898c4c75c8fa3.stp (up to 30s; --secs to change)
+5 -> 3 calls, still crashes: True (check failed: dump/load roundtrip | in roundtrip)
+  .stitch/campaigns/main/w0/crashes/5e5898c4c75c8fa3.min.stp
+$ stitch exec c3 --trace
+[stitch] main:c3 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/5e5898c4c75c8fa3.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/5e5898c4c75c8fa3.min.stp
+[stitch] #0 load(text=Str[70,decoded]"#52=s\nu[}G!G}Q7./q4.N-D>((8\x032DZ\x13y\x08KZs@)8=\xef\xbf\xbdI\n\n->+{@D@:=`VUeps3w;\ntm=\n")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[3]"tm=", value=Str[0]"")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+
+[stitch] CHECK FAILED: dump/load roundtrip (node 2)
+    #0 0x0 in stitch_harness::stubs::roundtrip /project/harness/stubs.rs:43
+
+
+result: CRASH check failed: dump/load roundtrip | in roundtrip (43 ms)

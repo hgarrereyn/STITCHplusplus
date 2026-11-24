@@ -1,0 +1,12 @@
+int main(void) {
+    // The program. Each STCall is one harness call with its arguments filled in.
+    return STReproMain(^{
+        // #0 load(text)
+        stitch_obj_Store store0 = STCall(0, "load", ^id { return stub_load(@"tmp="); });
+        // #1 remove(st=store0, key)
+        STCall(1, "remove", ^id { stub_remove(store0, @"tmp"); return nil; });
+        // #2 roundtrip(st=store0)  <-- crashes here in the original run
+        STCall(2, "roundtrip", ^id { stub_roundtrip(store0); return nil; });
+        // the original run crashed in call #2; nothing after it ran
+    });
+}

@@ -1,0 +1,58 @@
+use stitch::*;
+
+object!(Store, kvrs::Store);
+object!(Snapshot, kvrs::Store);
+datatype!(KvText);
+
+decoder!(KvText, fn kv_text(s: &mut Source) -> String {
+    let mut out = String::new();
+    while s.more() {
+        let k = if s.coin(0.3) { s.token() } else { s.str(8) };
+        out += &format!("{k}={}\n", s.str(12));
+    }
+    out
+});
+
+endpoint! {
+    fn new_store() -> New<Store> {
+        New::new(kvrs::Store::new())
+    }
+}
+
+endpoint! {
+    fn load(text: Str<256, KvText>) -> Result<New<Store>, String> {
+        Ok(New::new(kvrs::load(&text)?))
+    }
+}
+
+endpoint! {
+    fn put(st: Borrow<Store>, key: Str<16>, value: Str<32>) -> Result<(), String> {
+        st.put(&key, &value)
+    }
+}
+
+endpoint! {
+    fn remove(st: Borrow<Store>, key: Str<16>) {
+        st.remove(&key);
+    }
+}
+
+endpoint! {
+    fn snapshot(st: Borrow<Store>) -> Result<New<Snapshot>, String> {
+        Ok(New::new(kvrs::load(&st.dump())?))
+    }
+}
+
+endpoint! {
+    fn merge(st: Borrow<Store>, snap: Take<Snapshot>) -> Result<(), String> {
+        st.merge(&snap.into_inner())
+    }
+}
+
+endpoint! {
+    fn roundtrip(st: Borrow<Store>) {
+        let again = kvrs::load(&st.dump());
+        require(again.is_ok(), "dump did not load");
+        check(again.unwrap().len() == st.len(), "dump/load roundtrip");
+    }
+}

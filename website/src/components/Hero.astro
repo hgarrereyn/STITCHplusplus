@@ -1,0 +1,108 @@
+---
+// Home page hero (replaces Starlight's): a title whose last word cycles through the languages,
+// the tagline, a pointer for agents, the two actions, and a citation.
+import { LANGUAGES } from "./languages";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const agentGuide = new URL(`${base}/agents/overview.md`, Astro.site).href;
+const PAPER = "https://doi.org/10.1145/3830454.3846663";
+const BIBTEX = `@inproceedings{green2026stitching,
+  title     = {Automatic, Expressive, and Scalable Fuzzing with Stitching},
+  author    = {Green, Harrison and Brown, Fraser and Le Goues, Claire},
+  booktitle = {Proceedings of the 2026 ACM SIGSAC Conference on Computer and Communications Security},
+  series    = {CCS '26},
+  publisher = {ACM},
+  address   = {The Hague, Netherlands},
+  pages     = {1582--1596},
+  year      = {2026},
+  doi       = {10.1145/3830454.3846663}
+}`;
+const names = LANGUAGES.map(([, label]) => label);
+const order = ["cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc"];
+const words = order.map((id) => [id, LANGUAGES.find(([l]) => l === id)![1]]);
+---
+
+<div class="hero home-hero not-content">
+  <h1 id="_top" data-page-title aria-label={`Automatic, Expressive, and Scalable Fuzzing for ${names.join(", ")}`}>
+    <span aria-hidden="true">Automatic, Expressive, and Scalable Fuzzing for</span>
+    <span class="rotator" aria-hidden="true">
+      {words.map(([id, label], i) => (
+        <span class="word" data-lang={id} data-state={i === 0 ? "in" : "idle"}>{label}</span>
+      ))}
+    </span>
+  </h1>
+  <p class="tagline">
+    Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
+    endpoints, generates arguments, and finds crashes, exceptions, and failed checks.
+  </p>
+
+  <p class="agent-callout">
+    <svg class="robot" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v3" /><circle cx="12" cy="2.6" r="0.9" fill="currentColor" stroke="none" />
+      <rect x="4.5" y="6" width="15" height="12" rx="3" />
+      <circle cx="9.3" cy="11.5" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="14.7" cy="11.5" r="1.3" fill="currentColor" stroke="none" />
+      <path d="M9.5 15h5" /><path d="M2.5 10.5v3M21.5 10.5v3" />
+    </svg>
+    <span>Are you an agent? Read this instead:</span>
+    <a href={`${base}/agents/overview.md`}>{agentGuide}</a>
+  </p>
+
+  <div class="hero-actions">
+    <a class="hero-btn primary" href={`${base}/guide/tutorial/library/`}><svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h6a4 4 0 0 1 4 4V20a3 3 0 0 0-3-3H2z" /><path d="M22 4.5h-6a4 4 0 0 0-4 4V20a3 3 0 0 1 3-3h7z" /></svg>Tutorial</a>
+    <a class="hero-btn secondary lang-reference" href={`${base}/reference/languages/python/`} data-base={`${base}/reference/languages/`}><svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5" /><path d="m16 7 5 5-5 5" /><path d="m14 4-4 16" /></svg>Language reference</a>
+    <a class="hero-btn secondary" href={PAPER}><svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-11z" /><path d="M14 2.5v6h6" /><path d="M8 13h8M8 17h5" /></svg>Read the paper</a>
+    <span class="cite">
+      Useful? Cite our work :)
+      <button type="button" class="copy-bibtex" data-bibtex={BIBTEX}><svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2" /><path d="M4 16V5a2 2 0 0 1 2-2h11" /></svg>copy bibtex</button>
+      <span class="copied" role="status" aria-live="polite"></span>
+    </span>
+  </div>
+</div>
+
+<script>
+  // Title: every few seconds the language moves down and out, and the next one drops in.
+  for (const rotator of document.querySelectorAll<HTMLElement>(".rotator")) {
+    const words = [...rotator.querySelectorAll<HTMLElement>(".word")];
+    let i = 0;
+    setInterval(() => {
+      if (document.hidden) return;
+      const prev = words[i];
+      i = (i + 1) % words.length;
+      prev.dataset.state = "out";
+      words[i].dataset.state = "in";
+      setTimeout(() => { if (prev.dataset.state === "out") prev.dataset.state = "idle"; }, 600);
+    }, 2600);
+  }
+
+  // "Language reference" opens the page of the picked language.
+  import { currentLang, onLang } from "./lang-state";
+  for (const a of document.querySelectorAll<HTMLAnchorElement>(".lang-reference")) {
+    const point = (id: string) => (a.href = `${a.dataset.base}${id}/`);
+    point(currentLang());
+    onLang(point);
+  }
+
+  // Copy the BibTeX entry; fall back to selecting it where the clipboard is not available.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".copy-bibtex")) {
+    const status = button.parentElement!.querySelector<HTMLElement>(".copied")!;
+    button.addEventListener("click", async () => {
+      const text = button.dataset.bibtex!;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        try { document.execCommand("copy"); } catch {}
+        area.remove();
+      }
+      status.textContent = "copied";
+      setTimeout(() => (status.textContent = ""), 1800);
+    });
+  }
+</script>

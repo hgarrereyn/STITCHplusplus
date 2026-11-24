@@ -1,0 +1,105 @@
+---
+// A light/dark switch in place of Starlight's three-way menu. With nothing stored, the page follows
+// the system setting (Starlight's head script); a click stores the other theme.
+---
+
+<starlight-theme-select>
+  <button type="button" class="theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme">
+    <span class="theme-toggle-thumb" aria-hidden="true"></span>
+    <span class="theme-toggle-icon light" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="3.7" fill="none" stroke="currentColor" stroke-width="1.7" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.65 5.65l1.4 1.4M16.95 16.95l1.4 1.4M18.35 5.65l-1.4 1.4M7.05 16.95l-1.4 1.4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.6" /></svg>
+    </span>
+    <span class="theme-toggle-icon dark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="14" height="14"><path d="M15.7 4a8 8 0 1 0 4.2 12.3 7.7 7.7 0 0 1-4.2-12.3z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" /></svg>
+    </span>
+  </button>
+</starlight-theme-select>
+
+<script>
+  const KEY = "starlight-theme";
+  type Theme = "light" | "dark";
+  const stored = (): Theme | null => {
+    try { const t = localStorage.getItem(KEY); return t === "light" || t === "dark" ? t : null; } catch { return null; }
+  };
+  const system = (): Theme => (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+
+  function apply(theme: Theme) {
+    document.documentElement.dataset.theme = theme;
+    const next = theme === "dark" ? "light" : "dark";
+    document.querySelectorAll<HTMLButtonElement>("starlight-theme-select .theme-toggle").forEach((b) => {
+      b.dataset.state = theme;
+      b.setAttribute("aria-label", `Switch to ${next} theme`);
+      b.title = `Switch to ${next} theme`;
+    });
+  }
+
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (!stored()) apply(system()); });
+
+  class ThemeSwitch extends HTMLElement {
+    connectedCallback() {
+      apply(stored() ?? system());
+      this.querySelector("button")!.addEventListener("click", () => {
+        const theme: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        try { localStorage.setItem(KEY, theme); } catch {}
+        apply(theme);
+      });
+    }
+  }
+  customElements.define("starlight-theme-select", ThemeSwitch);
+</script>
+
+<style>
+  .theme-toggle {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, 1.6875rem);
+    align-items: center;
+    width: 3.75rem;
+    height: 2rem;
+    padding: 2px;
+    border: 1px solid var(--sl-color-hairline-shade);
+    border-radius: 999px;
+    background: var(--stitch-surface);
+    color: var(--sl-color-gray-3);
+    cursor: pointer;
+    transition: border-color 150ms ease;
+  }
+  .theme-toggle:hover {
+    border-color: var(--sl-color-gray-4);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+  .theme-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1.6875rem;
+    height: calc(100% - 4px);
+    border: 1px solid var(--sl-color-hairline-shade);
+    border-radius: 999px;
+    background: var(--sl-color-black);
+    box-shadow: 0 1px 4px rgb(20 22 18 / 0.1);
+    transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .theme-toggle[data-state="dark"] .theme-toggle-thumb {
+    transform: translateX(1.6875rem);
+  }
+  .theme-toggle-icon {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    transition: color 160ms ease;
+  }
+  .theme-toggle[data-state="light"] .light,
+  .theme-toggle[data-state="dark"] .dark {
+    color: var(--sl-color-white);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .theme-toggle-thumb { transition: none; }
+  }
+</style>

@@ -1,0 +1,16 @@
+use stitch::*;
+use stitch_harness::stubs::*;
+
+fn main() {
+    stitch_harness::__stitch_register();
+    stitch::run(|| {
+        // #0 load(text)
+        let mut r0 = stitch::call(0, "load", || load(Str::from("tmp=\n")));
+        let mut store0 = r0.get::<Store>(0);
+        // #1 remove(st=store0, key)
+        stitch::call(1, "remove", || remove(stitch::borrow(&mut store0), Str::from("tmp")));
+        // #2 roundtrip(st=store0)  <-- crashes here in the original run
+        stitch::call(2, "roundtrip", || roundtrip(stitch::borrow(&mut store0)));
+        // the original run crashed in call #2; nothing after it ran
+    });
+}

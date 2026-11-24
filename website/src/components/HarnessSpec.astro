@@ -1,0 +1,243 @@
+---
+// The home page harness (src/showcase/<lang>/harness.txt) with the shape of each endpoint beside it,
+// and notes on hover (mouse) or tap. Anchors are in showcase.ts; a missing one fails the build.
+import { Code } from "@astrojs/starlight/components";
+import { LANGUAGES } from "./languages";
+import { ENDPOINTS, LANGS, nameOf, PART_NOTES } from "./showcase";
+import { glyph, BOX_H } from "./glyph";
+
+const files = import.meta.glob<string>("../showcase/*/harness.txt", { query: "?raw", import: "default", eager: true });
+const SOURCE: Record<string, string> = {
+  python: "python", cpp: "cpp", javascript: "js", java: "java", go: "go", rust: "rust", ruby: "ruby", swift: "swift", objc: "objc",
+};
+const PAD_X = 8, PAD_TOP = 17;
+const io = (ps: { name: string; type: string; take?: boolean }[]) =>
+  ps.length ? ps.map((p) => `${p.name} (${p.type}${p.take ? ", taken" : ""})`).join(", ") : "nothing";
+
+const blocks = LANGUAGES.map(([lang]) => {
+  const text = files[`../showcase/${lang}/harness.txt`].replace(/\n+$/, "");
+  const lines = text.split("\n");
+  const L = LANGS[lang];
+  const lineOf = (at: string) => {
+    const i = lines.findIndex((l) => l.includes(at));
+    if (i < 0) throw new Error(`showcase ${lang}: "${at}" is not in harness.txt`);
+    return i;
+  };
+  const glyphs = ENDPOINTS.map((e) => {
+    const name = nameOf(lang, e.id);
+    const g = glyph(e, name, PAD_X, PAD_TOP, { labels: true });
+    const summary = `Inputs: ${io(e.in)}${e.fuzz.length ? `; fuzzed: ${e.fuzz.map((f) => f.name + (f.decoder ? ` (${f.decoder})` : "")).join(", ")}` : ""}. Outputs: ${io(e.out)}.`;
+    return { id: e.id, name, line: lineOf(L.at[e.id]), svg: g.svg, w: g.extent + PAD_X * 2, h: PAD_TOP + BOX_H + 20, cy: PAD_TOP + BOX_H / 2, note: e.note, summary };
+  });
+  const marks = [
+    // both object types make one note: either one lights both
+    ...Object.entries(L.types).map(([t, at]) => ({ at, kind: `type-${t === "Store" ? "store" : "snap"}`, group: "objects", ...PART_NOTES.objects })),
+    { at: L.decoder, kind: "decoder", ...PART_NOTES.decoder },
+    ...L.bail.map((at) => ({ at, kind: "bail", ...PART_NOTES.bail })),
+    { at: L.check, kind: "check", ...PART_NOTES.check },
+  ];
+  for (const m of marks) lineOf(m.at);
+  return { lang, text, glyphs, marks };
+});
+const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
+---
+
+<div class="spec">
+  {blocks.map(({ lang, text, glyphs }) => (
+    <div class="lang-block spec-block" data-for={lang}>
+      <div class="spec-glyphs">
+        {glyphs.map((g) => (
+          <button type="button" class="spec-glyph" data-line={g.line} data-cy={g.cy} data-title={g.name}
+                  data-note={`${g.note} ${g.summary}`} aria-label={`${g.name}: ${g.note}`}>
+            <svg viewBox={`0 0 ${g.w} ${g.h}`} width={g.w} height={g.h} aria-hidden="true" set:html={g.svg} />
+          </button>
+        ))}
+      </div>
+      <div class="spec-code"><Code code={text} lang={SOURCE[lang]} wrap preserveIndent /></div>
+    </div>
+  ))}
+  <div class="spec-pop" role="tooltip" hidden><strong class="spec-pop-title"></strong><span class="spec-pop-text"></span></div>
+</div>
+
+<script type="application/json" id="spec-marks" set:html={JSON.stringify(marks)} />
+
+<script>
+  import { currentLang, onLang } from "./lang-state";
+
+  type Mark = { at: string; kind: string; title: string; note: string; group?: string };
+  const MARKS: Record<string, Mark[]> = JSON.parse(document.getElementById("spec-marks")!.textContent!);
+  const spec = document.querySelector<HTMLElement>(".spec");
+
+  // Wrap every occurrence of `at` in a code line (last first, so earlier offsets stay valid).
+  function wrapAll(line: Element, m: Mark) {
+    const nodesOf = () => {
+      const out: Text[] = [];
+      const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) out.push(w.currentNode as Text);
+      return out;
+    };
+    const full = nodesOf().map((t) => t.data).join("");
+    const starts: number[] = [];
+    for (let p = full.indexOf(m.at); p >= 0; p = full.indexOf(m.at, p + m.at.length)) starts.push(p);
+    for (const start of starts.reverse()) {
+      const end = start + m.at.length, range = document.createRange();
+      let pos = 0;
+      for (const t of nodesOf()) {
+        const nxt = pos + t.data.length;
+        if (start >= pos && start < nxt) range.setStart(t, start - pos);
+        if (end > pos && end <= nxt) range.setEnd(t, end - pos);
+        pos = nxt;
+      }
+      const span = document.createElement("span");
+      span.className = `spec-mark ${m.kind}`;
+      span.tabIndex = 0;
+      span.setAttribute("role", "button");
+      span.dataset.title = m.title;
+      span.dataset.note = m.note;
+      if (m.group) span.dataset.group = m.group;
+      span.append(range.extractContents());
+      range.insertNode(span);
+    }
+  }
+
+  if (spec) {
+    const pop = spec.querySelector<HTMLElement>(".spec-pop")!;
+    const popTitle = pop.querySelector<HTMLElement>(".spec-pop-title")!, popText = pop.querySelector<HTMLElement>(".spec-pop-text")!;
+
+    for (const block of spec.querySelectorAll<HTMLElement>(".spec-block")) {
+      const lines = [...block.querySelectorAll(".ec-line")];
+      for (const m of MARKS[block.dataset.for!] ?? []) {
+        lines.forEach((line) => { if ((line.textContent ?? "").includes(m.at)) wrapAll(line, m); });
+      }
+    }
+
+    // Place each shape beside its endpoint's line; add space between lines where shapes would touch.
+    // Narrow screens put each shape above its line instead.
+    function layout() {
+      const block = spec!.querySelector<HTMLElement>(`.spec-block[data-for="${currentLang()}"]`);
+      if (!block) return;
+      const above = block.clientWidth < 520;
+      block.classList.toggle("above", above);
+      const code = block.querySelector<HTMLElement>(".spec-code")!;
+      const lines = [...block.querySelectorAll<HTMLElement>(".ec-line")];
+      lines.forEach((l) => (l.style.marginTop = ""));
+      const glyphs = [...block.querySelectorAll<HTMLElement>(".spec-glyph")].sort((a, b) => +a.dataset.line! - +b.dataset.line!);
+      const base = code.getBoundingClientRect().top;
+      let prevBottom = -Infinity;
+      for (const g of glyphs) {
+        const line = lines[+g.dataset.line!];
+        if (!line) continue;
+        const h = g.offsetHeight, lineH = parseFloat(getComputedStyle(line).lineHeight) || 22;
+        if (above) {
+          line.style.marginTop = `${h}px`;
+          g.style.top = `${line.getBoundingClientRect().top - base - h}px`;
+        } else {
+          let top = line.getBoundingClientRect().top - base + lineH / 2 - +g.dataset.cy!;
+          if (top < prevBottom + 6) {
+            line.style.marginTop = `${prevBottom + 6 - top}px`;
+            top = prevBottom + 6;
+          }
+          g.style.top = `${top}px`;
+          prevBottom = top + h;
+        }
+      }
+    }
+    let queued = false;
+    const relayout = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; layout(); }); } };
+    new ResizeObserver(relayout).observe(spec);
+    onLang(() => { hide(); relayout(); });
+    layout();
+
+    // Lines of the endpoint a shape stands for: its line, annotations above, and the block below.
+    function endpointLines(g: HTMLElement) {
+      const block = g.closest(".spec-block")!;
+      const lines = [...block.querySelectorAll<HTMLElement>(".ec-line")];
+      const text = (i: number) => (lines[i]?.textContent ?? "").trim();
+      let a = +g.dataset.line!, b = a;
+      while (a > 0 && /^@/.test(text(a - 1))) a--;
+      while (b + 1 < lines.length && text(b + 1) !== "") b++;
+      return lines.slice(a, b + 1);
+    }
+
+    let current: HTMLElement | null = null;
+    function show(target: HTMLElement) {
+      hide();
+      current = target;
+      popTitle.textContent = target.dataset.title!;
+      popText.textContent = target.dataset.note!;
+      pop.hidden = false;
+      target.classList.add("active");
+      // What the note must not cover: a shape and its endpoint's lines, or an underlined word's line.
+      const block = target.closest<HTMLElement>(".spec-block")!;
+      let covered: Element[];
+      if (target.classList.contains("spec-glyph")) {
+        block.classList.add("focus");
+        const lines = endpointLines(target);
+        lines.forEach((l) => l.classList.add("lit"));
+        covered = [target, ...lines];
+      } else {
+        covered = [target, target.closest(".ec-line") ?? target];
+        // the other parts of its group light up too; the note keeps clear of those on screen
+        if (target.dataset.group) {
+          for (const m of block.querySelectorAll<HTMLElement>(`.spec-mark[data-group="${target.dataset.group}"]`)) {
+            if (m === target) continue;
+            m.classList.add("active");
+            const r = m.getBoundingClientRect();
+            if (r.bottom > 0 && r.top < innerHeight) covered.push(m, m.closest(".ec-line") ?? m);
+          }
+        }
+      }
+      const rects = covered.map((e) => e.getBoundingClientRect());
+      const top = Math.min(...rects.map((r) => r.top)), bottom = Math.max(...rects.map((r) => r.bottom));
+      const box = spec!.getBoundingClientRect(), t = target.getBoundingClientRect();
+      // Just above the highlight, close to what is pointed at; below it when there is no room above.
+      const h = pop.offsetHeight, w = pop.offsetWidth;
+      const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sl-nav-height")) * 16 || 64;
+      const above = top - 10 - h >= nav || bottom + 10 + h > innerHeight;
+      pop.classList.toggle("below", !above);
+      pop.style.top = `${(above ? top - 10 - h : bottom + 10) - box.top}px`;
+      const left = Math.min(Math.max(t.left - box.left - 6, 0), box.width - w);
+      pop.style.left = `${left}px`;
+      // the caret points at the middle of the shape, or the start of the word
+      const aim = target.classList.contains("spec-glyph") ? t.left + Math.min(t.width / 2, 40) : t.left + Math.min(t.width / 2, 24);
+      pop.style.setProperty("--caret", `${Math.min(Math.max(aim - box.left - left, 14), w - 14)}px`);
+    }
+    function hide() {
+      current?.classList.remove("active");
+      spec!.querySelectorAll(".spec-mark.active").forEach((e) => e.classList.remove("active"));
+      spec!.querySelectorAll(".focus").forEach((e) => e.classList.remove("focus"));
+      spec!.querySelectorAll(".lit").forEach((e) => e.classList.remove("lit"));
+      current = null;
+      pop.hidden = true;
+    }
+    const targetOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>(".spec-glyph, .spec-mark");
+
+    // Mouse: the note shows while the pointer is over a shape or underlined part. This checks what is
+    // under the pointer on every move instead of trusting pointerout (whose relatedTarget some browsers
+    // report unreliably over SVG), and closes on scroll, since the page then moves under the pointer.
+    // Touch and pen: tap to open, tap again or elsewhere to close. Keyboard: focus.
+    let byMouse = false;
+    document.addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse") return;
+      const t = targetOf(e);
+      if (t && spec!.contains(t)) {
+        if (t !== current) { show(t); byMouse = true; }
+      } else if (current && byMouse) hide();
+    }, { passive: true });
+    document.addEventListener("pointerleave", () => { if (byMouse) hide(); });
+    addEventListener("scroll", () => { if (current && byMouse) hide(); }, { passive: true });
+    let lastPointer = "";   // the kind of the last press: "mouse", "touch", "pen", or "" for a key
+    spec.addEventListener("pointerdown", (e) => (lastPointer = e.pointerType));
+    spec.addEventListener("keydown", () => (lastPointer = ""));
+    spec.addEventListener("click", (e) => {
+      const t = targetOf(e);
+      if (!t) return;
+      if (lastPointer === "mouse") { if (t !== current) { show(t); byMouse = true; } return; }
+      if (t === current) hide(); else { show(t); byMouse = false; }
+    });
+    spec.addEventListener("focusin", (e) => { const t = targetOf(e); if (t && t.matches(":focus-visible")) { show(t); byMouse = false; } });
+    spec.addEventListener("focusout", (e) => { if (targetOf(e) === current) hide(); });
+    document.addEventListener("click", (e) => { if (current && !targetOf(e)) hide(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+  }
+</script>

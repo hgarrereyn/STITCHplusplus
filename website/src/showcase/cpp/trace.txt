@@ -1,0 +1,54 @@
+$ stitch exec c5 --trace
+[stitch] main:c5: running the minimized program .stitch/campaigns/main/w0/crashes/ec73e6aed6f32a4f.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/ec73e6aed6f32a4f.min.stp
+[stitch] #0 load(text=Str[0]"")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[3]"tmp", value=Str[0]"")
+[stitch]     -> ok
+[stitch] #2 remove_key(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #3 snapshot(st=o0.0)
+=================================================================
+==9==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000000bd0 at pc 0x55a8ae81ed23 bp 0x7fff23271900 sp 0x7fff232718f8
+READ of size 8 at 0x502000000bd0 thread T0
+    #0 0x55a8ae81ed22 in kv_dump /src/kv.c:77:37
+    #1 0x55a8ae7c58cd in snapshot /project/harness/stubs.cpp:37:18
+    #2 0x55a8ae7c58cd in void stitch::detail::Endpoint<&snapshot(stitch::Borrow<Store>)>::call<0ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul>) /stitch/runtime/include/stitch.h:904:19
+    #3 0x55a8ae7eda78 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1368:13
+    #4 0x55a8ae7e9114 in stitch_exec /stitch/runtime/src/runtime.cpp:1545:12
+    #5 0x55a8ae7f7c0e in stitch_run_file /stitch/runtime/src/runtime.cpp:1565:12
+    #6 0x55a8ae7b3a09 in main /stitch/runtime/src/main_repro.cpp:99:13
+    #7 0x7fdf8a0971c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #8 0x7fdf8a09728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #9 0x55a8ae6d76d4 in _start (/project/.stitch/build/repro+0x336d4) (BuildId: 9b3632ca8f7ebd019dbe9c22c0d41611139eebf0)
+
+0x502000000bd0 is located 0 bytes inside of 16-byte region [0x502000000bd0,0x502000000be0)
+freed by thread T0 here:
+    #0 0x55a8ae77228a in free (/project/.stitch/build/repro+0xce28a) (BuildId: 9b3632ca8f7ebd019dbe9c22c0d41611139eebf0)
+    #1 0x55a8ae7c5134 in remove_key /project/harness/stubs.cpp:33:50
+    #2 0x55a8ae7c5134 in void stitch::detail::Endpoint<&remove_key(stitch::Borrow<Store>, stitch::Str<16ul, void>)>::call<0ul, 1ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul>) /stitch/runtime/include/stitch.h:902:13
+    #3 0x55a8ae7eda78 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1368:13
+    #4 0x55a8ae7e9114 in stitch_exec /stitch/runtime/src/runtime.cpp:1545:12
+    #5 0x55a8ae7f7c0e in stitch_run_file /stitch/runtime/src/runtime.cpp:1565:12
+    #6 0x55a8ae7b3a09 in main /stitch/runtime/src/main_repro.cpp:99:13
+    #7 0x7fdf8a0971c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #8 0x7fdf8a09728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #9 0x55a8ae6d76d4 in _start (/project/.stitch/build/repro+0x336d4) (BuildId: 9b3632ca8f7ebd019dbe9c22c0d41611139eebf0)
+
+previously allocated by thread T0 here:
+    #0 0x55a8ae772523 in malloc (/project/.stitch/build/repro+0xce523) (BuildId: 9b3632ca8f7ebd019dbe9c22c0d41611139eebf0)
+    #1 0x55a8ae81e0fc in kv_put /src/kv.c:35:9
+    #2 0x55a8ae7c3e10 in put /project/harness/stubs.cpp:29:21
+    #3 0x55a8ae7c3e10 in void stitch::detail::Endpoint<&put(stitch::Borrow<Store>, stitch::Str<16ul, void>, stitch::Str<32ul, void>)>::call<0ul, 1ul, 2ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul, 1ul, 2ul>) /stitch/runtime/include/stitch.h:902:13
+    #4 0x55a8ae7eda78 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1368:13
+    #5 0x55a8ae7e9114 in stitch_exec /stitch/runtime/src/runtime.cpp:1545:12
+    #6 0x55a8ae7f7c0e in stitch_run_file /stitch/runtime/src/runtime.cpp:1565:12
+    #7 0x55a8ae7b3a09 in main /stitch/runtime/src/main_repro.cpp:99:13
+    #8 0x7fdf8a0971c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #9 0x7fdf8a09728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #10 0x55a8ae6d76d4 in _start (/project/.stitch/build/repro+0x336d4) (BuildId: 9b3632ca8f7ebd019dbe9c22c0d41611139eebf0)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/kv.c:77:37 in kv_dump
+[... shadow memory map omitted ...]
+
+result: CRASH heap-use-after-free READ | kv_dump kv.c:77 | snapshot stubs.cpp | snapshot (stub) (52 ms)

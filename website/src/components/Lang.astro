@@ -1,0 +1,11 @@
+---
+// Content for one tutorial language. Shown when that language is picked.
+import type { LanguageId } from "./languages";
+
+interface Props {
+  id: LanguageId;
+}
+const { id } = Astro.props;
+---
+
+<div class="lang-block" data-for={id}><slot /></div>

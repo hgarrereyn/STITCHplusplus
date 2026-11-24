@@ -1,0 +1,15 @@
+import stitch.Standalone;
+
+public class Repro {
+    public static void main(String[] args) {
+        Standalone.run(() -> {
+            // #0 load(text)
+            var store0 = Standalone.call(0, "load", () -> Stubs.load("tmp=\n"));
+            // #1 remove(st=store0, key)
+            Standalone.exec(1, "remove", () -> Stubs.remove(store0, "tmp"));
+            // #2 roundtrip(st=store0)  <-- crashes here in the original run
+            Standalone.exec(2, "roundtrip", () -> Stubs.roundtrip(store0));
+            // the original run crashed in call #2; nothing after it ran
+        });
+    }
+}

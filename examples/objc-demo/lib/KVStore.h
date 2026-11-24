@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// [key, value] pairs in insertion order.
 - (NSArray<NSArray<NSString *> *> *)items;
 - (NSDictionary<NSString *, NSString *> *)dictionary;
+/// Puts every entry of other into this store; NO (and an error) for an invalid entry.
+- (BOOL)mergeStore:(KVStore *)other error:(NSError **)error;
 - (NSString *)dump;
 /// Byte i of the UTF-8 value of key, or -1.
 - (int)byteForKey:(NSString *)key atIndex:(NSUInteger)i;

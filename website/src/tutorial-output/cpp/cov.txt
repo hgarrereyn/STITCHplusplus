@@ -1,0 +1,19 @@
+$ stitch cov
+[stitch] coverage build + 303 programs (main)
+[stitch] building project image stitch-kv:local-cov (log: ~/.cache/stitch/logs/kv-local-cov.log)
+coverage of 303 programs (298 ok, 5 crashed, 0 timed out), library at local
+
+library:
+  lines           90 / 94       95.7%
+  functions        8 / 9        88.9%
+  branches        35 / 38       92.1%
+
+  file        lines  functions
+  src/kv.c    95.7%      88.9%
+
+never called: 1 library functions, 1 of them not static
+  kv_get  src/kv.c:45
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

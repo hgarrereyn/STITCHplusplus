@@ -1,0 +1,27 @@
+---
+// Output of a tutorial command, recorded from a real run in each language
+// (src/tutorial-output/<language>/<name>.txt). Shows the picked language's file.
+import { Code } from "@astrojs/starlight/components";
+import { LANGUAGES } from "./languages";
+
+interface Props {
+  name: string;
+  /** Highlighting; "source" highlights each file in its own language. */
+  lang?: string;
+  /** Wrap long lines instead of scrolling sideways. */
+  wrap?: boolean;
+}
+const { name, lang = "text", wrap = false } = Astro.props;
+const files = import.meta.glob<string>("../tutorial-output/*/*.txt", { query: "?raw", import: "default", eager: true });
+const SOURCE: Record<string, string> = {
+  python: "python", cpp: "cpp", javascript: "js", java: "java", go: "go",
+  rust: "rust", ruby: "ruby", swift: "swift", objc: "objc",
+};
+const outputs = LANGUAGES.map(([id]) => [id, files[`../tutorial-output/${id}/${name}.txt`]] as const).filter(([, text]) => text);
+---
+
+{outputs.map(([id, text]) => (
+  <div class="lang-block" data-for={id}>
+    <Code code={text.replace(/\n+$/, "")} lang={lang === "source" ? SOURCE[id] : lang} wrap={wrap} preserveIndent={wrap} />
+  </div>
+))}

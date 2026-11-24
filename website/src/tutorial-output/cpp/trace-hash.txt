@@ -1,0 +1,32 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w1/crashes/c8eb10ab74699171.stp (up to 30s; --secs to change)
+4 -> 1 calls, still crashes: True (SEGV | strcspn  (BuildId: | kv_load kv.c | load stubs.cpp)
+  .stitch/campaigns/main/w1/crashes/c8eb10ab74699171.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/c8eb10ab74699171.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/c8eb10ab74699171.min.stp
+[stitch] #0 load(text=Str[34,decoded]"\xa1\xbd\xa8\xb1\x17\xcbR\xc5=8\\;5hu*B[d>B\nI5zM-8a5=#!\n")
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==9==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x7f180e491342 bp 0x7fff6c6a21f0 sp 0x7fff6c6a19a8 T0)
+==9==The signal is caused by a READ memory access.
+==9==Hint: address points to the zero page.
+    #0 0x7f180e491342  (/lib/x86_64-linux-gnu/libc.so.6+0x1a8342) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #1 0x55720c6d0d41 in strcspn (/project/.stitch/build/repro+0x4ed41) (BuildId: 68ab65200ffc3531324a57f4f5fa0732bc7b8ede)
+    #2 0x55720c7f9292 in kv_load /src/kv.c:96:15
+    #3 0x55720c79ddbe in load /project/harness/stubs.cpp:20:20
+    #4 0x55720c79ddbe in void stitch::detail::Endpoint<&load(stitch::Str<256ul, KvText>)>::call<0ul>(stitch::detail::Ctx&, std::integer_sequence<unsigned long, 0ul>) /stitch/runtime/include/stitch.h:904:19
+    #5 0x55720c7c7f38 in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/runtime/src/runtime.cpp:1368:13
+    #6 0x55720c7c35d4 in stitch_exec /stitch/runtime/src/runtime.cpp:1545:12
+    #7 0x55720c7d20ce in stitch_run_file /stitch/runtime/src/runtime.cpp:1565:12
+    #8 0x55720c791619 in main /stitch/runtime/src/main_repro.cpp:99:13
+    #9 0x7f180e3131c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #10 0x7f180e31328a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #11 0x55720c6b52e4 in _start (/project/.stitch/build/repro+0x332e4) (BuildId: 68ab65200ffc3531324a57f4f5fa0732bc7b8ede)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (/lib/x86_64-linux-gnu/libc.so.6+0x1a8342) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09) 
+[... shadow memory map omitted ...]
+
+result: CRASH SEGV | strcspn   | kv_load kv.c | load stubs.cpp (70 ms)

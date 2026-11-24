@@ -1,0 +1,6 @@
+$ stitch write c3
+[stitch] main:c3 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/b0b8b173289d4cc0.min.stp
+wrote .stitch/standalone/c3/repro.go (28 lines, 3 calls, crash in call #2)
+  expected: nil pointer dereference in kvgo.Store.Dump
+SAME CRASH: .stitch/standalone/c3/repro.go -> nil pointer dereference in kvgo.Store.Dump
+next: cp .stitch/standalone/c3/repro.go .stitch/standalone/c3/min.go, shrink it, and run `stitch try .stitch/standalone/c3/min.go` after each edit

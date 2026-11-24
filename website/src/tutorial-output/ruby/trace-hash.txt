@@ -1,0 +1,19 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w1/crashes/408db8d52f543f03.stp (up to 30s; --secs to change)
+1 -> 1 calls, still crashes: True (NoMethodError | block in Kvrb.load kvrb.rb:39 | Array#each kvrb.rb | Kvrb.load kvrb.rb)
+  .stitch/campaigns/main/w1/crashes/408db8d52f543f03.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/408db8d52f543f03.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/408db8d52f543f03.min.stp
+[stitch] #0 load(text=Str[3]"=#!")
+
+[stitch] EXCEPTION in load: NoMethodError: undefined method 'upcase' for nil
+    #0 0x0 in block in Kvrb.load /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:39
+    #1 0x0 in Array#each /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:34
+    #2 0x0 in Kvrb.load /usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:34
+    #3 0x0 in block in <top (required)> /project/.stitch/build/app/harness/stubs.rb:22
+    #4 0x0 in <main> /stitch/ruby/bin/stitch-rb:8
+
+
+result: CRASH NoMethodError | block in Kvrb.load kvrb.rb:39 | Array#each kvrb.rb | Kvrb.load kvrb.rb (114 ms)

@@ -1,0 +1,6 @@
+$ stitch write c4
+[stitch] main:c4 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/733243a843626d65.min.stp
+wrote .stitch/standalone/c4/repro.m (25 lines, 3 calls, crash in call #2)
+  expected: NSInvalidArgumentException in -[KVStore items]
+SAME CRASH: .stitch/standalone/c4/repro.m -> NSInvalidArgumentException in -[KVStore items]
+next: cp .stitch/standalone/c4/repro.m .stitch/standalone/c4/min.m, shrink it, and run `stitch try .stitch/standalone/c4/min.m` after each edit

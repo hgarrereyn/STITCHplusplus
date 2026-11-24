@@ -1,0 +1,128 @@
+---
+title: 6. Fuzz and triage
+description: Run a campaign, group its crashes, and decide what each one is.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
+
+## Run a campaign
+
+<RunOutput name="fuzz" />
+
+The campaign runs in the background. `--jobs` sets the number of workers, and `--secs` stops it
+after a while; without `--secs` it runs until `stitch stop`. Running `stitch fuzz` again resumes
+from the programs it kept. `stitch status --wait` waits for the end.
+
+## List the crashes
+
+<RunOutput name="crashes" />
+
+Crashes are grouped by their kind and the innermost frames in the library. The number after the
+id (`x10`) is how many saved programs are in the group.
+
+## Look at one
+
+Take the group whose frames go through `dump`, or `items`, which `dump` calls. `minimize` removes
+calls and shortens inputs while the program still crashes the same way. `exec --trace` runs it and prints every call:
+
+<RunOutput name="trace-tmp" />
+
+A key that starts with `tmp` goes into the store (through `load` or `put`), `remove` removes it,
+and then `dump` fails. In the library, `remove` skips the order list for keys that start with
+`tmp`, so `dump` looks up a key that is gone.
+
+## Harness bug or library bug?
+
+Decide this for every crash:
+
+- **Harness bug**: the stubs used the API wrong, for example a double free or a missing
+  precondition. Fix the stub, run `stitch build`, and check that `stitch exec` with the crash id
+  no longer crashes.
+- **Library bug**: every call was valid use of the API. Make a reproducer (next page).
+
+Here every call is valid: putting, removing and dumping are always allowed, so this is a library
+bug.
+
+## The other groups
+
+The other groups come from two more bugs. A value that starts with `#!` makes `load` crash; it
+should reject the text instead:
+
+<RunOutput name="trace-hash" />
+
+A key that contains `=` does not survive `dump` and `load`: `load` splits the line at the first
+`=`, so the key comes back different, or empty and rejected. `roundtrip` catches it:
+
+<RunOutput name="trace-eq" />
+
+The groups of this run, by bug:
+
+{/* gen:groups */}
+<Lang id="python">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c5` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c3`, `c4` |
+</Lang>
+<Lang id="cpp">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c2` |
+| `#!` values | `c1`, `c3` |
+| keys with `=` | `c4` |
+</Lang>
+<Lang id="javascript">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c4` |
+| `#!` values | `c2`, `c3` |
+| keys with `=` | `c1`, `c5` |
+</Lang>
+<Lang id="java">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c2` |
+| `#!` values | `c1` |
+| keys with `=` | `c3`, `c4` |
+</Lang>
+<Lang id="go">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c3` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c4` |
+</Lang>
+<Lang id="rust">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c2` |
+| `#!` values | `c1` |
+| keys with `=` | `c3` |
+</Lang>
+<Lang id="ruby">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c4` |
+| `#!` values | `c1` |
+| keys with `=` | `c2`, `c3` |
+</Lang>
+<Lang id="swift">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c4` |
+| `#!` values | `c2`, `c3` |
+| keys with `=` | `c1` |
+</Lang>
+<Lang id="objc">
+| Bug | Groups |
+|---|---|
+| `tmp` keys | `c4` |
+| `#!` values | `c1`, `c2` |
+| keys with `=` | `c3` |
+</Lang>
+{/* /gen:groups */}
+
+One bug can show up as several groups, so fix or explain one group before judging the next.

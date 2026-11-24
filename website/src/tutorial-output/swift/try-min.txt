@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c4/min.swift
+SAME CRASH: .stitch/standalone/c4/min.swift -> Unexpectedly found nil while unwrapping an Optional value in closure
+  5 code lines, plain library code

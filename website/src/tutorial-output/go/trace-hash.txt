@@ -1,0 +1,15 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/32adc2d5ed2d4dd3.stp (up to 30s; --secs to change)
+6 -> 1 calls, still crashes: True (index out of range | kvgo.Load kv.go:66)
+  .stitch/campaigns/main/w0/crashes/32adc2d5ed2d4dd3.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/32adc2d5ed2d4dd3.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/32adc2d5ed2d4dd3.min.stp
+[stitch] #0 load(text=Str[5,decoded]"2=#!\n")
+
+[stitch] EXCEPTION in load: index out of range: runtime error: index out of range [1] with length 0
+    #0 0x0 in kvgo.Load /src/kv.go:66
+
+
+result: CRASH index out of range | kvgo.Load kv.go:66 (8 ms)

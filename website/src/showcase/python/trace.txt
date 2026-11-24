@@ -1,0 +1,16 @@
+$ stitch exec c6 --trace
+[stitch] main:c6: running the minimized program .stitch/campaigns/main/w1/crashes/efa7571e60551605.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/efa7571e60551605.min.stp
+[stitch] #0 load(text=Str[4,decoded]"tmp=")
+[stitch]     -> ok produced o0.0
+[stitch] #1 remove(st=o0.0, key=Str[3]"tmp")
+[stitch]     -> ok
+[stitch] #2 snapshot(st=o0.0)
+
+[stitch] EXCEPTION in snapshot: KeyError: 'tmp'
+    #0 0x0 in Store.items /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:26
+    #1 0x0 in Store.dump /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:34
+    #2 0x0 in snapshot /project/.stitch/build/app/harness/stubs.py:41
+
+
+result: CRASH KeyError | Store.items __init__.py:26 | Store.dump __init__.py | snapshot (stub) (59 ms)

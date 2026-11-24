@@ -1,0 +1,7 @@
+$ stitch build
+[stitch] building project image stitch-kv:local (log: ~/.cache/stitch/logs/kv-local.log)
+ok: 4 endpoints, 1 object types, 0 datatypes  [stitch-kv:local]
+$ stitch check
+4 endpoints, 1 object types, 0 datatypes
+  harness/: 4
+no issues

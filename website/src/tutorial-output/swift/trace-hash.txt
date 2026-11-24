@@ -1,0 +1,44 @@
+$ stitch minimize c2 --secs 30
+[stitch] main:c2 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w0/crashes/ab6b366ba91cb783.stp (up to 30s; --secs to change)
+4 -> 1 calls, still crashes: True (Index out of range | load KV.swift:47 | closure #1 in variable initialization expression of load stubs.swift)
+  .stitch/campaigns/main/w0/crashes/ab6b366ba91cb783.min.stp
+$ stitch exec c2 --trace
+[stitch] main:c2 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/ab6b366ba91cb783.min.stp
+[stitch] running .stitch/campaigns/main/w0/crashes/ab6b366ba91cb783.min.stp
+[stitch] #0 load(text=Str[3,decoded]"=#!")
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: ILL on unknown address 0x5607a5e05afa (pc 0x5607a5e05afa bp 0x7ffe87912250 sp 0x7ffe87912080 T0)
+    #0 0x5607a5e05afa in Swift runtime failure: Index out of range /<compiler-generated>
+    #1 0x5607a5e05afa in specialized Array._checkSubscript(_:wasNativeTypeChecked:) /<compiler-generated>
+    #2 0x5607a5e05afa in specialized Array.subscript.getter /<compiler-generated>
+    #3 0x5607a5e05afa in load(_:) /src/Sources/KVSwift/KV.swift:47:60
+    #4 0x5607a5e62e7f in closure #1 in variable initialization expression of load /project/.stitch/build/app/pkg/Sources/worker/stubs.swift:22:13
+    #5 0x5607a5e0e4bc in closure #1 in endpoint<A, B>(_:file:_:) /stitch/swift/Stitch/Sources/Stitch/Endpoints.swift:90:81
+    #6 0x5607a5e0c412 in partial apply for closure #1 in endpoint<A, B>(_:file:_:) Endpoints.swift.o
+    #7 0x5607a5e0e6c6 in partial apply for closure #1 in endpoint<A, B>(_:file:_:) Endpoints.swift.o
+    #8 0x5607a5e510cb in thunk for @escaping @callee_guaranteed (@unowned Call) -> (@error @owned Error) /<compiler-generated>
+    #9 0x5607a5e58d94 in partial apply for thunk for @escaping @callee_guaranteed (@unowned Call) -> (@error @owned Error) /<compiler-generated>
+    #10 0x5607a5e505bf in closure #1 in static Runtime.setup() /stitch/swift/Stitch/Sources/Stitch/Stitch.swift:527:42
+    #11 0x5607a5e6e77b in void (anonymous namespace)::invoke<1>(stitch::detail::Ctx&) /stitch/swift/bridge/bridge.cpp:47:25
+    #12 0x5607a5eb4a0e in stitch::run_program(std::vector<stitch::PNode, std::allocator<stitch::PNode>> const&, bool) /stitch/cpp-runtime/src/runtime.cpp:1368:13
+    #13 0x5607a5eb126f in stitch_exec /stitch/cpp-runtime/src/runtime.cpp:1545:12
+    #14 0x5607a5ebf28f in stitch_run_file /stitch/cpp-runtime/src/runtime.cpp:1565:12
+    #15 0x5607a5eecfe8 in stitch_repro_main(int, char**) /stitch/cpp-runtime/src/main_repro.cpp:99:13
+    #16 0x5607a5e518d4 in stitchMain(argNames:_:) /stitch/swift/Stitch/Sources/Stitch/Stitch.swift:595:12
+    #17 0x5607a5e61497 in worker_main /project/.stitch/build/app/pkg/Sources/worker/main.swift:7:6
+    #18 0x7fdc9ffd81c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #19 0x7fdc9ffd828a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8cebda42d140fc2b09639f8b13a5d5f2e617ef09)
+    #20 0x5607a5d43d04 in _start (/project/.stitch/build/app/worker+0xbcd04) (BuildId: 48f36afc3038b80cb372f1457c189abee706f593)
+
+==13==Register values:
+rax = 0x0000000000000001  rbx = 0x00007ffe879120e0  rcx = 0x0000000000000000  rdx = 0x00007fdc9fb4e000  
+rdi = 0x0000000000000000  rsi = 0x0000000000000001  rbp = 0x00007ffe87912250  rsp = 0x00007ffe87912080  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007fffffffff01  r11 = 0x0000000000000201  
+r12 = 0x0000000000000000  r13 = 0x00007fdca0dc6bf0  r14 = 0x0000000000000000  r15 = 0x0000000000000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ILL /<compiler-generated> in Swift runtime failure: Index out of range
+==13==ABORTING
+
+result: CRASH Index out of range | load KV.swift:47 | closure #1 in variable initialization expression of load stubs.swift | partial apply for closure #1 in endpoint<A, B>  (140 ms)

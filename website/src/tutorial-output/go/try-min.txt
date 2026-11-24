@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c3/min.go
+SAME CRASH: .stitch/standalone/c3/min.go -> nil pointer dereference in kvgo.Store.Dump
+  8 code lines, plain library code

@@ -1,4 +1,5 @@
 """`stitch init` scaffolding."""
+import os
 from pathlib import Path
 
 TOML = """# STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
@@ -551,7 +552,9 @@ def init_project(root: Path, name=None, git=None, rev=None, path=None, language=
     if git:
         source = f'git = "{git}"\nrev = "{rev or "HEAD"}"   # branch, tag or commit; `stitch build --rev X` overrides it'
     else:
-        source = f'path = "{path}"   # local checkout, used as-is (uncommitted changes included)'
+        # stitch.toml resolves a relative path against the project folder, not the current directory
+        stored = path if os.path.isabs(os.path.expanduser(path)) else os.path.relpath(Path(path).resolve(), root)
+        source = f'path = "{stored}"   # local checkout, used as-is (uncommitted changes included)'
     (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module,
                                                        gomod=_go_module(git, path, module),
                                                        swift_product=_swift_product(git, path, name)))

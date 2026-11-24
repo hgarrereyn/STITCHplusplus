@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c3/bad.go
+NO CRASH: .stitch/standalone/c3/bad.go ran to completion (expected nil pointer dereference in kvgo.Store.Dump)

@@ -1,0 +1,7 @@
+$ stitch write c2
+[stitch] main:c2 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/34e651e6094e7fd3.min.stp
+warning: .stitch/campaigns/main/w1/crashes/34e651e6094e7fd3.min.stp now crashes differently from bucket c2 (NullPointerException at Stubs.roundtrip (stub) instead of Stubs.roundtrip Stubs.java); the reproducer expects the new crash
+wrote .stitch/standalone/c2/Repro.java (22 lines, 3 calls, crash in call #2)
+  expected: NullPointerException in Store.dump
+SAME CRASH: .stitch/standalone/c2/Repro.java -> NullPointerException in Store.dump
+next: cp .stitch/standalone/c2/Repro.java .stitch/standalone/c2/min.java, shrink it, and run `stitch try .stitch/standalone/c2/min.java` after each edit

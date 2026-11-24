@@ -1,0 +1,6 @@
+$ stitch repro c5
+[stitch] main:c5 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w0/crashes/4141d2e5c3d584be.min.stp
+[stitch] verifying the reproducer from scratch (~/STITCHplusplus/examples/kv/.stitch/repros/kv-c5/run.sh)...
+[stitch] verified: same crash
+reproducer: ~/STITCHplusplus/examples/kv/.stitch/repros/kv-c5
+  run it anywhere with docker: ~/STITCHplusplus/examples/kv/.stitch/repros/kv-c5/run.sh

@@ -1,0 +1,21 @@
+---
+import { LANGUAGES } from "./languages";
+---
+
+<label class="lang-select">
+  <span>Language</span>
+  <select aria-label="Tutorial language">
+    {LANGUAGES.map(([id, label]) => <option value={id}>{label}</option>)}
+  </select>
+</label>
+
+<script>
+  import { currentLang, onLang, setLang } from "./lang-state";
+
+  const selects = document.querySelectorAll<HTMLSelectElement>(".lang-select select");
+  for (const select of selects) {
+    select.value = currentLang();
+    select.addEventListener("change", () => setLang(select.value));
+  }
+  onLang((id) => selects.forEach((s) => (s.value = id)));
+</script>

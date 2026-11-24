@@ -1,0 +1,468 @@
+---
+title: Concepts
+description: Objects, parameters, bails, checks, data types and attributes.
+languages: true
+---
+
+import Lang from "../../../components/Lang.astro";
+
+The tutorial uses most of these ideas. This page explains each one on its own. The syntax summary
+for the language you picked is at the [end of the page](#syntax).
+
+## Stubs and programs
+
+A stub makes one API call. Its signature declares what it needs (objects and fuzzed parameters)
+and what it produces (new objects). A program is a list of stub calls, where each object input
+refers to an output of an earlier call. `stitch exec --trace` prints programs like this:
+
+```
+[stitch] #0 load(text=Str[3,decoded]"a=1")
+[stitch]     -> ok produced o0.0
+[stitch] #1 put(st=o0.0, key=Str[4]"tmpa", value=Str[1]"x")
+[stitch]     -> ok
+[stitch] #2 roundtrip(st=o0.0)
+[stitch]     -> ok
+```
+
+`o0.0` is output 0 of call 0.
+
+## Objects
+
+An object is a value that one call produces and later calls use: a store, a parsed document, a
+file handle. Each object has a type that you name in the harness.
+
+- **Borrow**: the call uses the object. It stays available for later calls.
+- **Take**: the call consumes the object. Later calls can't use it.
+- **New**: the call returns a new object.
+
+When the library takes ownership of an input only if the call succeeds, borrow it and mark it
+consumed after the call succeeds.
+
+A stub can have several outputs, and an output can be optional. A parser that returns either a
+table or an array can return both as optional outputs, so that stubs that need a table get one.
+
+Write one producer per kind of object (`new_number`, `new_string`), not one producer with a
+`kind` parameter. The fuzzer learns which producer each consumer needs.
+
+## Fuzzed parameters
+
+Every parameter that is not an object is fuzzed:
+
+| Kind | Value |
+|---|---|
+| integers, floats, booleans | any value of the type |
+| range | an integer between two bounds |
+| one of | one value from a list of constants |
+| flags | the OR of a subset of flags |
+| string, bytes | at most a given number of bytes, optionally tagged with a data type |
+| file | the path of a temporary file holding the data |
+| value | whatever a data type's decoder returns: a list, a struct, a record |
+| source | a stream of choices to use inside the stub |
+
+Prefer a range or a list of values to a plain integer that the stub then rejects. A stub that
+rejects most values wastes runs.
+
+A source picks among things that exist at run time, such as an existing key or element. These
+examples come from the language reference:
+
+<Lang id="python">
+```python
+@stitch.endpoint
+def remove(doc: Borrow[Doc], s: Src[8]):
+    keys = list(doc.keys())
+    stitch.require(keys, "no keys")
+    doc.remove(s.pick(keys))                  # pick an existing key
+```
+</Lang>
+<Lang id="cpp">
+```cpp
+void delete_member(Borrow<Json> obj, Src<16> s) {
+    int n = cJSON_GetArraySize(obj);
+    stitch::require(cJSON_IsObject(obj) && n > 0, "no members");
+    cJSON_DeleteItemFromArray(obj, (int)s->choice(n));   // pick an existing member
+}
+STITCH_ENDPOINT(delete_member);
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.endpoint("remove_key", { o: Borrow(Obj), s: Src(8) }, null, ({ o, s }) => {
+  const keys = Object.keys(o);
+  stitch.require(keys.length > 0, "no keys");
+  delete o[s.pick(keys)];                               // pick an existing key
+});
+```
+</Lang>
+<Lang id="java">
+```java
+@Endpoint
+public static void get_index(CSVRecord r, @Max(4) Source s) {
+    Stitch.require(r.size() > 0, "empty record");
+    int i = s.choice(r.size());                 // pick an existing field
+    Stitch.check(java.util.Objects.equals(r.get(i), r.toList().get(i)), "get(i) matches values()");
+}
+```
+</Lang>
+<Lang id="go">
+```go
+func remove(d *Doc, s *stitch.Source) {
+	keys := sortedKeys(d.M)                      // sorted: map order is random
+	stitch.Require(len(keys) > 0, "no keys")
+	delete(d.M, stitch.Pick(s, keys...))         // pick an existing key
+}
+```
+</Lang>
+<Lang id="rust">
+```rust
+endpoint! {
+    fn pick_comparator(req: Borrow<Req>, s: Src<8>) -> Option<New<Cmp>> {
+        if req.comparators.is_empty() { return None; }
+        let i = s.choice(req.comparators.len());          // pick an existing element
+        Some(New::new(req.comparators[i].clone()))
+    }
+}
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.endpoint :remove, { doc: Borrow[Doc], s: Src[8] } do |doc, s|
+  kids = doc.root ? doc.root.elements.to_a : []
+  Stitch.require(!kids.empty?, "no children")
+  doc.root.delete_element(s.pick(kids))       # pick an existing element
+end
+```
+</Lang>
+<Lang id="swift">
+```swift
+let removeChild = endpoint("remove_child") { (doc: Borrow<Doc>, s: Choices<8>) throws in
+    let kids = doc.value.body()?.children().array() ?? []
+    try require(!kids.isEmpty, "no children")
+    try s.source.pick(kids).remove()                        // pick an existing element
+}
+```
+</Lang>
+<Lang id="objc">
+```objc
+STITCH_ENDPOINT(void, remove_any, Borrow(Store) st, Src(8) s) {
+    NSArray *keys = [[st dictionary] allKeys];
+    STRequire(keys.count > 0, @"empty");
+    [st removeKey:[s pick:keys]];                   // pick an existing key
+}
+```
+</Lang>
+
+When the order is not stable (a hash map), sort before picking, so that a program replays the same
+way.
+
+## Bails, bugs and checks
+
+A **bail** is an expected failure: invalid input or an unmet precondition. The call produces
+nothing, the calls that need its outputs are skipped, and the rest of the program runs.
+
+A **bug** is anything else: a crash, a sanitizer report, a panic or trap, an exception the stub
+did not declare, a failed check, or a program slower than `timeout_ms`.
+
+A **check** is a property you assert: `check(cond, "what")`. Good checks hold for every input:
+
+- round trips: `load(dump(x))` equals `x`
+- idempotence: `normalize(normalize(x)) == normalize(x)`
+- agreement: two APIs that compute the same thing give the same result
+
+## Data types
+
+A data type is a tag on a string or bytes parameter, such as `Str[256, KvText]`. Its folder
+`harness/data/KvText/` can hold:
+
+- `seeds/`: sample inputs, one per file
+- `*.dict`: tokens, one quoted string per line
+- a **decoder** in the harness, which builds a value from fuzzer choices
+
+<Lang id="python">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more():` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="cpp">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw<Other>()`.
+</Lang>
+<Lang id="javascript">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="java">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while (s.more())` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw("Other")`.
+</Lang>
+<Lang id="go">
+A decoder draws from a source: `s.Str(8)` for text, `s.Token()` for a dictionary token, `s.Range(0, 9)` for a
+number, and `for s.More()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `stitch.Draw[T](s, "Other")`.
+</Lang>
+<Lang id="rust">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw::<Other>()`.
+</Lang>
+<Lang id="ruby">
+A decoder draws from a source: `s.str(8)` for text, `s.token` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other)`.
+</Lang>
+<Lang id="swift">
+A decoder draws from a source: `s.str(8)` for text, `s.token()` for a dictionary token, `s.range(0, 9)` for a
+number, and `while s.more()` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `s.draw(Other.self)`.
+</Lang>
+<Lang id="objc">
+A decoder draws from a source: `[s str:8]` for text, `[s token]` for a dictionary token, `[s range:0 to:9]` for a
+number, and `while ([s more])` to loop. Mutations change the choices, so decoded values stay well formed.
+A decoder can also return a structured value, which a `Val` parameter receives, and call another
+decoder with `STDraw(s, Other)`.
+</Lang>
+
+`stitch sample KvText -n 5` prints values a decoder makes.
+
+## Attributes
+
+An attribute is a value the harness stores on an object, for facts the library can't tell you,
+such as a count the harness keeps:
+
+<Lang id="python">
+```python
+stitch.set(doc, "edits", stitch.get(doc, "edits", 0) + 1)   # any value
+stitch.get(doc, "edits", 0)          # with a default: a missing key is normal
+```
+</Lang>
+<Lang id="cpp">
+```cpp
+stitch::set(obj, "refs", stitch::get(obj, "refs", 0) + 1);       // integer, with a default
+stitch::require(stitch::get(obj, "refs", 0) == 0, "object is referenced");
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.set(o, "edits", stitch.get(o, "edits", 0) + 1);   // any value
+stitch.get(o, "edits", 0);             // with a default: a missing key is normal
+```
+</Lang>
+<Lang id="java">
+```java
+Stitch.set(p, "count", Stitch.getLong(p, "count", 0) + 1);   // any Object, lists included
+Stitch.getLong(p, "count", 0);          // long, with a default
+```
+</Lang>
+<Lang id="go">
+```go
+stitch.Set(d, "depth", stitch.GetInt(d, "depth", 0)+1)   // any value
+stitch.GetInt(d, "depth", 0)            // int64 with a default
+```
+</Lang>
+<Lang id="rust">
+```rust
+set_int(&v, "bumps", 1);
+let n = get_int(&v, "bumps");            // Option<i64>; a miss is reported by `stitch probe`
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.set(doc, "edits", Stitch.get(doc, "edits", 0) + 1)   # any value
+Stitch.get(doc, "edits", 0)                 # with a default: a missing key is normal
+```
+</Lang>
+<Lang id="swift">
+```swift
+doc.set("children", (doc.int("children") ?? 0) + 1)
+```
+</Lang>
+<Lang id="objc">
+```objc
+STSetInt(st, @"puts", STGetIntOr(st, @"puts", 0) + 1);   // integer, with a default
+STRequire(STGetIntOr(st, @"puts", 0) < 100, @"store is full");
+```
+</Lang>
+
+Ask the library first; use an attribute only when there is no API for the fact. A stub that copies
+an object should copy its attributes too.
+
+## Campaigns and the corpus
+
+`stitch fuzz` starts a **campaign** (named `main` unless you pass `--name`). It keeps a
+**corpus**: the programs that reached new code. Running `stitch fuzz` again resumes the corpus.
+`stitch probe` is a short campaign named `probe`, used to check the harness. Crash ids (`c1`,
+`c2`, ...) are numbered per campaign.
+
+## Syntax
+
+<Lang id="python">
+| Concept | Python |
+|---|---|
+| stub | `@stitch.endpoint` on a function; `@stitch.endpoint(bails_on=(ValueError,))` |
+| object type | `Store = stitch.object("Store")` |
+| borrow, take, new | `st: Borrow[Store]`, `st: Take[Store]`, `-> New[Store]` |
+| optional output | `-> New[Store] \| None`; several: `-> tuple[New[A], New[B] \| None]` |
+| integers, floats | `I64`, `U8`, `F64`, `bool`, ... |
+| range, one of, flags | `Range[0, 9]`, `OneOf["a", "b"]`, `Flags[1, 2, 4]` |
+| string, bytes, file | `Str[64]`, `Bytes[256, Tag]`, `File[4096, Tag]` |
+| value, source | `Val[Tag, 256]`, `Src[8]` |
+| bail, require, check | `stitch.bail(r)`, `stitch.require(c, r)`, `stitch.check(c, what)` |
+| data type, decoder | `Tag = stitch.datatype("Tag")`, `@stitch.decoder(Tag)` |
+| attributes | `stitch.set(x, k, v)`, `stitch.get(x, k, default)` |
+
+Full reference: [Python](/STITCHplusplus/reference/languages/python/).
+</Lang>
+
+<Lang id="cpp">
+| Concept | C/C++ |
+|---|---|
+| stub | a function, then `STITCH_ENDPOINT(name);` |
+| object type | `STITCH_OBJECT(Store, kv_store*);` and optionally `STITCH_DROP(Store, fn);` |
+| borrow, take, new | `Borrow<Store> st`, `Take<Store> st`, return `New<Store>` |
+| optional output | return `std::tuple<New<A>, std::optional<New<B>>>` |
+| integers, floats | `I32`, `U64`, `F64`, `Bool`, ... |
+| range, one of, flags | `Range<0, 9>`, `OneOf<A, B>`, `Flags<1, 2, 4>` |
+| string, bytes, file | `Str<64>`, `Bytes<256, Tag>`, `File<4096, Tag>` |
+| value, source | `stitch::Val<Tag, 256>`, `Src<8>` |
+| bail, require, check | `stitch::bail(r)`, `stitch::require(c, r)`, `stitch::check(c, what)` |
+| data type, decoder | `STITCH_DATATYPE(Tag);`, `STITCH_DECODER(Tag, fn);` |
+| attributes | `stitch::set(x, k, v)`, `stitch::get(x, k, default)` |
+
+Full reference: [C/C++](/STITCHplusplus/reference/languages/cpp/).
+</Lang>
+
+<Lang id="javascript">
+| Concept | JavaScript |
+|---|---|
+| stub | `stitch.endpoint(name, params, returns, fn, { bailsOn: [RangeError] })` |
+| object type | `const Store = stitch.object("Store")` |
+| borrow, take, new | `Borrow(Store)`, `Take(Store)`, returns `New(Store)` |
+| optional output | `New(Store).optional()`; several: `[New(A), New(B).optional()]` |
+| integers, floats | `I32`, `U8`, `F64`, `Bool`, ... |
+| range, one of, flags | `Range(0, 9)`, `OneOf("a", "b")`, `Flags(1, 2, 4)` |
+| string, bytes, file | `Str(64)`, `Bytes(256, Tag)`, `File(4096, Tag)` |
+| value, source | `Val(Tag, 256)`, `Src(8)` |
+| bail, require, check | `stitch.bail(r)`, `stitch.require(c, r)`, `stitch.check(c, what)` |
+| data type, decoder | `const Tag = stitch.datatype("Tag")`, `stitch.decoder(Tag, (s) => ...)` |
+| attributes | `stitch.set(x, k, v)`, `stitch.get(x, k, default)` |
+
+Full reference: [JavaScript](/STITCHplusplus/reference/languages/javascript/).
+</Lang>
+
+<Lang id="java">
+| Concept | Java |
+|---|---|
+| stub | `@Endpoint` on a `public static` method; `@Endpoint(bailsOn = {...})` |
+| object type | the class's simple name, or `@Obj("Name")` |
+| borrow, take, new | a parameter of a class type, `@Take`, a non-void return |
+| optional output | `@Endpoint(optional = true)` |
+| integers, floats | `int`, `long`, `double`, `boolean`, ... |
+| range, one of, flags | `@Range(lo = 0, hi = 9) int`, `@OneOf(strings = {...}) String`, `@Flags({1, 2, 4}) int` |
+| string, bytes, file | `@Str(max = 64) String`, `@Bytes(max = 256, type = "Tag") byte[]`, `@FileParam(...) Path` |
+| value, source | `@Val(value = "Tag", max = 256)`, `@Max(8) Source s` |
+| bail, require, check | `throw Stitch.bail(r)`, `Stitch.require(c, r)`, `Stitch.check(c, what)` |
+| data type, decoder | `@Decoder("Tag")` on a `public static` method taking a `Source` |
+| attributes | `Stitch.set(x, k, v)`, `Stitch.getLong(x, k, default)` |
+
+Full reference: [Java](/STITCHplusplus/reference/languages/java/).
+</Lang>
+
+<Lang id="go">
+| Concept | Go |
+|---|---|
+| stub | `stitch.Endpoint("name", fn, specs...)` in `init()` |
+| object type | `stitch.Object[*kvgo.Store]("Store", nil)` |
+| borrow, take, new | a parameter of the type, the spec `"st:take"`, a result of the type |
+| optional output | the spec `"out0:optional"` |
+| integers, floats | `int64`, `uint8`, `float64`, `bool`, ... |
+| range, one of, flags | `"n:range=0..9"`, `"m:oneof=1\|2"`, `"f:flags=1\|2\|4"` |
+| string, bytes, file | `string` with `"s:max=64"`, `[]byte` with `"b:max=256,type=Tag"`, `stitch.Path` |
+| value, source | `"v:val=Tag,max=256"`, `*stitch.Source` with `"s:max=8"` |
+| bail, require, check | a non-nil `error` result, `stitch.Bail(r)`, `stitch.Require(c, r)`, `stitch.Check(c, what)` |
+| data type, decoder | `stitch.Decoder("Tag", fn)` |
+| attributes | `stitch.Set(x, k, v)`, `stitch.GetInt(x, k, default)` |
+
+Full reference: [Go](/STITCHplusplus/reference/languages/go/).
+</Lang>
+
+<Lang id="rust">
+| Concept | Rust |
+|---|---|
+| stub | `endpoint! { fn name(...) -> ... { ... } }` |
+| object type | `object!(Store, kvrs::Store);` |
+| borrow, take, new | `Borrow<Store>`, `Take<Store>`, `-> New<Store>` |
+| optional output | `-> Option<New<Store>>`; several: `-> (New<A>, Option<New<B>>)` |
+| integers, floats | `i64`, `u8`, `f64`, `bool`, ... |
+| range, one of, flags | `Range<0, 9>`, `OneOf<C>` with `choices!`, `Flags<F>` with `flags!` |
+| string, bytes, file | `Str<64>`, `Bytes<256, Tag>`, `File<4096, Tag>` |
+| value, source | `Val<Tag, 256>`, `Src<8>` |
+| bail, require, check | an `Err` result, `bail(r)`, `require(c, r)`, `check(c, what)` |
+| data type, decoder | `datatype!(Tag);`, `decoder!(Tag, fn name(s: &mut Source) -> T { ... });` |
+| attributes | `set_int(&x, k, v)`, `get_int(&x, k)`, `has(&x, k)` |
+
+Full reference: [Rust](/STITCHplusplus/reference/languages/rust/).
+</Lang>
+
+<Lang id="ruby">
+| Concept | Ruby |
+|---|---|
+| stub | `Stitch.endpoint :name, {params}, outputs, bails_on: [...] do \|args\| ... end` |
+| object type | `Store = Stitch.object("Store")` |
+| borrow, take, new | `Borrow[Store]`, `Take[Store]`, outputs `New[Store]` |
+| optional output | `New[Store] \| nil`; several: `[New[A], New[B] \| nil]` |
+| integers, floats | `I64`, `U8`, `F64`, `Bool`, ... |
+| range, one of, flags | `Int[0, 9]`, `OneOf["a", "b"]`, `Flags[1, 2, 4]` |
+| string, bytes, file | `Str[64]`, `Bytes[256, Tag]`, `FilePath[4096, Tag]` |
+| value, source | `Val[Tag, 256]`, `Src[8]` |
+| bail, require, check | `Stitch.bail(r)`, `Stitch.require(c, r)`, `Stitch.check(c, what)` |
+| data type, decoder | `Tag = Stitch.datatype("Tag")`, `Stitch.decoder(Tag) do \|s\| ... end` |
+| attributes | `Stitch.set(x, k, v)`, `Stitch.get(x, k, default)` |
+
+Full reference: [Ruby](/STITCHplusplus/reference/languages/ruby/).
+</Lang>
+
+<Lang id="swift">
+| Concept | Swift |
+|---|---|
+| stub | `let name = endpoint("name") { (args) throws -> ... in ... }` |
+| object type | `enum Store: StitchObject { typealias Handle = KVSwift.Store }` |
+| borrow, take, new | `Borrow<Store>`, `Take<Store>`, `-> New<Store>` |
+| optional output | `-> New<Store>?`; two: `-> New2<A, B>` |
+| integers, floats | `Int64`, `UInt8`, `Double`, `Bool`, ... |
+| range, one of | `Between<0, 9>`, `Pick<E>` for a `CaseIterable` enum |
+| string, bytes, file | `Str<64, Plain>`, `Bytes<256, Tag>`, `FilePath<4096, Tag>` |
+| value, source | `Val<Tag, 256>`, `Choices<8>` |
+| bail, require, check | a thrown error, `throw Bail(r)`, `try require(c, r)`, `try check(c, what)` |
+| data type, decoder | `enum Tag: Decoded { static func decode(_ s: Source) -> T }` |
+| attributes | `x.set(k, v)`, `x.int(k)` |
+
+Full reference: [Swift](/STITCHplusplus/reference/languages/swift/).
+</Lang>
+
+<Lang id="objc">
+| Concept | Objective-C |
+|---|---|
+| stub | `STITCH_ENDPOINT(ReturnType, name, params...) { ... }` |
+| object type | `STITCH_OBJECT(Store, KVStore *);` |
+| borrow, take, new | `Borrow(Store) st`, `Take(Store) st`, return `New(Store)` |
+| optional output | `Maybe(Store)`; several: `Outputs(New(A), Maybe(B))` |
+| integers, floats | `int64_t`, `uint8_t`, `double`, `BOOL`, ... |
+| range, one of, flags | `Range(0, 9)`, `OneOf(A, B)`, `Flags(A, B)` |
+| string, bytes, file | `Str(64)`, `Bytes(256, Tag)`, `File(4096, Tag)` |
+| value, source | `Val(Tag, 256)`, `Src(8)` |
+| bail, require, check | `STBail(r)`, `STRequire(c, r)`, `STCheck(c, what)` |
+| data type, decoder | `STITCH_DATATYPE(Tag);`, `STITCH_DECODER(Tag) { ... }` |
+| attributes | `STSetInt(x, k, v)`, `STGetIntOr(x, k, default)` |
+
+Full reference: [Objective-C](/STITCHplusplus/reference/languages/objc/).
+</Lang>

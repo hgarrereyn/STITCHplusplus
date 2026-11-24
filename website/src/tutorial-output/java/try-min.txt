@@ -1,0 +1,3 @@
+$ stitch try .stitch/standalone/c2/Min.java
+SAME CRASH: .stitch/standalone/c2/Min.java -> NullPointerException in Store.dump
+  9 code lines, plain library code

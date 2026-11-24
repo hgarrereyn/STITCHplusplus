@@ -1,0 +1,20 @@
+$ stitch crashes
+[stitch] rerunning 58 new crash programs of 'main' to group them (timeouts take their full timeout; slower while a campaign runs)
+4 unique crashes in 'main':
+  c1   x20    StringIndexOutOfBoundsException  in load
+         String.checkBoundsBeginEnd String.java:4855
+         String.substring String.java:2823
+         Store.load Store.java:40
+         example (4 calls): .stitch/campaigns/main/w0/crashes/55e9caf49141a982.stp
+  c2   x18    NullPointerException  in roundtrip
+         Store.dump Store.java:25
+         Stubs.roundtrip Stubs.java:34
+         example (6 calls): .stitch/campaigns/main/w1/crashes/34e651e6094e7fd3.stp
+  c3   x10    IllegalArgumentException  in roundtrip
+         Store.put Store.java:14
+         Store.load Store.java:41
+         Stubs.roundtrip Stubs.java:34
+         example (5 calls): .stitch/campaigns/main/w0/crashes/150388345e73a33e.stp
+  c4   x10    check failed: dump/load roundtrip  in roundtrip
+         example (4 calls): .stitch/campaigns/main/w0/crashes/0b06a0b7280f8443.stp
+next: stitch exec <id> --trace | stitch minimize <id> | stitch repro <id> | stitch bisect <id>

@@ -1,0 +1,77 @@
+---
+// The crash the home page harness found, from a real run (src/showcase/<lang>/trace.txt): the
+// minimized program drawn with the harness shapes beside the same program as code, the error, and
+// the stack (library and spec frames; the rest folded away).
+import { LANGUAGES } from "./languages";
+import { endpointByName, nameOf } from "./showcase";
+import { GRAPH_W, programFromTrace, renderProgram } from "./program";
+import { codeItems, programCode } from "./code";
+import { parseTrace, type Frame } from "./trace";
+
+const traces = import.meta.glob<string>("../showcase/*/trace.txt", { query: "?raw", import: "default", eager: true });
+const cards = LANGUAGES.flatMap(([lang]) => {
+  const trace = traces[`../showcase/${lang}/trace.txt`];
+  if (!trace) return [];
+  const { calls, kind } = programFromTrace(trace, (name) => endpointByName(lang, name)?.id);
+  const { svg, width, height, rows } = renderProgram(calls, (id) => nameOf(lang, id), { fuzz: "names", width: GRAPH_W });
+  const code = codeItems(programCode(calls, lang), rows, height, { crash: calls.length - 1 });
+  const { message, stacks } = parseTrace(trace, kind);
+  // runs of frames: shown (library, spec) or folded (everything else, when more than one)
+  const groups = stacks.map((s) => ({
+    title: s.title,
+    runs: s.frames.reduce<{ fold: boolean; frames: Frame[] }[]>((runs, f) => {
+      const fold = f.where === "other", last = runs[runs.length - 1];
+      if (last && last.fold === fold) last.frames.push(f); else runs.push({ fold, frames: [f] });
+      return runs;
+    }, []).flatMap((r) => (r.fold && r.frames.length === 1 ? [{ fold: false, frames: r.frames }] : [r])),
+  }));
+  return [{ lang, svg, width, height, code, message, groups, n: calls.length }];
+});
+const TAG = { library: "library", spec: "spec", other: "" };
+---
+
+{cards.map((c) => (
+  <div class="lang-block crash-card" data-for={c.lang}>
+    <div class="prog">
+      <span class="prog-cap" aria-hidden="true">Graph</span>
+      <span class="prog-cap" aria-hidden="true">Code</span>
+      <svg class="prog-graph" viewBox={`0 0 ${c.width} ${c.height}`} role="img"
+           aria-label={`The crashing program: ${c.n} calls`} set:html={c.svg} />
+      <ol class="prog-code" aria-label="The crashing program as code" set:html={c.code} />
+    </div>
+    <p class="crash-error">{c.message}</p>
+    <details class="crash-stack">
+      <summary>Show the stack trace</summary>
+      {c.groups.map((g) => (
+        <section>
+          {c.groups.length > 1 && <h4 class="stack-title">{g.title}</h4>}
+          <ol class="stack">
+            {g.runs.map((run) => run.fold ? (
+              <li class="frame-fold">
+                <details>
+                  <summary>{run.frames.length} {run.frames.length === 1 ? "frame" : "frames"} in the runtime and system libraries</summary>
+                  <ol class="stack">
+                    {run.frames.map((f) => (
+                      <li class="stack-frame other"><span class="frame-fn">{f.fn}</span><span class="frame-file" title={f.path}>{f.file}</span></li>
+                    ))}
+                  </ol>
+                </details>
+              </li>
+            ) : run.frames.map((f) => (
+              <li class={`stack-frame ${f.where}`}>
+                <span class="frame-fn">{f.fn}</span>
+                <span class="frame-file" title={f.path}>{f.file}</span>
+                <span class="frame-tag">{TAG[f.where]}</span>
+              </li>
+            )))}
+          </ol>
+        </section>
+      ))}
+    </details>
+  </div>
+))}
+
+<script>
+  import { linkRows } from "./code";
+  document.querySelectorAll<HTMLElement>(".crash-card .prog").forEach(linkRows);
+</script>

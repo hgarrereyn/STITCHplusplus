@@ -42,6 +42,16 @@ func (s *Store) Remove(key string) {
 	}
 }
 
+// Merge puts every entry of o into s.
+func (s *Store) Merge(o *Store) error {
+	for _, k := range o.order {
+		if err := s.Put(k, o.data[k].value); err != nil { // nil dereference after a tmp removal in o
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) Dump() string {
 	var b strings.Builder
 	for _, k := range s.order {

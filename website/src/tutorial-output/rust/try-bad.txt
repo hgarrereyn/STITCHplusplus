@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c2/bad.rs
+NO CRASH: .stitch/standalone/c2/bad.rs ran to completion (expected called `Option::unwrap()` on a `None` value in kvrs::Store::dump::{{closure}})

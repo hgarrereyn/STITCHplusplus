@@ -1,0 +1,16 @@
+$ stitch minimize c1 --secs 30
+[stitch] main:c1 (latest campaign; also: probe)
+[stitch] minimizing .stitch/campaigns/main/w1/crashes/3367673ffe2a89fe.stp (up to 30s; --secs to change)
+1 -> 1 calls, still crashes: True (IndexError | load __init__.py:41 | load stubs.py)
+  .stitch/campaigns/main/w1/crashes/3367673ffe2a89fe.min.stp
+$ stitch exec c1 --trace
+[stitch] main:c1 (latest campaign; also: probe): running the minimized program .stitch/campaigns/main/w1/crashes/3367673ffe2a89fe.min.stp
+[stitch] running .stitch/campaigns/main/w1/crashes/3367673ffe2a89fe.min.stp
+[stitch] #0 load(text=Str[3]"=#!")
+
+[stitch] EXCEPTION in load: IndexError: list index out of range
+    #0 0x0 in load /opt/venv/lib/python3.12/site-packages/kvlib/__init__.py:41
+    #1 0x0 in load /project/.stitch/build/app/harness/stubs.py:25
+
+
+result: CRASH IndexError | load __init__.py:41 | load (stub) (79 ms)

@@ -6,3 +6,9 @@ __pycache__/
 .DS_Store
 # recreated from examples/demolib-src.bundle (a git repo with the planted bug history)
 examples/demolib-src/
+# docs site
+website/node_modules/
+website/dist/
+website/.astro/
+website/src/content/docs/reference/languages/
+website/src/content/docs/reference/cli.md

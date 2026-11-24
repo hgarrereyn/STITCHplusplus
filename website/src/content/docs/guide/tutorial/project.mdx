@@ -1,0 +1,273 @@
+---
+title: 2. Create a project
+description: Create a STITCH++ project and build the library in Docker.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+
+A project is a folder with three things:
+
+- `stitch.toml`: where the library source is, and build and fuzzing settings
+- `Dockerfile`: builds or installs the library
+- `harness/`: your stubs
+
+## Initialize
+
+Run this from `examples/`:
+
+<Lang id="python">
+```sh
+stitch setup --lang python
+stitch init kv --lang python --path python-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="cpp">
+```sh
+stitch setup --lang cpp
+stitch init kv --path cpp-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="javascript">
+```sh
+stitch setup --lang javascript
+stitch init kv --lang javascript --path javascript-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="java">
+```sh
+stitch setup --lang java
+stitch init kv --lang java --path java-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="go">
+```sh
+stitch setup --lang go
+stitch init kv --lang go --path go-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="rust">
+```sh
+stitch setup --lang rust
+stitch init kv --lang rust --path rust-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="ruby">
+```sh
+stitch setup --lang ruby
+stitch init kv --lang ruby --path ruby-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="swift">
+```sh
+stitch setup --lang swift
+stitch init kv --lang swift --path swift-demo/lib
+cd kv
+```
+</Lang>
+<Lang id="objc">
+```sh
+stitch setup --lang objc
+stitch init kv --lang objc --path objc-demo/lib
+cd kv
+```
+</Lang>
+
+`--path` points at a local folder. For a library in a git repository, use
+`--git URL --rev REV` instead.
+
+## Build the library
+
+The `Dockerfile` starts from the STITCH++ image for your language. The library source is copied
+to `/src`. Edit the two files so that they build the store:
+
+<Lang id="python">
+`Dockerfile` (unchanged from `init`):
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+RUN pip install --no-cache-dir /src
+```
+
+`stitch.toml`: set `include` to the library's import name. Only these modules get coverage and
+comparison tracing.
+
+```toml
+[python]
+include = ["kvlib"]
+```
+</Lang>
+
+<Lang id="cpp">
+`Dockerfile`: build a static library with `$CC`, which adds coverage and sanitizer
+instrumentation.
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+WORKDIR /src
+RUN make libkv.a CC="$CC"
+```
+
+`stitch.toml`: tell the harness where the headers and the library are.
+
+```toml
+[build]
+cflags = ["-I/src"]
+ldflags = ["/src/libkv.a"]
+sanitizers = ["address"]
+```
+</Lang>
+
+<Lang id="javascript">
+`Dockerfile`: install the package into `/opt`.
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+RUN cd /opt && npm install /src
+```
+
+`stitch.toml`: set `include` to the package name. Only this package gets coverage and comparison
+tracing.
+
+```toml
+[javascript]
+include = ["kvjs"]
+```
+</Lang>
+
+<Lang id="java">
+`Dockerfile`: compile the library and put the jar in `/deps`.
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+RUN cd /src && javac -g -d /tmp/kv $(find . -name '*.java') && jar cf /deps/kv.jar -C /tmp/kv .
+```
+
+`stitch.toml`: set `include` to the library's package, and `sources` to its source folder (for
+coverage reports).
+
+```toml
+[java]
+include = ["demo.kv"]
+sources = ["/src"]
+```
+</Lang>
+
+<Lang id="go">
+`Dockerfile` (unchanged from `init`):
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+RUN cd /src && go mod download
+```
+
+`stitch.toml`: `init` reads the module path from `go.mod`.
+
+```toml
+[go]
+module = "example.com/kvgo"
+```
+</Lang>
+
+<Lang id="rust">
+`Dockerfile` (unchanged from `init`):
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+```
+
+`stitch.toml`: name the dependency after the library's crate.
+
+```toml
+[rust.dependencies]
+kvrs = { path = "/src" }
+```
+</Lang>
+
+<Lang id="ruby">
+`Dockerfile`: build and install the gem.
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+RUN cd /src && gem build kvrb.gemspec && gem install --local ./kvrb-*.gem
+```
+
+`stitch.toml`: set `include` to the gem name. Only this gem gets coverage and comparison tracing.
+
+```toml
+[ruby]
+include = ["kvrb"]
+```
+</Lang>
+
+<Lang id="swift">
+`Dockerfile` (unchanged from `init`):
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+```
+
+`stitch.toml`: `init` reads the package and its products from `Package.swift`.
+
+```toml
+[swift]
+dependencies = ['.package(path: "/src")']
+products = ['.product(name: "KVSwift", package: "src")']
+```
+</Lang>
+
+<Lang id="objc">
+`Dockerfile`: build a static library with `$CC`, which adds coverage and sanitizer
+instrumentation.
+
+```dockerfile
+ARG STITCH_BASE
+FROM ${STITCH_BASE}
+COPY --from=source . /src
+WORKDIR /src
+RUN $CC -fobjc-arc -c KVStore.m -o KVStore.o && ar rcs libkvstore.a KVStore.o
+```
+
+`stitch.toml`: tell the harness where the headers and the library are.
+
+```toml
+[build]
+cflags = ["-I/src"]
+ldflags = ["/src/libkvstore.a"]
+sanitizers = ["address"]
+```
+</Lang>
+
+Build the image:
+
+```sh
+stitch build --image-only
+```
+
+If the build fails, the error and the path of the full log are printed. `stitch shell` opens a
+shell in the image, which helps when you are working out build commands.
+
+Next, write the stubs.

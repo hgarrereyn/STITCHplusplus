@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c5/bad.py
+NO CRASH: .stitch/standalone/c5/bad.py ran to completion (expected KeyError in Store.items)

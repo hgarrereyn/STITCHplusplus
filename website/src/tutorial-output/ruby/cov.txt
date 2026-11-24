@@ -1,0 +1,18 @@
+$ stitch cov
+[stitch] coverage build + 76 programs (main)
+coverage of 76 programs (72 ok, 4 crashed, 0 timed out), library at local
+
+library:
+  lines           25 / 25      100.0%
+  functions        6 / 7        85.7%
+  branches        13 / 14       92.9%
+
+  file                                            lines  functions
+  usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb   100.0%      85.7%
+
+never called: 1 library functions, 1 of them not static
+  Kvrb::Store#get  usr/local/bundle/gems/kvrb-0.1.0/lib/kvrb.rb:18
+
+lcov: .stitch/cov/main/lcov.info
+html: .stitch/cov/main/html/index.html
+summary: .stitch/cov/main/summary.json

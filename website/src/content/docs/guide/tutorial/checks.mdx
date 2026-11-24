@@ -1,0 +1,462 @@
+---
+title: 5. Checks and data types
+description: Assert a property of the store, and generate valid input for load.
+languages: true
+---
+
+import Lang from "../../../../components/Lang.astro";
+import RunOutput from "../../../../components/RunOutput.astro";
+
+## A check
+
+So far the fuzzer only finds crashes. A **check** also finds wrong results. Pick a property that
+holds for every store: loading the output of `dump` gives the same entries.
+
+<Lang id="python">
+```python
+@stitch.endpoint
+def roundtrip(st: Borrow[Store]):
+    again = kvlib.load(st.dump())
+    stitch.check(dict(again.items()) == dict(st.items()), "dump/load roundtrip")
+```
+
+`roundtrip` does not list `ValueError` in `bails_on`: `load` must accept what `dump` writes, so an
+exception here is a bug too.
+</Lang>
+
+<Lang id="cpp">
+```cpp
+void roundtrip(Borrow<Store> st) {
+    char* text = kv_dump(st);
+    kv_store* again = kv_load(text);
+    free(text);
+    stitch::require(again, "dump did not load");
+    size_t n = kv_len(again);
+    kv_free(again);
+    stitch::check(n == kv_len(st), "dump/load roundtrip");
+}
+STITCH_ENDPOINT(roundtrip);
+```
+</Lang>
+
+<Lang id="javascript">
+```js
+stitch.endpoint("roundtrip", { st: Borrow(Store) }, null, ({ st }) => {
+  const again = kv.load(st.dump());
+  const keys = (o) => JSON.stringify([...o].sort());
+  stitch.check(keys(Object.keys(again.data)) === keys(st.order), "dump/load roundtrip");
+});
+```
+
+`roundtrip` has no `bailsOn`: `load` must accept what `dump` writes, so an exception here is a bug
+too.
+</Lang>
+
+<Lang id="java">
+```java
+@Endpoint
+public static void roundtrip(Store st) {
+    Store again = Store.load(st.dump());
+    Stitch.check(again.size() == st.size(), "dump/load roundtrip");
+}
+```
+
+`roundtrip` has no `bailsOn`: `load` must accept what `dump` writes, so an exception here is a bug
+too.
+</Lang>
+
+<Lang id="go">
+```go
+stitch.Endpoint("roundtrip", roundtrip, "st")   // in init()
+
+func roundtrip(st *kvgo.Store) {
+	again, err := kvgo.Load(st.Dump())
+	stitch.Require(err == nil, "dump did not load")
+	stitch.Check(again.Len() == st.Len(), "dump/load roundtrip")
+}
+```
+</Lang>
+
+<Lang id="rust">
+```rust
+endpoint! {
+    fn roundtrip(st: Borrow<Store>) {
+        let again = kvrs::load(&st.dump());
+        require(again.is_ok(), "dump did not load");
+        check(again.unwrap().len() == st.len(), "dump/load roundtrip");
+    }
+}
+```
+</Lang>
+
+<Lang id="ruby">
+```ruby
+Stitch.endpoint :roundtrip, { st: Borrow[Store] } do |st|
+  again = Kvrb.load(st.dump)
+  Stitch.check(again.items.to_h == st.items.to_h, "dump/load roundtrip")
+end
+```
+
+`roundtrip` has no `bails_on`: `load` must accept what `dump` writes, so an exception here is a bug
+too.
+</Lang>
+
+<Lang id="swift">
+```swift
+let roundtrip = endpoint("roundtrip") { (st: Borrow<Store>) throws in
+    let again = try KVSwift.load(st.value.dump())
+    try check(Dictionary(again.items(), uniquingKeysWith: { a, _ in a })
+              == Dictionary(st.value.items(), uniquingKeysWith: { a, _ in a }),
+              "dump/load roundtrip")
+}
+```
+</Lang>
+
+<Lang id="objc">
+```objc
+STITCH_ENDPOINT(void, roundtrip, Borrow(Store) st) {
+    KVStore *again = [KVStore storeWithText:[st dump] error:NULL];
+    STCheck(again != nil && [[again dictionary] isEqual:[st dictionary]], @"dump/load roundtrip");
+}
+```
+</Lang>
+
+## A data type for `load`
+
+`load` gets random text, so it rejects much of it. A **data type** tells the fuzzer what a string
+parameter should look like. Tag the parameter with it:
+
+<Lang id="python">
+```python
+KvText = stitch.datatype("KvText")
+
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256, KvText]) -> New[Store]:
+    return kvlib.load(text)
+```
+</Lang>
+<Lang id="cpp">
+```cpp
+STITCH_DATATYPE(KvText);
+
+New<Store> load(Str<256, KvText> text) { ... }
+```
+</Lang>
+<Lang id="javascript">
+```js
+const KvText = stitch.datatype("KvText");
+
+stitch.endpoint("load", { text: Str(256, KvText) }, New(Store), ({ text }) => kv.load(text),
+  { bailsOn: [RangeError] });
+```
+</Lang>
+<Lang id="java">
+```java
+@Endpoint(bailsOn = {IllegalArgumentException.class})
+public static Store load(@Str(max = 256, type = "KvText") String text) {
+    return Store.load(text);
+}
+```
+</Lang>
+<Lang id="go">
+```go
+stitch.Endpoint("load", kvgo.Load, "text:max=256,type=KvText")
+```
+</Lang>
+<Lang id="rust">
+```rust
+datatype!(KvText);
+
+endpoint! {
+    fn load(text: Str<256, KvText>) -> Result<New<Store>, String> {
+        Ok(New::new(kvrs::load(&text)?))
+    }
+}
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+KvText = Stitch.datatype("KvText")
+
+Stitch.endpoint :load, { text: Str[256, KvText] }, New[Store], bails_on: [ArgumentError] do |text|
+  Kvrb.load(text)
+end
+```
+</Lang>
+<Lang id="swift">
+```swift
+let load = endpoint("load") { (text: Str<256, KvText>) throws -> New<Store> in
+    New(try KVSwift.load(text.value))
+}
+```
+
+In Swift, the data type is the `KvText` enum with a decoder, below.
+</Lang>
+<Lang id="objc">
+```objc
+STITCH_ENDPOINT(New(Store), load, Str(256, KvText) text) { ... }
+```
+</Lang>
+
+Then give the data type something to start from. Create `harness/data/KvText/` with a sample
+input and a dictionary:
+
+```
+harness/data/KvText/
+  seeds/s1.txt      a=1
+                    b=2
+  kv.dict           tmp
+                    "#!"
+```
+
+Seeds are sample inputs, one per file. Copy them from the library's tests when it has some. The
+dictionary holds tokens the fuzzer mixes into inputs, one per line.
+
+### A decoder
+
+A **decoder** builds a value from a stream of fuzzer choices. Mutations change the choices, so
+every value it returns has the right shape: here, `key=value` lines.
+
+<Lang id="python">
+```python
+@stitch.decoder(KvText)
+def kv_text(s):
+    lines = []
+    while s.more():
+        key = s.token() if s.coin(0.3) else s.str(8)
+        lines.append(f"{key}={s.str(12)}")
+    return "\n".join(lines)
+```
+</Lang>
+<Lang id="cpp">
+```cpp
+STITCH_DECODER(KvText, [](stitch::Source& s) {
+    std::string out;
+    while (s.more()) out += (s.coin(0.3) ? s.token() : s.str(8)) + "=" + s.str(12) + "\n";
+    return out;
+});
+```
+</Lang>
+<Lang id="javascript">
+```js
+stitch.decoder(KvText, (s) => {
+  const lines = [];
+  while (s.more()) lines.push(`${s.coin(0.3) ? s.token() : s.str(8)}=${s.str(12)}`);
+  return lines.join("\n");
+});
+```
+</Lang>
+<Lang id="java">
+```java
+@Decoder("KvText")
+public static String kvText(Source s) {
+    StringBuilder b = new StringBuilder();
+    while (s.more()) b.append(s.coin(0.3) ? s.token() : s.str(8)).append('=').append(s.str(12)).append('\n');
+    return b.toString();
+}
+```
+</Lang>
+<Lang id="go">
+```go
+stitch.Decoder("KvText", kvText)   // in init()
+
+func kvText(s *stitch.Source) string {
+	out := ""
+	for s.More() {
+		k := s.Str(8)
+		if s.Coin(0.3) {
+			k = s.Token()
+		}
+		out += k + "=" + s.Str(12) + "\n"
+	}
+	return out
+}
+```
+</Lang>
+<Lang id="rust">
+```rust
+decoder!(KvText, fn kv_text(s: &mut Source) -> String {
+    let mut out = String::new();
+    while s.more() {
+        let k = if s.coin(0.3) { s.token() } else { s.str(8) };
+        out += &format!("{k}={}\n", s.str(12));
+    }
+    out
+});
+```
+</Lang>
+<Lang id="ruby">
+```ruby
+Stitch.decoder(KvText) do |s|
+  lines = []
+  while s.more
+    key = s.coin(0.3) ? s.token : s.str(8)
+    lines << "#{key}=#{s.str(12)}"
+  end
+  lines.join("\n")
+end
+```
+</Lang>
+<Lang id="swift">
+```swift
+enum KvText: Decoded {
+    static func decode(_ s: Source) -> String {
+        var lines: [String] = []
+        while s.more() {
+            let key = s.coin(0.3) ? s.token() : s.str(8)
+            lines.append("\(key)=\(s.str(12))")
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+```
+</Lang>
+<Lang id="objc">
+```objc
+STITCH_DECODER(KvText) {
+    NSMutableArray *lines = [NSMutableArray array];
+    while ([s more]) {
+        NSString *key = [s coin:0.3] ? [s token] : [s str:8];
+        [lines addObject:[NSString stringWithFormat:@"%@=%@", key, [s str:12]]];
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+```
+</Lang>
+
+<Lang id="python">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="cpp">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="javascript">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="java">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="go">
+- `s.More()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.Token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.Str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="rust">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="ruby">
+- `s.more` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="swift">
+- `s.more()` decides how many lines there are. The fuzzer can add and remove lines.
+- `s.token()` draws a token from the dictionary, so keys like `tmp` show up often.
+- `s.str(8)` draws text of at most 8 bytes.
+</Lang>
+<Lang id="objc">
+- `[s more]` decides how many lines there are. The fuzzer can add and remove lines.
+- `[s token]` draws a token from the dictionary, so keys like `tmp` show up often.
+- `[s str:8]` draws text of at most 8 bytes.
+</Lang>
+
+See what it makes:
+
+<RunOutput name="sample" />
+
+The keys and values are arbitrary, but every line has an `=`. (`stitch sample` prints each value
+as a JSON string.)
+
+## Probe again
+
+<RunOutput name="probe-2" />
+
+Compared with the first probe:
+
+{/* gen:compare */}
+<Lang id="python">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 18% | 11% |
+| `load` bail rate | 34% | 22% |
+| edges | 43 | 64 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="cpp">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 19% | 12% |
+| `load` bail rate | 51% | 17% |
+| edges | 135 | 180 |
+| crash programs saved | 5 | 15 |
+</Lang>
+<Lang id="javascript">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 14% | 15% |
+| `load` bail rate | 41% | 49% |
+| edges | 24 | 32 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="java">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 26% | 12% |
+| `load` bail rate | 52% | 24% |
+| edges | 36 | 57 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="go">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 30% | 17% |
+| `load` bail rate | 70% | 37% |
+| edges | 28 | 43 |
+| crash programs saved | 5 | 18 |
+</Lang>
+<Lang id="rust">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 10% | 11% |
+| `load` bail rate | 37% | 22% |
+| edges | 406 | 459 |
+| crash programs saved | 5 | 16 |
+</Lang>
+<Lang id="ruby">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 22% | 19% |
+| `load` bail rate | 37% | 34% |
+| edges | 22 | 31 |
+| crash programs saved | 5 | 25 |
+</Lang>
+<Lang id="swift">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 22% | 8% |
+| `load` bail rate | 61% | 19% |
+| edges | 248 | 378 |
+| crash programs saved | 5 | 15 |
+</Lang>
+<Lang id="objc">
+| | first probe | second probe |
+|---|---|---|
+| calls bailing | 20% | 13% |
+| `load` bail rate | 57% | 24% |
+| edges | 26 | 43 |
+| crash programs saved | 5 | 20 |
+</Lang>
+{/* /gen:compare */}
+
+The second probe reaches more of the library (more edges): `load` now makes stores with entries
+for the other stubs to work on. Next, run a longer campaign and look at the bugs it finds.

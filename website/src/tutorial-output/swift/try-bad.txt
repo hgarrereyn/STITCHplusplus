@@ -1,0 +1,2 @@
+$ stitch try .stitch/standalone/c4/bad.swift
+NO CRASH: .stitch/standalone/c4/bad.swift ran to completion (expected Unexpectedly found nil while unwrapping an Optional value in closure)

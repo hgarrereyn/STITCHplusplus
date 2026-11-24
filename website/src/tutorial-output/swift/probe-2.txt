@@ -1,0 +1,6 @@
+$ stitch probe --secs 30
+[stitch] probing for 30s of fuzzing (plus the harness build and worker start-up)...
+probe: 30s, 16.6k execs (553/s), 378/6457 edges, corpus 123, calls bailing 8% (programs with a bail 31%), 15 crash/timeout programs saved
+depends on where an input came from (the stub that made or last used that object; the fuzzer learns these pairs. Act only when the low one should work: a different kind of object behind one type gets its own type):
+  roundtrip(st): ok 41% when st last came from remove, 100% when from load
+crashes found: run `stitch crashes probe`
