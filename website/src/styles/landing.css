@@ -438,11 +438,29 @@
   border: 1px solid var(--sl-color-hairline-light);
   border-radius: 0.625rem;
   background: var(--sl-color-black);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.16);
   font-size: var(--sl-text-sm);
   line-height: 1.5;
   color: var(--sl-color-gray-2);
   pointer-events: none;
+}
+.spec-pop::after {
+  content: "";
+  position: absolute;
+  left: var(--caret, 1.5rem);
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-right: 1px solid var(--sl-color-hairline-light);
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+  background: var(--sl-color-black);
+  transform: rotate(45deg);
+}
+.spec-pop.below::after {
+  top: -6px;
+  bottom: auto;
+  transform: rotate(-135deg);
 }
 .spec-pop[hidden] {
   display: none;

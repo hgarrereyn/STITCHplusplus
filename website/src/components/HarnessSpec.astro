@@ -178,15 +178,18 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
       }
       const rects = covered.map((e) => e.getBoundingClientRect());
       const top = Math.min(...rects.map((r) => r.top)), bottom = Math.max(...rects.map((r) => r.bottom));
-      const box = spec!.getBoundingClientRect();
-      const anchor = target.classList.contains("spec-glyph")
-        ? block.querySelector(".spec-code")!.getBoundingClientRect().left
-        : target.getBoundingClientRect().left;
-      // below the highlight, or above it when there is no room below on screen
-      const h = pop.offsetHeight, nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sl-nav-height")) * 16 || 64;
-      const below = bottom + 8 + h <= innerHeight || top - 8 - h < nav;
-      pop.style.top = `${(below ? bottom + 8 : top - 8 - h) - box.top}px`;
-      pop.style.left = `${Math.min(Math.max(anchor - box.left, 0), box.width - pop.offsetWidth)}px`;
+      const box = spec!.getBoundingClientRect(), t = target.getBoundingClientRect();
+      // Just above the highlight, close to what is pointed at; below it when there is no room above.
+      const h = pop.offsetHeight, w = pop.offsetWidth;
+      const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sl-nav-height")) * 16 || 64;
+      const above = top - 10 - h >= nav || bottom + 10 + h > innerHeight;
+      pop.classList.toggle("below", !above);
+      pop.style.top = `${(above ? top - 10 - h : bottom + 10) - box.top}px`;
+      const left = Math.min(Math.max(t.left - box.left - 6, 0), box.width - w);
+      pop.style.left = `${left}px`;
+      // the caret points at the middle of the shape, or the start of the word
+      const aim = target.classList.contains("spec-glyph") ? t.left + Math.min(t.width / 2, 40) : t.left + Math.min(t.width / 2, 24);
+      pop.style.setProperty("--caret", `${Math.min(Math.max(aim - box.left - left, 14), w - 14)}px`);
     }
     function hide() {
       current?.classList.remove("active");
