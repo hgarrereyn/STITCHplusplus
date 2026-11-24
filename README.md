@@ -1,116 +1,79 @@
-<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/title-dark.gif">
+  <img src="docs/assets/readme/title-light.gif" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
+</picture>
 
-# STITCH++
+Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
+endpoints, generates arguments, and finds crashes, exceptions, and failed checks.
 
-**API fuzzing for libraries in nine languages, built for coding agents.**
+**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)** &nbsp;·&nbsp;
+[Tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) &nbsp;·&nbsp;
+[CLI reference](https://hgarrereyn.github.io/STITCHplusplus/reference/cli/) &nbsp;·&nbsp;
+[Paper](https://doi.org/10.1145/3830454.3846663)
 
-<img src="docs/assets/icons/cplusplus.svg" height="36" title="C/C++" alt="C/C++">&nbsp;&nbsp;
-<img src="docs/assets/icons/python.svg" height="36" title="Python" alt="Python">&nbsp;&nbsp;
-<img src="docs/assets/icons/javascript.svg" height="36" title="JavaScript" alt="JavaScript">&nbsp;&nbsp;
-<img src="docs/assets/icons/java.svg" height="36" title="Java" alt="Java">&nbsp;&nbsp;
-<img src="docs/assets/icons/go.svg" height="36" title="Go" alt="Go">&nbsp;&nbsp;
-<img src="docs/assets/icons/rust.svg" height="36" title="Rust" alt="Rust">&nbsp;&nbsp;
-<img src="docs/assets/icons/ruby.svg" height="36" title="Ruby" alt="Ruby">&nbsp;&nbsp;
-<img src="docs/assets/icons/swift.svg" height="36" title="Swift" alt="Swift">&nbsp;&nbsp;
-<img src="docs/assets/icons/objectivec.svg" height="36" title="Objective-C" alt="Objective-C">
+> [!NOTE]
+> **Are you an agent?** Read [`agents/overview.md`](https://hgarrereyn.github.io/STITCHplusplus/agents/overview.md)
+> instead, or run `stitch guide`.
 
-<br><br>
+<a href="languages/README.md"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/languages-dark.png">
+  <img src="docs/assets/readme/languages-light.png" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
+</picture></a>
 
-<img src="docs/assets/stitching.gif" width="760" alt="Stubs are stitched into a program, fuzzed, re-stitched, and a crash is found">
-
-**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)**
-
-</div>
-
-> [!IMPORTANT]
-> **Agent guide.** If you are an agent, read [`skill/stitch/SKILL.md`](skill/stitch/SKILL.md)
-> first (or run `stitch guide`), then your language's page in
-> [`skill/stitch/reference/`](skill/stitch/reference/) (`stitch guide <lang>`).
->
-> - Install with `pip install stitch-fuzz` and `stitch setup --lang <lang>`. Everything else runs in Docker.
-> - Iterate with `stitch probe` until the health report is clean, then start `stitch fuzz`.
-> - Decide for every crash whether the harness or the library is at fault. Check
->   `stitch exec <id> --rev HEAD` before you report a library bug.
-> - Every command takes `--json`. All commands: [`docs/cli.md`](docs/cli.md).
-
-## How it works
-
-You write **stubs**: small typed functions that each make one API call. STITCH++ **stitches** them
-into programs, passing objects from one call to the next, and fuzzes the arguments. It learns which
-call sequences work, keeps the ones that reach new code, and reports crashes, uncaught exceptions and
-failed checks.
-
-```python
-@stitch.endpoint(bails_on=(TOMLKitError,))
-def parse(text: Str[2048, TomlText]) -> New[Doc]:
-    doc = tomlkit.parse(text)
-    stitch.check(doc.as_string() == text, "parse/print preserves the text")
-    return doc
-```
-
-Stubs have the same shape in every language. The library, harness and fuzzer run in Docker, so you
-only need Docker and the `stitch` CLI.
-
-## Features
-
-- **Powered by [LibAFL](https://github.com/AFLplusplus/LibAFL).** Coverage-guided scheduling, havoc
-  mutations and multi-core campaigns.
-- **Program mutations.** Insert, delete, rewire and splice calls, alongside byte-level mutation of
-  each argument.
-- **Comparison feedback (cmplog).** Operands of comparisons in the library flow back into inputs,
-  in every language.
-- **Structured inputs.** Typed decoders build JSON, URLs or source code from fuzzer bytes, with
-  dictionaries and seeds.
-- **Bug detectors.** ASan, UBSan, panics, traps, undeclared exceptions, prototype pollution,
-  timeouts, and your own `check`s.
-- **Triage.** Crash bucketing, minimization, replay at any revision, and bisection.
-- **Reproducers.** Self-contained Docker folders, or one standalone source file per crash.
-- **Coverage reports.** lcov and HTML from each language's own coverage tool.
-
-## Languages
-
-| | Language | Coverage | Comparisons (cmplog) | Detects |
-|---|---|---|---|---|
-| <img src="docs/assets/icons/cplusplus.svg" height="20"> | C/C++ | SanitizerCoverage | `trace-cmp`, `memcmp`/`strcmp` hooks | ASan, UBSan, uncaught exceptions |
-| <img src="docs/assets/icons/python.svg" height="20"> | Python | `sys.monitoring` | rewritten `==`, `in`, `<` | undeclared exceptions |
-| <img src="docs/assets/icons/javascript.svg" height="20"> | JavaScript | Babel plugin | `===`, `switch`, `String`/`Map` hooks | exceptions, prototype pollution |
-| <img src="docs/assets/icons/java.svg" height="20"> | Java | Java agent | `if_icmp`, `switch`, `String.equals` | undeclared `Throwable`s |
-| <img src="docs/assets/icons/go.svg" height="20"> | Go | `-d=libfuzzer` | `libfuzzerTraceCmp*` | panics, fatal errors, data races |
-| <img src="docs/assets/icons/rust.svg" height="20"> | Rust | SanitizerCoverage | `trace-compares` | panics, ASan |
-| <img src="docs/assets/icons/ruby.svg" height="20"> | Ruby | Prism rewriting | rewritten `==`, `case`/`when` | undeclared exceptions |
-| <img src="docs/assets/icons/swift.svg" height="20"> | Swift | SanitizerCoverage | `trace-cmp` | traps, ASan |
-| <img src="docs/assets/icons/objectivec.svg" height="20"> | Objective-C | SanitizerCoverage | `trace-cmp`, `NSString` and `strcmp` hooks | exceptions, ASan, UBSan |
-
-Details: [`languages/README.md`](languages/README.md).
-
-## Quick start
+## Install
 
 ```sh
 pip install stitch-fuzz
 stitch setup --lang python
-stitch init tomlkit --lang python --git https://github.com/python-poetry/tomlkit --rev 0.13.2
 ```
 
-Write stubs, then build and probe:
+Requires Docker. The library, the harness and the fuzzer run in containers.
 
-<img src="docs/assets/probe.gif" width="760" alt="stitch build and stitch probe on tomlkit">
+## How it works
 
-Triage a crash and check whether it is fixed upstream:
+A spec is written in the target language. It declares the objects your API passes around, and
+stubs that each make one call:
 
-<img src="docs/assets/triage.gif" width="760" alt="stitch crashes and stitch exec on tomlkit">
+```python
+Store = stitch.object("Store")
+Snapshot = stitch.object("Snapshot")
 
-All commands are in [`docs/cli.md`](docs/cli.md). The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/)
-walks through a whole run on a small key-value store, in the language you pick.
+@stitch.endpoint(bails_on=(ValueError,))
+def load(text: Str[256]) -> New[Store]:
+    return kvlib.load(text)
 
-## Results
+@stitch.endpoint
+def remove(st: Borrow[Store], key: Str[16]):
+    st.remove(key)
 
-Harnesses for 40+ real libraries are in [`projects/`](projects/README.md). They found bugs that are
-still in the latest releases, and found known CVEs again in jsoup, semver, go-yaml, x/net/html, regex
-and lodash.
+@stitch.endpoint(bails_on=(ValueError,))
+def snapshot(st: Borrow[Store]) -> New[Snapshot]:
+    return kvlib.load(st.dump())
+```
+
+The fuzzer stitches stubs into programs, generates their arguments, and keeps the programs that
+reach new code. When one crashes, it minimizes it and writes a standalone reproducer.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/example-dark.png">
+  <img src="docs/assets/readme/example-light.png" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
+</picture>
+
+The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) takes this
+key-value store from a new project to a minimized reproducer, in the language you pick.
+
+## In this repository
+
+- [`projects/`](projects/README.md): harnesses for 49 real libraries and the bugs they found,
+  including known CVEs in jsoup, semver, go-yaml, x/net/html, regex and lodash
+- [`examples/`](examples/): the finished tutorial harness in each language
+- [`languages/`](languages/README.md): each language's runtime, coverage, comparison hooks and bug
+  detectors
+- [`skill/stitch/`](skill/stitch/SKILL.md): the agent skill
+- [`docs/cli.md`](docs/cli.md): every command
+- [`website/`](website/README.md): the documentation site
 
 ## Citation
-
-If you find STITCH++ useful, please cite our paper:
 
 ```bibtex
 @inproceedings{green2026stitching,
