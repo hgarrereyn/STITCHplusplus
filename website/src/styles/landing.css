@@ -444,6 +444,9 @@
   color: var(--sl-color-gray-2);
   pointer-events: none;
 }
+.spec-pop[hidden] {
+  display: none;
+}
 .spec-pop-title {
   font-family: var(--sl-font-mono);
   font-size: 0.8125rem;
