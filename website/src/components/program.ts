@@ -7,6 +7,8 @@ import { ENDPOINTS, type Endpoint } from "./showcase";
 export type Call = { ep: string; uses: string[]; values?: Record<string, string>; crash?: boolean };
 
 const PITCH = 66;
+/** The width the programs are drawn at, so they share one scale. */
+export const GRAPH_W = 180;
 const TOP = 14;
 
 const ep = (id: string) => ENDPOINTS.find((e) => e.id === id)!;
@@ -23,8 +25,12 @@ function outputs(calls: Call[]) {
   });
 }
 
-/** Draws a program; `name` gives each endpoint's name in the reader's language. */
-export function renderProgram(calls: Call[], name: (id: string) => string, opts: { values?: boolean; width?: number } = {}) {
+/**
+ * Draws a program; `name` gives each endpoint's name in the reader's language. `fuzz` puts each
+ * fuzzed input's value (or just its name) to the right of its block. `rows` are the y of each block's middle.
+ */
+export function renderProgram(calls: Call[], name: (id: string) => string,
+  opts: { fuzz?: "values" | "names"; width?: number } = {}) {
   const outs = outputs(calls);
   const widths = calls.map((c) => glyphWidth(ep(c.ep), name(c.ep)));
   const maxW = Math.max(...widths, 120);
@@ -36,10 +42,11 @@ export function renderProgram(calls: Call[], name: (id: string) => string, opts:
   calls.forEach((c, i) => {
     const e = ep(c.ep), w = widths[i];
     const g = glyph(e, name(c.ep), cx - w / 2, TOP + i * PITCH, {
-      values: opts.values ? c.values : undefined,
+      values: opts.fuzz === "values" ? c.values
+        : opts.fuzz === "names" ? Object.fromEntries(e.fuzz.map((f) => [f.name, f.name])) : undefined,
       cls: c.crash ? "crash" : undefined,
     });
-    blocks.push(`<g class="call" style="--i:${i}">${g.svg}</g>`);
+    blocks.push(`<g class="call" data-i="${i}" style="--i:${i}">${g.svg}</g>`);
     right = Math.max(right, cx - w / 2 + g.extent);
     placed.push({ ins: g.ins, outs: g.outs });
   });
@@ -72,7 +79,8 @@ export function renderProgram(calls: Call[], name: (id: string) => string, opts:
   }
   const width = Math.max(opts.width ?? 0, laneX(lanes.length) + 6);
   const height = TOP + (calls.length - 1) * PITCH + BOX_H + 14;
-  return { svg: `<g class="wires">${wires.join("")}</g><g class="blocks">${blocks.join("")}</g>`, width, height };
+  const rows = calls.map((_, i) => TOP + i * PITCH + BOX_H / 2);
+  return { svg: `<g class="wires">${wires.join("")}</g><g class="blocks">${blocks.join("")}</g>`, width, height, rows };
 }
 
 const VALUES: Record<string, string[]> = {

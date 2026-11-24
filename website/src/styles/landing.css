@@ -475,13 +475,71 @@
 .stitch-graph {
   margin: 0;
 }
-.stitch-graph svg {
+/* A program: its graph beside the same program as code, each line level with its block */
+.prog {
+  display: grid;
+  grid-template-columns: minmax(0, 11.25rem) minmax(0, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
+}
+.prog-cap {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.prog-graph {
   display: block;
   width: 100%;
-  max-width: 24rem;
   height: auto;
-  margin-inline: auto;
 }
+.prog-code {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-start: 1px solid var(--sl-color-hairline-light);
+}
+.prog-code li {
+  position: absolute;
+  left: 0.375rem;
+  margin: 0;
+  padding: 0.1875rem 0.4375rem;
+  border-radius: 0.375rem;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  transition: background-color 0.15s ease, opacity 0.35s ease calc(var(--i) * 70ms);
+}
+.prog-code .ln {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  color: var(--sl-color-gray-2);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+.prog-code li.entering,
+.prog-code li.leaving {
+  opacity: 0;
+}
+.prog-code li.leaving {
+  transition-delay: 0s;
+}
+.prog-code li.hot {
+  background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent);
+}
+.prog-code li.crash {
+  background: color-mix(in srgb, var(--port-crash) 11%, transparent);
+}
+.prog-code .c-fn { color: var(--sl-color-white); }
+.prog-code .c-kw { color: var(--sl-color-gray-3); }
+.prog-code .c-store { color: var(--port-store); }
+.prog-code .c-snap { color: var(--port-snap); }
+.prog-code .c-str { color: var(--stitch-orange); }
+.call .g-box { transition: stroke 0.15s ease; }
+.call.hot .g-box { stroke: var(--sl-color-accent); stroke-width: 1.5; }
 .stitch-graph .program {
   transition: opacity 0.35s ease;
 }
@@ -533,12 +591,6 @@
 }
 
 /* The crash */
-.crash-card svg {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin-inline: auto;
-}
 .crash-error {
   margin: 0.5rem 0 0;
   font-family: var(--sl-font-mono);
@@ -671,6 +723,17 @@
   }
 }
 @media (max-width: 40rem) {
+  .prog {
+    grid-template-columns: minmax(0, 8.75rem) minmax(0, 1fr);
+    column-gap: 0.5rem;
+  }
+  .prog-code li {
+    left: 0.25rem;
+    padding-inline: 0.3125rem;
+  }
+  .prog-code .ln {
+    font-size: 0.6875rem;
+  }
   .guides {
     grid-template-columns: minmax(0, 1fr);
   }

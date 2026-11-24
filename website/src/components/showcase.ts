@@ -36,7 +36,7 @@ export const PART_NOTES = {
 };
 
 type Lang = {
-  /** stub names that differ from the endpoint ids */
+  /** stub names that differ from the endpoint ids (the name a caller writes) */
   names?: Record<string, string>;
   /** text on the signature line of each endpoint (its shape sits beside that line) */
   at: Record<string, string>;
@@ -77,6 +77,7 @@ export const LANGS: Record<string, Lang> = {
     decoder: '@Decoder("KvText")', bail: ["bailsOn = {IllegalArgumentException.class}"], check: "Stitch.check(",
   },
   go: {
+    names: { new_store: "newStore" },
     at: { new_store: "func newStore()", load: "func load(", put: "func put(", remove: "func remove(",
       snapshot: "func snapshot(", merge: "func merge(", roundtrip: "func roundtrip(" },
     types: { Store: 'stitch.Object[*kvgo.Store]("Store", nil)', Snapshot: 'stitch.Object[*Snapshot]("Snapshot", nil)' },
@@ -96,6 +97,7 @@ export const LANGS: Record<string, Lang> = {
     decoder: "Stitch.decoder(KvText)", bail: ["bails_on: [ArgumentError]"], check: "Stitch.check(",
   },
   swift: {
+    names: { new_store: "newStore" },
     at: { new_store: "let newStore = endpoint", load: "let load = endpoint", put: "let put = endpoint",
       remove: "let remove = endpoint", snapshot: "let snapshot = endpoint", merge: "let merge = endpoint",
       roundtrip: "let roundtrip = endpoint" },
@@ -112,5 +114,6 @@ export const LANGS: Record<string, Lang> = {
 };
 
 export const nameOf = (lang: string, id: string) => LANGS[lang]?.names?.[id] ?? id;
+/** The endpoint a stub name refers to: the name in the reader's language, or the registered one. */
 export const endpointByName = (lang: string, name: string) =>
-  ENDPOINTS.find((e) => nameOf(lang, e.id) === name);
+  ENDPOINTS.find((e) => nameOf(lang, e.id) === name) ?? ENDPOINTS.find((e) => e.id === name);

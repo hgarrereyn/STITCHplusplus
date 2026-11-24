@@ -1,10 +1,18 @@
 ---
 // Programs the fuzzer could build from the home page harness: random, valid (every input gets an
-// object of its type that is still available), drawn with the same shapes as the harness gutter.
+// object of its type that is still available), drawn with the same shapes as the harness gutter,
+// beside the same program as code.
+import { GRAPH_W } from "./program";
+const H = 404;
 ---
 
 <figure class="stitch-graph">
-  <svg viewBox="0 0 360 404" role="img" aria-label="An example program built from the endpoints"></svg>
+  <div class="prog">
+    <span class="prog-cap" aria-hidden="true">Graph</span>
+    <span class="prog-cap" aria-hidden="true">Code</span>
+    <svg class="prog-graph" viewBox={`0 0 ${GRAPH_W} ${H}`} role="img" aria-label="An example program built from the endpoints"></svg>
+    <ol class="prog-code" aria-label="The same program as code"></ol>
+  </div>
   <figcaption class="legend">
     <span><i class="dot p-store"></i>Store</span>
     <span><i class="dot p-snap"></i>Snapshot</span>
@@ -16,37 +24,57 @@
 <script>
   import { currentLang, onLang } from "./lang-state";
   import { nameOf } from "./showcase";
-  import { randomProgram, renderProgram, type Call } from "./program";
+  import { GRAPH_W, randomProgram, renderProgram, type Call } from "./program";
+  import { codeItems, linkRows, programCode } from "./code";
 
-  const W = 360, H = 404;
+  const H = 404;
   for (const fig of document.querySelectorAll<HTMLElement>(".stitch-graph")) {
     const svg = fig.querySelector("svg")!;
+    const list = fig.querySelector("ol")!;
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let program: Call[] = randomProgram();
+    linkRows(fig.querySelector(".prog")!);
 
     const draw = (enter: boolean) => {
-      const { svg: body, height, width } = renderProgram(program, (id) => nameOf(currentLang(), id), { values: true, width: W });
+      const lang = currentLang();
+      const { svg: body, height, width, rows } = renderProgram(program, (id) => nameOf(lang, id), { fuzz: "names", width: GRAPH_W });
       svg.setAttribute("viewBox", `0 0 ${width} ${H}`);
+      const offset = Math.max(0, (H - height) / 2);
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.setAttribute("class", `program${enter && !reduced ? " entering" : ""}`);
-      g.setAttribute("transform", `translate(0 ${Math.max(0, (H - height) / 2)})`);
+      const animate = enter && !reduced;
+      g.setAttribute("class", `program${animate ? " entering" : ""}`);
+      g.setAttribute("transform", `translate(0 ${offset})`);
       g.innerHTML = body;
-      for (const old of [...svg.children]) {
+
+      const tmp = document.createElement("ol");
+      tmp.innerHTML = codeItems(programCode(program, lang), rows, H, { offset });
+      const items = [...tmp.children] as HTMLElement[];
+      if (animate) items.forEach((li) => li.classList.add("entering"));
+
+      for (const old of [...svg.children, ...list.children]) {
+        old.classList.remove("hot");
         old.classList.add("leaving");
         setTimeout(() => old.remove(), reduced ? 0 : 350);
       }
       svg.append(g);
-      if (enter && !reduced) requestAnimationFrame(() => requestAnimationFrame(() => g.classList.remove("entering")));
+      list.append(...items);
+      if (animate) requestAnimationFrame(() => requestAnimationFrame(() => {
+        g.classList.remove("entering");
+        items.forEach((li) => li.classList.remove("entering"));
+      }));
     };
 
     draw(false);
     onLang(() => draw(false));
-    let visible = true;
+    let visible = true, hovered = false;
     new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(fig);
+    // hold still while the reader traces a block to its line
+    fig.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") hovered = true; });
+    fig.addEventListener("pointerleave", () => (hovered = false));
     setInterval(() => {
-      if (!visible || document.hidden) return;
+      if (!visible || hovered || document.hidden) return;
       program = randomProgram();
       draw(true);
-    }, reduced ? 5000 : 3200);
+    }, reduced ? 5000 : 3600);
   }
 </script>
