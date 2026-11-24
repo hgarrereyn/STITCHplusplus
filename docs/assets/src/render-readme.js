@@ -1,7 +1,11 @@
 // Renders the README images from the docs site, in GitHub's light and dark page colors:
-//   docs/assets/readme/title-{dark,light}.gif     the home page title, cycling through the languages
-//   docs/assets/readme/languages-{dark,light}.png the language buttons, none picked
-//   docs/assets/readme/example-{dark,light}.png   the "Programs" and "Example crash" cards
+//   website/public/readme/title-{dark,light}.gif     the home page title, cycling through the languages
+//   website/public/readme/languages-{dark,light}.png the language buttons, none picked
+//   website/public/readme/example-{dark,light}.png   the "Programs" and "Example crash" cards
+//
+// They are published with the docs site, and the README links them by absolute URL
+// (https://hgarrereyn.github.io/STITCHplusplus/readme/...): GitHub does not resolve relative
+// <picture> srcset paths in a private repository.
 //
 // Needs Playwright, ffmpeg and the site running:
 //   cd website && npm run build && npx astro preview
@@ -11,7 +15,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 
 const URL = process.argv[2] || 'http://localhost:4321/STITCHplusplus/';
-const OUT = path.join(__dirname, '..', 'readme');
+const OUT = path.join(__dirname, '..', '..', '..', 'website', 'public', 'readme');
 const GITHUB_BG = { dark: '#0d1117', light: '#ffffff' };
 const FPS = 25, HOLD = 2.0, MOVE = 0.6, FADE = 0.4;
 

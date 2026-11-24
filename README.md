@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/title-dark.gif">
-  <img src="docs/assets/readme/title-light.gif" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
+  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/title-dark.gif">
+  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-light.gif" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
 </picture>
 
 Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
@@ -16,8 +16,8 @@ endpoints, generates arguments, and finds crashes, exceptions, and failed checks
 > instead, or run `stitch guide`.
 
 <a href="languages/README.md"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/languages-dark.png">
-  <img src="docs/assets/readme/languages-light.png" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
+  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-dark.png">
+  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-light.png" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
 </picture></a>
 
 ## Install
@@ -55,8 +55,8 @@ The fuzzer stitches stubs into programs, generates their arguments, and keeps th
 reach new code. When one crashes, it minimizes it and writes a standalone reproducer.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/example-dark.png">
-  <img src="docs/assets/readme/example-light.png" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
+  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/example-dark.png">
+  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-light.png" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
 </picture>
 
 The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) takes this
