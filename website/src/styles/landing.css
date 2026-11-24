@@ -634,7 +634,7 @@
 .stack li {
   margin: 0;
 }
-.frame {
+.stack-frame {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   column-gap: 0.625rem;
@@ -660,13 +660,13 @@
   text-align: end;
   color: var(--sl-color-gray-3);
 }
-.frame.spec .frame-tag {
+.stack-frame.spec .frame-tag {
   color: var(--sl-color-text-accent);
 }
-.frame.other {
+.stack-frame.other {
   grid-template-columns: minmax(0, 1fr) auto;
 }
-.frame.other .frame-fn {
+.stack-frame.other .frame-fn {
   color: var(--sl-color-gray-3);
 }
 .frame-fold {
@@ -679,7 +679,7 @@
   color: var(--sl-color-gray-3);
 }
 @media (max-width: 30rem) {
-  .frame {
+  .stack-frame {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .frame-file {

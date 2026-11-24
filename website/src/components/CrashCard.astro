@@ -52,13 +52,13 @@ const TAG = { library: "library", spec: "spec", other: "" };
                   <summary>{run.frames.length} {run.frames.length === 1 ? "frame" : "frames"} in the runtime and system libraries</summary>
                   <ol class="stack">
                     {run.frames.map((f) => (
-                      <li class="frame other"><span class="frame-fn">{f.fn}</span><span class="frame-file" title={f.path}>{f.file}</span></li>
+                      <li class="stack-frame other"><span class="frame-fn">{f.fn}</span><span class="frame-file" title={f.path}>{f.file}</span></li>
                     ))}
                   </ol>
                 </details>
               </li>
             ) : run.frames.map((f) => (
-              <li class={`frame ${f.where}`}>
+              <li class={`stack-frame ${f.where}`}>
                 <span class="frame-fn">{f.fn}</span>
                 <span class="frame-file" title={f.path}>{f.file}</span>
                 <span class="frame-tag">{TAG[f.where]}</span>

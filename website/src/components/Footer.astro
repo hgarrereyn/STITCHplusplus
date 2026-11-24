@@ -1,0 +1,41 @@
+---
+// Starlight's footer (edit link, pagination), then the copyright and links.
+import Default from "@astrojs/starlight/components/Footer.astro";
+const GITHUB = "https://github.com/hgarrereyn/STITCHplusplus";
+const PAPER = "https://doi.org/10.1145/3830454.3846663";
+---
+
+<Default><slot /></Default>
+<div class="site-footer">
+  <span>© 2026 Harrison Green</span>
+  <nav aria-label="Project links">
+    <a href={GITHUB}>GitHub</a>
+    <a href={PAPER}>Paper</a>
+  </nav>
+</div>
+
+<style>
+  .site-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--sl-color-hairline-light);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  nav {
+    display: flex;
+    gap: 1.25rem;
+  }
+  a {
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--sl-color-white);
+  }
+</style>
