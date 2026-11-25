@@ -1,11 +1,12 @@
 ---
 // Home page body: the language picker, then the example spec beside the programs built from it and
-// a crash it found (recorded from a real run), the guides, install.
+// a crash it found (recorded from a real run), the guides, install, FAQ.
 import { Code } from "@astrojs/starlight/components";
 import LangButtons from "./LangButtons.astro";
 import HarnessSpec from "./HarnessSpec.astro";
 import CrashCard from "./CrashCard.astro";
 import StitchGraph from "./StitchGraph.astro";
+import Faq from "./Faq.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const url = (path: string) => `${base}/${path}`;
@@ -64,4 +65,6 @@ const url = (path: string) => `${base}/${path}`;
     <Code code={"pip install stitch-fuzz\nstitch setup --lang python"} lang="sh" frame="none" />
     <p class="row-note">Requires Docker. The library, the harness and the fuzzer run in containers.</p>
   </section>
+
+  <Faq />
 </div>

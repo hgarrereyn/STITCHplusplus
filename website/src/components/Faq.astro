@@ -1,0 +1,89 @@
+---
+// Home page FAQ: one <details> per question, so each answer expands in place without any script.
+---
+
+<section class="row faq" aria-labelledby="faq-title">
+  <h2 class="row-title" id="faq-title">FAQ</h2>
+  <div class="faq-list">
+    <details class="faq-item">
+      <summary>How do I use this?</summary>
+      <div class="faq-answer">
+        <p>Point your coding agent at this repo and tell it to fuzz your library :)</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>What kinds of things can I fuzz?</summary>
+      <div class="faq-answer">
+        <p>The main use case is fuzzing libraries that define an API (both large and small).</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>How is STITCH++ different from ___?</summary>
+      <div class="faq-answer">
+        <h3>libFuzzer, AFL++, honggfuzz, ...?</h3>
+        <p>Those are fuzzing engines which require a harness. Each of them makes different choices about how
+          to collect coverage, mutate, keep track of inputs, etc...</p>
+        <p>STITCH++ introduces both a fuzzable specification (which replaces a traditional fuzz harness) and a
+          new fuzzing engine designed to support this specification.</p>
+        <p>The STITCH++ fuzzing engine is built with LibAFL (same authors as AFL++) and can still make use of
+          modern fuzzing features, for example sanitizer coverage, compare-logging, forkserver, etc...</p>
+
+        <h3>FUDGE, FuzzGen, PromptFuzz, PromeFuzz, CKGFuzzer, OGHarn, oss-fuzz-gen, ...?</h3>
+        <p>Lots of prior work explores the idea of automatically generating fuzz harnesses (both with and
+          without LLMs).</p>
+        <p>STITCH++ instead creates a fuzzable specification, a replacement of (many) traditional fuzz
+          harnesses.</p>
+
+        <h3>STITCH?</h3>
+        <p>Work on stitching started in early 2025 and the original tool (which we describe in our paper) was
+          built in a LLM-pipeline world, not yet an agent-powered world.</p>
+        <p>Many of the design choices we made were necessary at the time for weaker models, and are no longer
+          necessary.</p>
+        <p>STITCH++ is an agent-forward rebuilt version of STITCH, where we retain only the fuzzing core and we
+          extend support to many more languages.</p>
+
+        <h3>GraphFuzz?</h3>
+        <p>I'm also the author of GraphFuzz :)</p>
+        <p>In a sense, stitching is the LLM-powered successor. It makes possible what used to be very tedious
+          to do by hand.</p>
+        <p>The key innovation was introducing extrinsic type-state allowing the spec to model open-ended
+          constraints. There are also a lot of engineering improvements with STITCH++.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>How expensive is it?</summary>
+      <div class="faq-answer">
+        <p>The code is free and open-source; the only cost is writing the specification (most likely using an
+          agent), compute to run the fuzzer, and any costs associated with triaging bugs (also probably an
+          agent).</p>
+        <p>Note that once the spec is created, the fuzzing itself is purely computational, no LLM usage.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>Will it find false positives?</summary>
+      <div class="faq-answer">
+        <p>Yes, sort of, but we expect this to improve:</p>
+        <p>All the bug reports contain real runnable code, so there is no hallucination risk. The only risk is
+          that a bug may be misusing the target API.</p>
+        <p>You could also use STITCH++ bug reports as input to some other kind of triage system.</p>
+        <p>The fuzzing engine accurately respects the specification. So if your specification perfectly
+          defines the expected way to use the API, you will be fine.</p>
+        <p>In practice, for any non-trivial API, it's basically impossible to produce an accurate specification
+          (let alone understand what the API <em>should</em> do in certain edge cases), even for an expert
+          human.</p>
+        <p>In practice, what we observed with STITCH (the predecessor) is that most API-misuse bugs are
+          "obvious in retrospect" &mdash; that is, while it may be hard to spot a slightly broken specification
+          ahead of time, it is generally very obvious if a specific testcase is abusing the API in a way that is
+          clearly unintended. Thus, after seeing such a testcase, one can go back and fix the specification to
+          avoid it.</p>
+        <p>We expect specification development to undergo this sort of refinement loop via dynamically testing
+          the specification. In practice, agents are already really good at this and we expect them to continue
+          to get better.</p>
+      </div>
+    </details>
+  </div>
+</section>
