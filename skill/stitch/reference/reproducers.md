@@ -25,7 +25,10 @@ cd .stitch/repros/cjson-c1
 ```
 
 The folder (`.stitch/repros/<project>-<id>`) holds the pinned library source, the Dockerfile, the
-harness, the crashing program and its trace. It needs only Docker. `stitch repro` runs it once
+harness, the crashing program and its trace. It needs only Docker. `run.sh` pulls the STITCH++
+toolchain image the reproducer was made with, pinned by digest, so upgrading STITCH++ does not
+change it. If that image cannot be pulled, or `STITCH_REPRO_BUILD=1` is set, `run.sh` builds the
+toolchain from the copy in `stitch/` instead. `stitch repro` runs it once
 from scratch to verify it. Run `stitch repro c1` again after you write a minimized file (below):
 it copies the file into `standalone/`.
 

@@ -24,6 +24,7 @@ from .source import Source
 
 RUN_SH = r"""#!/bin/sh
 # Reproduce: {title}
+# Made with stitch-fuzz {version}.
 # Requires docker (with buildx). Usage: ./run.sh            run the recorded harness program
 #                                       ./run.sh --standalone  build + run standalone/ (the bug without the fuzzer)
 set -e
@@ -31,7 +32,14 @@ cd "$(dirname "$0")"
 ID={rid}
 # on Linux, run as the calling user so files written into this folder stay yours
 U=""; [ "$(uname)" = Linux ] && U="--user $(id -u):$(id -g) -e HOME=/tmp"
-docker buildx build --load -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
+# the STITCH++ toolchain: the published image this reproducer was made with (pinned), else built
+# from stitch/ (also when STITCH_REPRO_BUILD=1, e.g. after editing stitch/)
+TOOLCHAIN={toolchain}
+if [ -n "$TOOLCHAIN" ] && [ -z "$STITCH_REPRO_BUILD" ] && docker pull -q "$TOOLCHAIN" >/dev/null 2>&1; then
+  docker tag "$TOOLCHAIN" stitch-repro-toolchain:$ID
+else
+  docker buildx build --load -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
+fi
 if [ ! -d source ]; then
 {fetch}
 fi
@@ -61,6 +69,7 @@ FENCE = {"cpp": "cpp", "python": "python", "javascript": "js", "java": "java", "
 
 
 def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
+    from . import __version__
     from .cli import build, run_repro, in_project
 
     info = build(p, harness_only=True, quiet=True)
@@ -120,11 +129,13 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     sh = d / "run.sh"
     # image tags: unique per project and bucket (reproducers of several projects can verify at once)
     tag_id = re.sub(r"[^a-z0-9_.-]", "-", f"{p.name}-{rid}".lower())
-    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, limit=limit,
+    toolchain = docker.published_toolchain(p.language) or ""
+    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, limit=limit, toolchain=f'"{toolchain}"', version=__version__,
                                 standalone=STANDALONE_CPP if p.language == "cpp" else STANDALONE_LANG))
     sh.chmod(0o755)
     attach_standalone(p, d)
-    (d / "README.md").write_text(render_readme(p.name, rid, rep, output, sj, d / "project" / "harness", p.language))
+    (d / "README.md").write_text(render_readme(p.name, rid, rep, output, sj, d / "project" / "harness", p.language,
+                                               toolchain=toolchain, version=__version__))
     if run:
         print(f"[stitch] verifying the reproducer from scratch ({d}/run.sh)...", file=sys.stderr, flush=True)
         r = subprocess.run([str(sh)], capture_output=True, text=True, errors="replace", timeout=3600)
@@ -270,7 +281,7 @@ def _sanitizer_excerpt(output: str, limit=45):
     return "\n".join(keep).strip()
 
 
-def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cpp") -> str:
+def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cpp", toolchain=None, version=None) -> str:
     calls = [l[len("[stitch] "):] for l in output.splitlines() if l.startswith("[stitch] #")]
     kind = rep["kind"] if rep["crashed"] else "no crash when recorded"
     where = reports.frame_func(rep["frames"][0]) if rep["frames"] else (rep.get("endpoint") or "?")
@@ -281,7 +292,9 @@ def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cp
          f"| Location | {', '.join(f'`{f}`' for f in rep['frames'][:3]) or '–'} |",
          f"| Library source | {src} |",
          f"| Reproduce | `./run.sh` (needs only Docker; builds the library and the harness from scratch) |",
-         f"| Crash id | `{rid}` |", ""]
+         f"| Crash id | `{rid}` |",
+         f"| Made with | stitch-fuzz {version or '?'}"
+         + (f"; toolchain image `{toolchain}`" if toolchain else "") + " |", ""]
     if harness_dir is not None and (harness_dir.parent.parent / "standalone").exists():
         r += [standalone_readme(harness_dir.parent.parent, language)]
     r += [f"## Call sequence ({len(calls)} calls)", "", "Each line is one harness stub call with its decoded arguments; `oN.K` is output K of call N.", "", "```"]
@@ -302,7 +315,7 @@ def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cp
     if exc:
         r += [f"## {REPORT_NAME.get(language, 'Report')}", "", "```", exc, "```", ""]
     r += ["## Files", "",
-          "- `run.sh`: builds the toolchain image, fetches the pinned source, builds the library with the project `Dockerfile`, compiles the harness and runs `crash.stp`",
+          "- `run.sh`: pulls the pinned toolchain image (or builds it from `stitch/`), fetches the pinned source, builds the library with the project `Dockerfile`, compiles the harness and runs `crash.stp`",
           "- `project/`: `Dockerfile`, `stitch.toml` and the harness stubs",
           f"- `stitch/`: the STITCH++ {language} toolchain (Dockerfile, runtime, build scripts); no fuzzer needed",
           "- `crash.stp`: the crashing program; `trace.txt`: the full recorded output",
@@ -316,7 +329,11 @@ def rewrite_readme(p, d: Path):
     rep = reports.parse_report(output, 1)
     sj = json.loads((d / "source.json").read_text())
     rid = d.name
-    text = render_readme(p.name, rid, rep, output, sj, d / "project" / "harness", p.language)
+    sh = (d / "run.sh").read_text() if (d / "run.sh").exists() else ""
+    toolchain = re.search(r'^TOOLCHAIN="([^"]*)"', sh, re.M)
+    version = re.search(r"^# Made with stitch-fuzz (\S+)\.$", sh, re.M)
+    text = render_readme(p.name, rid, rep, output, sj, d / "project" / "harness", p.language,
+                         toolchain=toolchain and toolchain.group(1), version=version and version.group(1))
     if (d / "verified.txt").exists() and (d / "verified.txt").read_text().startswith("verified"):
         text = text.replace("| Crash id |", "| Verified | rebuilt from scratch with `run.sh`: same crash |\n| Crash id |", 1)
     (d / "README.md").write_text(text)

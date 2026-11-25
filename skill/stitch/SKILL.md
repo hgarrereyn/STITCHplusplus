@@ -404,6 +404,14 @@ Steps and pitfalls: `stitch guide reproducers`.
 - `[source] path = "../lib"` in `stitch.toml` fuzzes a local checkout, uncommitted changes
   included. If it is a git checkout, `stitch bisect` walks its history.
 
+**The STITCH++ version.** Each `stitch-fuzz` version uses exactly one set of Docker images (tagged
+by a hash of their sources, never `latest`), so the CLI version decides everything that runs.
+Install a fixed version (`pip install stitch-fuzz==X.Y.Z`; `stitch --version` prints it), keep it
+for the whole task, and write it down next to your results. Do not upgrade STITCH++ in the middle
+of a campaign or between finding a crash and reporting it. A reproducer from `stitch repro`
+records the version it was made with and pins its toolchain image by digest, so `run.sh` keeps
+working after STITCH++ changes.
+
 ## Commands
 
 | Command | Does |

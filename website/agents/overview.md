@@ -56,6 +56,12 @@ pip install stitch-fuzz
 stitch setup --lang <lang>    # cpp, objc, python, javascript, java, go, rust, ruby, swift
 ```
 
+Each `stitch-fuzz` version uses one fixed set of Docker images (tagged by source hash, never
+`latest`), so the CLI version decides what runs. If a project, task or earlier report names a
+version, install exactly that one (`pip install stitch-fuzz==X.Y.Z`). Otherwise note the version
+`stitch --version` prints, keep using it for the whole task, and put it in your report. Reproducers
+from `stitch repro` pin their own image, so they keep working after an upgrade.
+
 Offline, `stitch guide` prints a workflow guide and `stitch guide <lang>` the syntax for one
 language. Pass `--json` to any command whose output you parse.
 

@@ -39,7 +39,8 @@ jobs:
       - name: installed CLI works outside the checkout
         working-directory: /tmp
         run: |
-          /tmp/venv/bin/stitch --version
+          v=$(PYTHONPATH=$GITHUB_WORKSPACE/cli python -c 'from stitch_fuzz import __version__; print(__version__)')
+          [ "$(/tmp/venv/bin/stitch --version)" = "stitch-fuzz $v" ] || { echo "wheel version != __version__ $v"; exit 1; }
           /tmp/venv/bin/stitch --help > /dev/null
           /tmp/venv/bin/stitch guide > /dev/null
           for t in cpp python javascript java go rust ruby swift objc reproducers; do

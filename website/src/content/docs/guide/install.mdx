@@ -20,6 +20,22 @@ stitch setup --lang all
 `stitch setup` checks that Docker works, then pulls the prebuilt image for your version of
 `stitch-fuzz`. If there is none, it builds the image locally.
 
+## Versions
+
+Each version of `stitch-fuzz` uses exactly one set of images, tagged by a hash of their sources
+(never `latest`). Upgrading the command is the only thing that changes the images. To keep results
+reproducible, pin the version:
+
+```sh
+pip install stitch-fuzz==X.Y.Z   # the version you set up with
+stitch --version
+```
+
+Reproducers from `stitch repro` record the version they were made with and pin their toolchain
+image by digest, so they keep working after you upgrade. Each
+[release](https://github.com/hgarrereyn/STITCHplusplus/releases) lists its images and their
+digests.
+
 ## Use it with a coding agent
 
 STITCH++ ships a guide for coding agents as a skill:
