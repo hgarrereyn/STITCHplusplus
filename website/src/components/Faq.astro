@@ -21,35 +21,40 @@
 
     <details class="faq-item">
       <summary>How is STITCH++ different from ___?</summary>
-      <div class="faq-answer">
-        <h3>libFuzzer, AFL++, honggfuzz, ...?</h3>
-        <p>Those are fuzzing engines which require a harness. Each of them makes different choices about how
-          to collect coverage, mutate, keep track of inputs, etc...</p>
-        <p>STITCH++ introduces both a fuzzable specification (which replaces a traditional fuzz harness) and a
-          new fuzzing engine designed to support this specification.</p>
-        <p>The STITCH++ fuzzing engine is built with LibAFL (same authors as AFL++) and can still make use of
-          modern fuzzing features, for example sanitizer coverage, compare-logging, forkserver, etc...</p>
-
-        <h3>FUDGE, FuzzGen, PromptFuzz, PromeFuzz, CKGFuzzer, OGHarn, oss-fuzz-gen, ...?</h3>
-        <p>Lots of prior work explores the idea of automatically generating fuzz harnesses (both with and
-          without LLMs).</p>
-        <p>STITCH++ instead creates a fuzzable specification, a replacement of (many) traditional fuzz
-          harnesses.</p>
-
-        <h3>STITCH?</h3>
-        <p>Work on stitching started in early 2025 and the original tool (which we describe in our paper) was
-          built in a LLM-pipeline world, not yet an agent-powered world.</p>
-        <p>Many of the design choices we made were necessary at the time for weaker models, and are no longer
-          necessary.</p>
-        <p>STITCH++ is an agent-forward rebuilt version of STITCH, where we retain only the fuzzing core and we
-          extend support to many more languages.</p>
-
-        <h3>GraphFuzz?</h3>
-        <p>I'm also the author of GraphFuzz :)</p>
-        <p>In a sense, stitching is the LLM-powered successor. It makes possible what used to be very tedious
-          to do by hand.</p>
-        <p>The key innovation was introducing extrinsic type-state allowing the spec to model open-ended
-          constraints. There are also a lot of engineering improvements with STITCH++.</p>
+      <div class="faq-answer faq-vs-list">
+        <div class="faq-vs">
+          <h3><span class="faq-vs-tag">vs</span> libFuzzer, AFL++, honggfuzz, ...</h3>
+          <p>Those are fuzzing engines which require a harness. Each of them makes different choices about how
+            to collect coverage, mutate, keep track of inputs, etc...</p>
+          <p>STITCH++ introduces both a fuzzable specification (which replaces a traditional fuzz harness) and a
+            new fuzzing engine designed to support this specification.</p>
+          <p>The STITCH++ fuzzing engine is built with LibAFL (same authors as AFL++) and can still make use of
+            modern fuzzing features, for example sanitizer coverage, compare-logging, forkserver, etc...</p>
+        </div>
+        <div class="faq-vs">
+          <h3><span class="faq-vs-tag">vs</span> FUDGE, FuzzGen, PromptFuzz, PromeFuzz, CKGFuzzer, OGHarn, oss-fuzz-gen, ...</h3>
+          <p>Lots of prior work explores the idea of automatically generating fuzz harnesses (both with and
+            without LLMs).</p>
+          <p>STITCH++ instead creates a fuzzable specification, a replacement of (many) traditional fuzz
+            harnesses.</p>
+        </div>
+        <div class="faq-vs">
+          <h3><span class="faq-vs-tag">vs</span> STITCH</h3>
+          <p>Work on stitching started in early 2025 and the original tool (which we describe in our paper) was
+            built in a LLM-pipeline world, not yet an agent-powered world.</p>
+          <p>Many of the design choices we made were necessary at the time for weaker models, and are no longer
+            necessary.</p>
+          <p>STITCH++ is an agent-forward rebuilt version of STITCH, where we retain only the fuzzing core and we
+            extend support to many more languages.</p>
+        </div>
+        <div class="faq-vs">
+          <h3><span class="faq-vs-tag">vs</span> GraphFuzz</h3>
+          <p>I'm also the author of GraphFuzz :)</p>
+          <p>In a sense, stitching is the LLM-powered successor. It makes possible what used to be very tedious
+            to do by hand.</p>
+          <p>The key innovation was introducing extrinsic type-state allowing the spec to model open-ended
+            constraints. There are also a lot of engineering improvements with STITCH++.</p>
+        </div>
       </div>
     </details>
 
