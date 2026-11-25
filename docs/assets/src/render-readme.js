@@ -1,12 +1,14 @@
-// Renders the README images from the docs site (dark theme):
-//   docs/assets/readme/title.png      the home page title, cycling through the languages (animated PNG)
-//   docs/assets/readme/languages.png  the language buttons, none picked
-//   docs/assets/readme/example.png    the "Programs" and "Example crash" cards
+// Renders the README images from the docs site, one light and one dark version of each, on a
+// transparent background so they sit on any GitHub theme:
+//   website/public/readme/title-{dark,light}.png      the home page title, cycling through the languages
+//                                                     (animated PNG)
+//   website/public/readme/languages-{dark,light}.png  the language buttons, none picked
+//   website/public/readme/example-{dark,light}.png    the "Programs" and "Example crash" cards
 //
-// Each image is its own dark panel on a transparent background, so one file reads on GitHub's light
-// and dark pages. The README links them with a plain relative <img src>, not <picture>: a <picture>
-// source follows the browser's prefers-color-scheme, which can disagree with the reader's GitHub
-// theme, and relative srcset paths do not resolve in a private repository.
+// They are published with the docs site. The README shows both versions of each image by absolute
+// URL, ending in #gh-dark-mode-only or #gh-light-mode-only: GitHub hides the one that does not match
+// the theme picked in the reader's GitHub settings. (A <picture> source follows the browser's
+// prefers-color-scheme instead, and relative paths in it do not resolve in a private repository.)
 //
 // Needs Playwright, ffmpeg and the site running:
 //   cd website && npm run build && npx astro preview
@@ -16,14 +18,13 @@ const { execFileSync } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 
 const URL = process.argv[2] || 'http://localhost:4321/STITCHplusplus/';
-const OUT = path.join(__dirname, '..', 'readme');
+const OUT = path.join(__dirname, '..', '..', '..', 'website', 'public', 'readme');
 const FPS = 25, HOLD = 2.0, MOVE = 0.6, FADE = 0.4;
-const PAD = { x: 36, y: 28 }; // around the title, inside its panel
 
 const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
 
-async function open(browser) {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' });
+async function open(browser, theme) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, colorScheme: theme });
   await page.addInitScript(() => {
     localStorage.setItem('stitch-lang', 'python');
     // The home page draws random programs; seed them so every render shows the same one.
@@ -34,8 +35,6 @@ async function open(browser) {
   await page.addStyleTag({
     content: `html, body { background: transparent !important; }
       .rotator .word { transition: none !important; }
-      .home-hero h1 { box-sizing: content-box; padding: ${PAD.y}px ${PAD.x}px;
-        background: var(--sl-color-black); border: 1px solid var(--sl-color-hairline-light); border-radius: 16px; }
       .example-side { position: static !important; display: grid !important;
         grid-template-columns: 1fr 1fr; align-items: stretch; width: 1040px; background: transparent; }
       .lang-buttons { width: 840px; }
@@ -49,16 +48,18 @@ async function open(browser) {
   return page;
 }
 
-async function title(browser) {
-  const page = await open(browser);
+async function title(browser, theme) {
+  const page = await open(browser, theme);
   const h1 = page.locator('.home-hero h1');
-  // Fit the panel to the text: the widest of the first two lines and the languages.
-  await h1.evaluate((el) => {
+  // Clip to the text, not the heading's box: the widest of the first two lines and the languages.
+  const box = await h1.boundingBox();
+  const width = await h1.evaluate((el) => {
     const range = document.createRange();
     range.selectNodeContents(el.firstElementChild);
     const words = [...el.querySelectorAll('.word')].map((w) => w.getBoundingClientRect().width);
-    el.style.width = `${Math.ceil(Math.max(range.getBoundingClientRect().width, ...words)) + 4}px`;
+    return Math.max(range.getBoundingClientRect().width, ...words);
   });
+  const clip = { x: box.x - 4, y: box.y - 4, width: Math.ceil(width) + 8, height: Math.ceil(box.height) + 12 };
   const n = await page.locator('.rotator .word').count();
   const set = (states) => page.evaluate((states) => {
     document.querySelectorAll('.rotator .word').forEach((w, i) => {
@@ -73,7 +74,7 @@ async function title(browser) {
   let f = 0;
   const shot = async (duration) => {
     const file = path.join(dir, `f${String(f++).padStart(4, '0')}.png`);
-    await h1.screenshot({ path: file, omitBackground: true });
+    await page.screenshot({ path: file, clip, omitBackground: true });
     list.push(`file '${file}'`, `duration ${duration}`);
   };
   for (let i = 0; i < n; i++) {
@@ -91,17 +92,17 @@ async function title(browser) {
   fs.writeFileSync(path.join(dir, 'list.txt'), list.join('\n'));
   await page.close();
 
-  const out = path.join(OUT, 'title.png');
+  const out = path.join(OUT, `title-${theme}.png`);
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'list.txt'),
     '-pix_fmt', 'rgba', '-fps_mode', 'vfr', '-plays', '0', '-f', 'apng', out]);
   fs.rmSync(dir, { recursive: true });
-  console.log(out);
+  console.log(out, clip.width, 'x', clip.height);
 }
 
-async function still(browser, selector, name) {
-  const page = await open(browser);
+async function still(browser, theme, selector, name) {
+  const page = await open(browser, theme);
   await page.waitForTimeout(500); // let the first program finish drawing
-  const out = path.join(OUT, name);
+  const out = path.join(OUT, `${name}-${theme}.png`);
   await page.locator(selector).screenshot({ path: out, omitBackground: true, animations: 'disabled' });
   await page.close();
   console.log(out);
@@ -110,8 +111,10 @@ async function still(browser, selector, name) {
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
-  await title(browser);
-  await still(browser, '.lang-buttons', 'languages.png');
-  await still(browser, '.example-side', 'example.png');
+  for (const theme of ['dark', 'light']) {
+    await title(browser, theme);
+    await still(browser, theme, '.lang-buttons', 'languages');
+    await still(browser, theme, '.example-side', 'example');
+  }
   await browser.close();
 })();
