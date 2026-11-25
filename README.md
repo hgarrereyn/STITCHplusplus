@@ -1,7 +1,5 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/title-dark.gif">
-  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-light.gif" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
-</picture>
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-dark.png#gh-dark-mode-only" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-light.png#gh-light-mode-only" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
 
 Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
 endpoints, generates arguments, and finds crashes, exceptions, and failed checks.
@@ -15,10 +13,10 @@ endpoints, generates arguments, and finds crashes, exceptions, and failed checks
 > **Are you an agent?** Read [`agents/overview.md`](https://hgarrereyn.github.io/STITCHplusplus/agents/overview.md)
 > instead, or run `stitch guide`.
 
-<a href="languages/README.md"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-dark.png">
-  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-light.png" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
-</picture></a>
+<a href="languages/README.md">
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-dark.png#gh-dark-mode-only" width="840" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-light.png#gh-light-mode-only" width="840" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
+</a>
 
 ## Install
 
@@ -54,10 +52,8 @@ def snapshot(st: Borrow[Store]) -> New[Snapshot]:
 The fuzzer stitches stubs into programs, generates their arguments, and keeps the programs that
 reach new code. When one crashes, it minimizes it and writes a standalone reproducer.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://hgarrereyn.github.io/STITCHplusplus/readme/example-dark.png">
-  <img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-light.png" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
-</picture>
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-dark.png#gh-dark-mode-only" width="1040" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
+<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-light.png#gh-light-mode-only" width="1040" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
 
 The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) takes this
 key-value store from a new project to a minimized reproducer, in the language you pick.

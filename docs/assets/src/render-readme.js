@@ -1,11 +1,14 @@
-// Renders the README images from the docs site, in GitHub's light and dark page colors:
-//   website/public/readme/title-{dark,light}.gif     the home page title, cycling through the languages
-//   website/public/readme/languages-{dark,light}.png the language buttons, none picked
-//   website/public/readme/example-{dark,light}.png   the "Programs" and "Example crash" cards
+// Renders the README images from the docs site, one light and one dark version of each, on a
+// transparent background so they sit on any GitHub theme:
+//   website/public/readme/title-{dark,light}.png      the home page title, cycling through the languages
+//                                                     (animated PNG)
+//   website/public/readme/languages-{dark,light}.png  the language buttons, none picked
+//   website/public/readme/example-{dark,light}.png    the "Programs" and "Example crash" cards
 //
-// They are published with the docs site, and the README links them by absolute URL
-// (https://hgarrereyn.github.io/STITCHplusplus/readme/...): GitHub does not resolve relative
-// <picture> srcset paths in a private repository.
+// They are published with the docs site. The README shows both versions of each image by absolute
+// URL, ending in #gh-dark-mode-only or #gh-light-mode-only: GitHub hides the one that does not match
+// the theme picked in the reader's GitHub settings. (A <picture> source follows the browser's
+// prefers-color-scheme instead, and relative paths in it do not resolve in a private repository.)
 //
 // Needs Playwright, ffmpeg and the site running:
 //   cd website && npm run build && npx astro preview
@@ -16,7 +19,6 @@ const fs = require('fs'), os = require('os'), path = require('path');
 
 const URL = process.argv[2] || 'http://localhost:4321/STITCHplusplus/';
 const OUT = path.join(__dirname, '..', '..', '..', 'website', 'public', 'readme');
-const GITHUB_BG = { dark: '#0d1117', light: '#ffffff' };
 const FPS = 25, HOLD = 2.0, MOVE = 0.6, FADE = 0.4;
 
 const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
@@ -25,16 +27,16 @@ async function open(browser, theme) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, colorScheme: theme });
   await page.addInitScript(() => {
     localStorage.setItem('stitch-lang', 'python');
-    // The home page draws random programs; seed them so both themes show the same one.
+    // The home page draws random programs; seed them so every render shows the same one.
     let seed = 7;
     Math.random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   });
   await page.goto(URL);
   await page.addStyleTag({
-    content: `html, body { background: ${GITHUB_BG[theme]} !important; }
+    content: `html, body { background: transparent !important; }
       .rotator .word { transition: none !important; }
       .example-side { position: static !important; display: grid !important;
-        grid-template-columns: 1fr 1fr; align-items: stretch; width: 1040px; padding: 2px; }
+        grid-template-columns: 1fr 1fr; align-items: stretch; width: 1040px; background: transparent; }
       .lang-buttons { width: 840px; }
       .lang-buttons button, .lang-buttons button[aria-pressed="true"] {
         background: transparent !important; box-shadow: none !important; font-weight: 500 !important;
@@ -57,7 +59,7 @@ async function title(browser, theme) {
     const words = [...el.querySelectorAll('.word')].map((w) => w.getBoundingClientRect().width);
     return Math.max(range.getBoundingClientRect().width, ...words);
   });
-  const clip = { x: box.x - 4, y: box.y - 4, width: Math.ceil(width) + 8, height: box.height + 12 };
+  const clip = { x: box.x - 4, y: box.y - 4, width: Math.ceil(width) + 8, height: Math.ceil(box.height) + 12 };
   const n = await page.locator('.rotator .word').count();
   const set = (states) => page.evaluate((states) => {
     document.querySelectorAll('.rotator .word').forEach((w, i) => {
@@ -72,7 +74,7 @@ async function title(browser, theme) {
   let f = 0;
   const shot = async (duration) => {
     const file = path.join(dir, `f${String(f++).padStart(4, '0')}.png`);
-    await page.screenshot({ path: file, clip });
+    await page.screenshot({ path: file, clip, omitBackground: true });
     list.push(`file '${file}'`, `duration ${duration}`);
   };
   for (let i = 0; i < n; i++) {
@@ -90,27 +92,18 @@ async function title(browser, theme) {
   fs.writeFileSync(path.join(dir, 'list.txt'), list.join('\n'));
   await page.close();
 
-  const out = path.join(OUT, `title-${theme}.gif`);
+  const out = path.join(OUT, `title-${theme}.png`);
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'list.txt'),
-    '-vf', 'split[a][b];[a]palettegen=stats_mode=full[p];[b][p]paletteuse=dither=none',
-    '-fps_mode', 'vfr', '-loop', '0', out]);
+    '-pix_fmt', 'rgba', '-fps_mode', 'vfr', '-plays', '0', '-f', 'apng', out]);
   fs.rmSync(dir, { recursive: true });
   console.log(out, clip.width, 'x', clip.height);
 }
 
-async function languages(browser, theme) {
-  const page = await open(browser, theme);
-  const out = path.join(OUT, `languages-${theme}.png`);
-  await page.locator('.lang-buttons').screenshot({ path: out });
-  await page.close();
-  console.log(out);
-}
-
-async function example(browser, theme) {
+async function still(browser, theme, selector, name) {
   const page = await open(browser, theme);
   await page.waitForTimeout(500); // let the first program finish drawing
-  const out = path.join(OUT, `example-${theme}.png`);
-  await page.locator('.example-side').screenshot({ path: out, animations: 'disabled' });
+  const out = path.join(OUT, `${name}-${theme}.png`);
+  await page.locator(selector).screenshot({ path: out, omitBackground: true, animations: 'disabled' });
   await page.close();
   console.log(out);
 }
@@ -120,8 +113,8 @@ async function example(browser, theme) {
   const browser = await chromium.launch();
   for (const theme of ['dark', 'light']) {
     await title(browser, theme);
-    await languages(browser, theme);
-    await example(browser, theme);
+    await still(browser, theme, '.lang-buttons', 'languages');
+    await still(browser, theme, '.example-side', 'example');
   }
   await browser.close();
 })();
