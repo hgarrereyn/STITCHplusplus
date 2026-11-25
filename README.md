@@ -1,22 +1,17 @@
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-dark.png#gh-dark-mode-only" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/title-light.png#gh-light-mode-only" width="608" alt="Automatic, Expressive, and Scalable Fuzzing for C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift and Objective-C">
+# STITCH++
 
 Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
 endpoints, generates arguments, and finds crashes, exceptions, and failed checks.
 
-**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)** &nbsp;·&nbsp;
-[Tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) &nbsp;·&nbsp;
-[CLI reference](https://hgarrereyn.github.io/STITCHplusplus/reference/cli/) &nbsp;·&nbsp;
-[Paper](https://doi.org/10.1145/3830454.3846663)
-
 > [!NOTE]
-> **Are you an agent?** Read [`agents/overview.md`](https://hgarrereyn.github.io/STITCHplusplus/agents/overview.md)
-> instead, or run `stitch guide`.
+> **Are you an agent?** Read this instead:
+> https://hgarrereyn.github.io/STITCHplusplus/agents/overview.md
 
-<a href="languages/README.md">
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-dark.png#gh-dark-mode-only" width="840" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/languages-light.png#gh-light-mode-only" width="840" alt="C/C++, Python, JavaScript, Java, Go, Rust, Ruby, Swift, Objective-C">
-</a>
+**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)** ·
+[Tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) ·
+[CLI reference](https://hgarrereyn.github.io/STITCHplusplus/reference/cli/) ·
+[Example projects](projects/README.md) ·
+[Paper](https://doi.org/10.1145/3830454.3846663)
 
 ## Install
 
@@ -27,47 +22,37 @@ stitch setup --lang python
 
 Requires Docker. The library, the harness and the fuzzer run in containers.
 
-## How it works
+## Languages
 
-A spec is written in the target language. It declares the objects your API passes around, and
-stubs that each make one call:
+[C/C++](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/cpp/) ·
+[Python](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/python/) ·
+[JavaScript](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/javascript/) ·
+[Java](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/java/) ·
+[Go](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/go/) ·
+[Rust](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/rust/) ·
+[Ruby](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/ruby/) ·
+[Swift](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/swift/) ·
+[Objective-C](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/objc/)
 
-```python
-Store = stitch.object("Store")
-Snapshot = stitch.object("Snapshot")
+<details>
+<summary>How each language is instrumented</summary>
 
-@stitch.endpoint(bails_on=(ValueError,))
-def load(text: Str[256]) -> New[Store]:
-    return kvlib.load(text)
+| Language | Coverage | Comparisons (cmplog) | Bugs detected |
+|---|---|---|---|
+| C/C++ | SanitizerCoverage (clang) | `trace-cmp`, `memcmp`/`strcmp` hooks | ASan, UBSan, uncaught exceptions |
+| Python | `sys.monitoring` line and branch events | AST rewrite of `==`, `!=`, `in`, `<` | undeclared exceptions |
+| JavaScript | Babel plugin (CommonJS hook and ESM loader) | Babel rewrite of `===` and `switch`; `String`/`Set`/`Map` hooks | undeclared exceptions, prototype pollution, unhandled rejections |
+| Java | Java agent, counters per basic block | `if_icmp`, `lcmp`, `switch`, `String.equals`/`startsWith`, `Map.get` | undeclared `Throwable`s |
+| Go | `-d=libfuzzer` 8-bit counters | `libfuzzerTraceCmp*`, `libfuzzerHookStrCmp` | panics, fatal errors, data races (`-race`, optional) |
+| Rust | SanitizerCoverage | `trace-compares`, ASan `memcmp` hooks | panics (including overflow checks), ASan |
+| Ruby | Prism source rewriting | rewritten `==`, `<`, `eql?`, `start_with?`, `include?`, `case`/`when` | undeclared exceptions |
+| Swift | SanitizerCoverage | `trace-cmp` | traps (bounds, overflow, nil unwrap), ASan |
+| Objective-C | SanitizerCoverage (clang, GNUstep) | `trace-cmp`, `memcmp`/`strcmp` hooks, `NSString` comparison wrappers | Objective-C exceptions, ASan, UBSan |
 
-@stitch.endpoint
-def remove(st: Borrow[Store], key: Str[16]):
-    st.remove(key)
+In every language, failed `check`s in your stubs and timeouts are reported too. Details:
+[`languages/README.md`](languages/README.md).
 
-@stitch.endpoint(bails_on=(ValueError,))
-def snapshot(st: Borrow[Store]) -> New[Snapshot]:
-    return kvlib.load(st.dump())
-```
-
-The fuzzer stitches stubs into programs, generates their arguments, and keeps the programs that
-reach new code. When one crashes, it minimizes it and writes a standalone reproducer.
-
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-dark.png#gh-dark-mode-only" width="1040" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
-<img src="https://hgarrereyn.github.io/STITCHplusplus/readme/example-light.png#gh-light-mode-only" width="1040" alt="Left: a program stitched from the stubs, as a graph and as code. Right: a three-call crash it found, KeyError: 'tmp'.">
-
-The [tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) takes this
-key-value store from a new project to a minimized reproducer, in the language you pick.
-
-## In this repository
-
-- [`projects/`](projects/README.md): harnesses for 49 real libraries and the bugs they found,
-  including known CVEs in jsoup, semver, go-yaml, x/net/html, regex and lodash
-- [`examples/`](examples/): the finished tutorial harness in each language
-- [`languages/`](languages/README.md): each language's runtime, coverage, comparison hooks and bug
-  detectors
-- [`skill/stitch/`](skill/stitch/SKILL.md): the agent skill
-- [`docs/cli.md`](docs/cli.md): every command
-- [`website/`](website/README.md): the documentation site
+</details>
 
 ## Citation
 
