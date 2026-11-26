@@ -11,7 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-venv python3-dev python3-pip build-essential git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
-RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir "coverage>=7.6,<8"
+# pip >= 26 honors PIP_UPLOADED_PRIOR_TO (reproducers pin packages to a date)
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir "pip>=26" "coverage>=7.6,<8"
 ENV PATH=/stitch/bin:/opt/venv/bin:$PATH \
     VIRTUAL_ENV=/opt/venv \
     PYTHONDONTWRITEBYTECODE=1 \

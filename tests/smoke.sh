@@ -1,5 +1,5 @@
 #!/bin/sh
-# End-to-end test on examples/demolib: build, check, probe, fuzz, triage, minimize, repro, bisect.
+# End-to-end test on examples/demolib: build, check, probe, fuzz, triage, minimize, repro, write, report, bisect.
 # STITCH_SMOKE_SECS (default 90): fuzzing time per round; STITCH_SMOKE_ROUNDS (default 3): rounds
 # to find both planted bugs. Raise them on a busy machine.
 # The demo library has two planted bugs with known introducing commits:
@@ -44,6 +44,9 @@ $STITCH -C $P try "$SA/repro.cpp" >/dev/null || fail "try generated"
 printf 'int main() { return 0; }\n' > "$SA/nocrash.c"
 set +e; $STITCH -C $P try "$SA/nocrash.c" >/dev/null; rc=$?; set -e
 [ $rc = 1 ] || fail "try must reject a program that does not crash (rc=$rc)"
+# the issue-sized reproducer (Dockerfile + file + run.sh), rebuilt from scratch: same crash
+rm -rf /tmp/stitch-smoke-report
+$STITCH -C $P --json report "$SA/repro.cpp" -o /tmp/stitch-smoke-report | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["check"]["status"] == "same", d' || fail report
 # a program with a Val parameter (append_all) replays from its recorded choices
 python3 - "$STITCH" "$P" "$PWD/$P/.stitch/standalone/smoke-val" <<'EOF' || fail "write (Val program)"
 import json, pathlib, subprocess, sys

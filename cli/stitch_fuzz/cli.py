@@ -973,6 +973,37 @@ def cmd_repro(a):
     out({"ok": True, "dir": str(d)}, f"reproducer: {d}\n  run it anywhere with docker: {d}/run.sh")
 
 
+def cmd_report(a):
+    from .report import make_report, ReportError
+    p = find_project(a.project)
+    try:
+        res = make_report(p, a.crash, Path(a.output).resolve() if a.output else None, run=not a.no_run)
+    except ReportError as e:
+        die(str(e))
+    if JSON:
+        reports.dump(res)
+        return
+    d = Path(res["dir"])
+    st = (res.get("check") or {}).get("status")
+    if st == "build_failed":
+        sys.stderr.write(res.get("output", "") + "\n")
+        die(f"the reproducer's Dockerfile does not build: {d}/Dockerfile")
+    print(f"report: {p.rel(d)}  (Dockerfile, {res['file']}, run.sh; ISSUE.md is the issue text)")
+    if st:
+        msg = {"same": "verified: same crash", "different": "WARNING: it crashes differently",
+               "no_crash": "WARNING: it does not crash", "diverged": "WARNING: it diverged",
+               "crash": "it crashes (no expected.json next to the file to compare with)"}.get(st, st)
+        got = (res.get("got") or {}).get("signature")
+        print(f"  {msg}" + (f": {got}" if got and st != "same" else ""))
+    print(f"  library pinned to {res['source']}; packages as of {res['pinned_to']}")
+    if not res["plain"]:
+        print("  note: it still uses the STITCH++ stand-in (shim file included); shrink it to plain library code for a cleaner report")
+    if not res["published_toolchain"]:
+        print("  note: no published toolchain image for this stitch-fuzz version: the Dockerfile builds only on this machine")
+    if st and st not in ("same", "crash"):
+        sys.exit(1)
+
+
 def cmd_bisect(a):
     from .bisect import bisect
     p = find_project(a.project)
@@ -1259,6 +1290,13 @@ def main(argv=None):
     s.add_argument("-o", "--output")
     s.add_argument("--no-run", action="store_true", help="do not verify the reproducer")
     s.set_defaults(fn=cmd_repro)
+
+    s = sp.add_parser("report", help="a reproducer for a GitHub issue: Dockerfile + reproducer file + run.sh (+ ISSUE.md)")
+    s.add_argument("crash", help="a standalone reproducer file (from `stitch write`, shrunk to plain library code), or a crash id: "
+                   "its newest min.* file in .stitch/standalone/<id>/")
+    s.add_argument("-o", "--output", help="output directory (default .stitch/reports/<id>)")
+    s.add_argument("--no-run", action="store_true", help="do not build and run it to verify")
+    s.set_defaults(fn=cmd_report)
 
     s = sp.add_parser("cov", help="run a corpus on a coverage build; write lcov.info, HTML and a summary")
     s.add_argument("inputs", nargs="*", help="campaign names (their corpus) or .stp files/directories (default: latest campaign)")

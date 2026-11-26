@@ -52,9 +52,10 @@ say which). Use `probe:c3` or `--campaign NAME` for another campaign, or pass a 
 | `stitch repro CRASH` | Write a self-contained Docker reproducer folder and verify it from scratch. |
 | `stitch write CRASH` | Write the crash as one standalone source file in the harness language, with every argument filled in. |
 | `stitch try FILE [--rev REV] [--show]` | Build and run an edited standalone file and check that it still fails the same way. |
+| `stitch report CRASH\|FILE [-o DIR] [--no-run]` | Package a shrunk standalone file for the library's maintainers: `Dockerfile`, the file, `run.sh` and `ISSUE.md`. Verified from scratch. |
 
 See [`skill/stitch/reference/reproducers.md`](../skill/stitch/reference/reproducers.md) for the
-`write` / `try` workflow.
+`write` / `try` / `report` workflow.
 
 ## Development
 

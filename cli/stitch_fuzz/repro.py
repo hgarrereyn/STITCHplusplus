@@ -40,11 +40,16 @@ if [ -n "$TOOLCHAIN" ] && [ -z "$STITCH_REPRO_BUILD" ] && docker pull -q "$TOOLC
 else
   docker buildx build --load -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
 fi
+# package versions as of when the library image was built (apt snapshot, pip, npm)
+docker build -q -t stitch-repro-base:$ID - >/dev/null <<EOF
+FROM stitch-repro-toolchain:$ID
+{pins}
+EOF
 if [ ! -d source ]; then
 {fetch}
 fi
 docker buildx build --load -q -f project/Dockerfile --build-context source=source \
-  --build-arg STITCH_BASE=stitch-repro-toolchain:$ID -t stitch-repro:$ID project >/dev/null
+  --build-arg STITCH_BASE=stitch-repro-base:$ID -t stitch-repro:$ID project >/dev/null
 if [ "$1" = "--standalone" ]; then
 {standalone}
   exit $?
@@ -130,7 +135,10 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     # image tags: unique per project and bucket (reproducers of several projects can verify at once)
     tag_id = re.sub(r"[^a-z0-9_.-]", "-", f"{p.name}-{rid}".lower())
     toolchain = docker.published_toolchain(p.language) or ""
-    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, limit=limit, toolchain=f'"{toolchain}"', version=__version__,
+    from .report import pin_time, pin_lines
+    pins = "\n".join(l for l in pin_lines(pin_time(image, f"stitch/{p.language}-toolchain:{docker.toolchain_hash(p.language)}"))
+                      if not l.startswith("#"))
+    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, limit=limit, toolchain=f'"{toolchain}"', version=__version__, pins=pins,
                                 standalone=STANDALONE_CPP if p.language == "cpp" else STANDALONE_LANG))
     sh.chmod(0o755)
     attach_standalone(p, d)

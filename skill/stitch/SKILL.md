@@ -375,6 +375,7 @@ stitch write c1           # the crash as one source file in your harness languag
 stitch try min.c          # build and run an edited copy: SAME CRASH, NO CRASH, ...
 stitch bisect c1          # the commit that introduced the bug (--good v1.0 if you know one)
 stitch bisect c1 --fixed  # the commit that fixed it, if HEAD no longer crashes
+stitch report c1          # Dockerfile + the shrunk file + run.sh + ISSUE.md, for the maintainers
 ```
 
 `stitch write` turns the crashing program into one file in your harness language, with the
@@ -395,6 +396,10 @@ int main(void) {
     return 0;
 }
 ```
+
+When the file is plain library code, `stitch report c1` packages it for the maintainers: a
+`Dockerfile` that builds the library at the pinned commit with package versions as of the crash,
+the file, `run.sh`, and `ISSUE.md`, the issue text. It runs it from scratch to verify it.
 
 Steps and pitfalls: `stitch guide reproducers`.
 
@@ -429,6 +434,7 @@ working after STITCH++ changes.
 | `stitch cov [NAME\|FILES] [--crashes] [--rev REV]` | coverage of a corpus: lcov + HTML |
 | `stitch repro ID` | Docker reproducer folder |
 | `stitch write ID` | standalone source file of a crash |
+| `stitch report ID\|FILE` | issue-sized reproducer: Dockerfile + file + run.sh + ISSUE.md |
 | `stitch try FILE [ID] [--rev REV] [--show]` | build and run a standalone file, compare with the crash |
 | `stitch bisect ID [--good REV] [--fixed [--fixed-at REV]]` | the commit that introduced a crash, or (`--fixed`) the one that fixed it |
 | `stitch sample TYPE [-n N]` | values a data type's decoder makes |
@@ -440,5 +446,5 @@ working after STITCH++ changes.
 - `.stitch/build/manifest.json`: the stubs as the fuzzer sees them (inputs, outputs, parameters)
 - `.stitch/campaigns/<name>/`: corpus, crashes, stats
 - `.stitch/cov/<campaign>/`: `lcov.info`, `html/`, `summary.json`, `report.txt`
-- `.stitch/repros/`, `.stitch/standalone/`, `.stitch/bisect/`: reproducers and bisect results
+- `.stitch/repros/`, `.stitch/standalone/`, `.stitch/reports/`, `.stitch/bisect/`: reproducers and bisect results
 - `~/.cache/stitch/logs/`: image build logs
