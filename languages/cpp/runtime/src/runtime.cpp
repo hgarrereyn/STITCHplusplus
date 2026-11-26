@@ -13,6 +13,7 @@
 #include <cmath>
 #include <exception>
 #include <map>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -217,6 +218,10 @@ static std::vector<std::pair<const void*, std::pair<std::string, Value>>> g_pend
 static std::vector<std::string> g_tmp_files;
 static uint32_t g_gen_counter = 1;
 static uint64_t g_cmp_seen[1024];  // per-run dedupe of comparison records
+// Comparison logging is on for the program being run. Read from the shared cmplog header once per
+// run (the engine only flips it between runs) so the trace-cmp hooks, which run on every comparison
+// in the library, cost one load when it is off.
+static bool g_cmp_run = false;
 // plan mode (`repro --plan FILE`): concrete values of every call, for the standalone C++ writer
 static FILE* g_plan = nullptr;
 static int g_plan_src_next = 0;      // Src params of the current call, in declaration order
@@ -428,7 +433,9 @@ struct Source::Impl {
     size_t pos = 0;
     size_t cap = 0;
     bool gen = false;
-    std::mt19937_64 rng;
+    // generation mode only (stitch_generate): allocated on first use, so the Source made for every
+    // decoded parameter does not carry (and seed) 2.5 KB of generator state
+    std::unique_ptr<std::mt19937_64> rng;
     const std::vector<std::string>* dict = nullptr;
     bool exhausted = false;
     std::vector<uint32_t>* spans = nullptr;  // (prefix offset, prefix width, content length) per str draw
@@ -464,7 +471,10 @@ struct Source::Impl {
         items->insert(items->end(), {site, inst, (uint32_t)a, (uint32_t)b});
     }
 
-    uint64_t rnd() { return rng(); }
+    uint64_t rnd() {
+        if (!rng) rng.reset(new std::mt19937_64());
+        return (*rng)();
+    }
     double unit() { return (rnd() >> 11) * (1.0 / 9007199254740992.0); }
 
     // Read n bytes; in generation mode, synthesize them with `synth` when the buffer ends.
@@ -1265,7 +1275,8 @@ static int finding_exit() {
 static int run_program(const std::vector<PNode>& nodes, bool trace) {
     auto& rg = reg();
     // a persistent worker runs many programs: per-run cmplog dedupe must start empty
-    if (g_cmplog && g_cmplog->enabled) memset(g_cmp_seen, 0, sizeof g_cmp_seen);
+    g_cmp_run = g_cmplog && g_cmplog->enabled;
+    if (g_cmp_run) memset(g_cmp_seen, 0, sizeof g_cmp_seen);
     StitchResults* R = results();
     R->magic = 0x53544348;  // "STCH"
     R->n_nodes = (uint32_t)nodes.size();
@@ -1587,7 +1598,7 @@ size_t stitch_generate(int dt, uint64_t seed, const uint8_t* prefix, size_t plen
     if (dt < 0 || dt >= (int)r.datatypes.size() || !r.datatypes[dt].decoder) return 0;
     Source s(prefix, std::min(plen, cap), cap);
     s.impl()->gen = true;
-    s.impl()->rng.seed(seed);
+    s.impl()->rng.reset(new std::mt19937_64(seed));
     s.impl()->dict = &r.datatypes[dt].dict;
     try {
         r.datatypes[dt].decoder(&s);
@@ -1641,6 +1652,11 @@ void stitch_dict_add(int dt, const uint8_t* tok, size_t len) {
 // ------------------------------------------------------------------------------------------
 // SanitizerCoverage: edges (hit counts) and comparisons (cmplog)
 // ------------------------------------------------------------------------------------------
+// The hooks below run on every edge and comparison of the code under test. They only touch the
+// runtime's own maps, so they are built without sanitizer checks (the runtime is otherwise compiled
+// with the harness's sanitizers): with ASan, the edge hook alone did three shadow checks per edge.
+#define STITCH_HOOK __attribute__((no_sanitize("address", "undefined")))
+
 void __sanitizer_cov_trace_pc_guard_init(uint32_t* start, uint32_t* stop) {
     if (start == stop || *start) return;
     stitch_edges(nullptr);
@@ -1650,14 +1666,14 @@ void __sanitizer_cov_trace_pc_guard_init(uint32_t* start, uint32_t* stop) {
     }
 }
 
-void __sanitizer_cov_trace_pc_guard(uint32_t* guard) {
+STITCH_HOOK void __sanitizer_cov_trace_pc_guard(uint32_t* guard) {
     uint8_t& c = g_edges[*guard];
     c = (uint8_t)(c + 1) ? (uint8_t)(c + 1) : 1;
 }
 
-static inline bool cmplog_on() { return g_in_exec && g_cmplog && g_cmplog->enabled && g_cur_node >= 0; }
+STITCH_HOOK static inline bool cmplog_on() { return g_cmp_run && g_in_exec && g_cur_node >= 0; }
 
-static void cmp_record_int(uint64_t a, uint64_t b, uint8_t size, bool a_const) {
+STITCH_HOOK static void cmp_record_int(uint64_t a, uint64_t b, uint8_t size, bool a_const) {
     if (a == b) return;
     uint64_t h = (a * 0x9E3779B97F4A7C15ull) ^ (b + size) ^ ((uint64_t)g_cur_node << 48);
     uint64_t bit = h % 65536;
@@ -1675,7 +1691,7 @@ static void cmp_record_int(uint64_t a, uint64_t b, uint8_t size, bool a_const) {
     memcpy(r.b, &b, 8);
 }
 
-static void cmp_record_bytes(const void* a, size_t la, const void* b, size_t lb) {
+STITCH_HOOK static void cmp_record_bytes(const void* a, size_t la, const void* b, size_t lb) {
     if (!a || !b) return;
     la = std::min<size_t>(la, 32);
     lb = std::min<size_t>(lb, 32);
@@ -1697,47 +1713,47 @@ static void cmp_record_bytes(const void* a, size_t la, const void* b, size_t lb)
     memcpy(r.b, b, lb);
 }
 
-void __sanitizer_cov_trace_cmp1(uint8_t a, uint8_t b) { if (cmplog_on()) cmp_record_int(a, b, 1, false); }
-void __sanitizer_cov_trace_cmp2(uint16_t a, uint16_t b) { if (cmplog_on()) cmp_record_int(a, b, 2, false); }
-void __sanitizer_cov_trace_cmp4(uint32_t a, uint32_t b) { if (cmplog_on()) cmp_record_int(a, b, 4, false); }
-void __sanitizer_cov_trace_cmp8(uint64_t a, uint64_t b) { if (cmplog_on()) cmp_record_int(a, b, 8, false); }
-void __sanitizer_cov_trace_const_cmp1(uint8_t a, uint8_t b) { if (cmplog_on()) cmp_record_int(a, b, 1, true); }
-void __sanitizer_cov_trace_const_cmp2(uint16_t a, uint16_t b) { if (cmplog_on()) cmp_record_int(a, b, 2, true); }
-void __sanitizer_cov_trace_const_cmp4(uint32_t a, uint32_t b) { if (cmplog_on()) cmp_record_int(a, b, 4, true); }
-void __sanitizer_cov_trace_const_cmp8(uint64_t a, uint64_t b) { if (cmplog_on()) cmp_record_int(a, b, 8, true); }
-void __sanitizer_cov_trace_switch(uint64_t val, uint64_t* cases) {
+STITCH_HOOK void __sanitizer_cov_trace_cmp1(uint8_t a, uint8_t b) { if (cmplog_on()) cmp_record_int(a, b, 1, false); }
+STITCH_HOOK void __sanitizer_cov_trace_cmp2(uint16_t a, uint16_t b) { if (cmplog_on()) cmp_record_int(a, b, 2, false); }
+STITCH_HOOK void __sanitizer_cov_trace_cmp4(uint32_t a, uint32_t b) { if (cmplog_on()) cmp_record_int(a, b, 4, false); }
+STITCH_HOOK void __sanitizer_cov_trace_cmp8(uint64_t a, uint64_t b) { if (cmplog_on()) cmp_record_int(a, b, 8, false); }
+STITCH_HOOK void __sanitizer_cov_trace_const_cmp1(uint8_t a, uint8_t b) { if (cmplog_on()) cmp_record_int(a, b, 1, true); }
+STITCH_HOOK void __sanitizer_cov_trace_const_cmp2(uint16_t a, uint16_t b) { if (cmplog_on()) cmp_record_int(a, b, 2, true); }
+STITCH_HOOK void __sanitizer_cov_trace_const_cmp4(uint32_t a, uint32_t b) { if (cmplog_on()) cmp_record_int(a, b, 4, true); }
+STITCH_HOOK void __sanitizer_cov_trace_const_cmp8(uint64_t a, uint64_t b) { if (cmplog_on()) cmp_record_int(a, b, 8, true); }
+STITCH_HOOK void __sanitizer_cov_trace_switch(uint64_t val, uint64_t* cases) {
     if (!cmplog_on()) return;
     uint64_t n = cases[0], bits = cases[1];
     uint8_t size = (uint8_t)(bits / 8);
     for (uint64_t i = 0; i < n && i < 64; i++) cmp_record_int(cases[2 + i], val, size ? size : 8, true);
 }
-void __sanitizer_cov_trace_div4(uint32_t) {}
-void __sanitizer_cov_trace_div8(uint64_t) {}
-void __sanitizer_cov_trace_gep(uintptr_t) {}
-void __sanitizer_cov_trace_pc_indir(uintptr_t) {}
+STITCH_HOOK void __sanitizer_cov_trace_div4(uint32_t) {}
+STITCH_HOOK void __sanitizer_cov_trace_div8(uint64_t) {}
+STITCH_HOOK void __sanitizer_cov_trace_gep(uintptr_t) {}
+STITCH_HOOK void __sanitizer_cov_trace_pc_indir(uintptr_t) {}
 
-void __sanitizer_weak_hook_memcmp(void*, const void* s1, const void* s2, size_t n, int result) {
+STITCH_HOOK void __sanitizer_weak_hook_memcmp(void*, const void* s1, const void* s2, size_t n, int result) {
     if (cmplog_on() && result != 0) cmp_record_bytes(s1, n, s2, n);
 }
-void __sanitizer_weak_hook_strncmp(void*, const char* s1, const char* s2, size_t n, int result) {
+STITCH_HOOK void __sanitizer_weak_hook_strncmp(void*, const char* s1, const char* s2, size_t n, int result) {
     if (cmplog_on() && result != 0) cmp_record_bytes(s1, strnlen(s1, n), s2, strnlen(s2, n));
 }
-void __sanitizer_weak_hook_strcmp(void*, const char* s1, const char* s2, int result) {
+STITCH_HOOK void __sanitizer_weak_hook_strcmp(void*, const char* s1, const char* s2, int result) {
     if (cmplog_on() && result != 0) cmp_record_bytes(s1, strlen(s1), s2, strlen(s2));
 }
-void __sanitizer_weak_hook_strncasecmp(void*, const char* s1, const char* s2, size_t n, int result) {
+STITCH_HOOK void __sanitizer_weak_hook_strncasecmp(void*, const char* s1, const char* s2, size_t n, int result) {
     if (cmplog_on() && result != 0) cmp_record_bytes(s1, strnlen(s1, n), s2, strnlen(s2, n));
 }
-void __sanitizer_weak_hook_strcasecmp(void*, const char* s1, const char* s2, int result) {
+STITCH_HOOK void __sanitizer_weak_hook_strcasecmp(void*, const char* s1, const char* s2, int result) {
     if (cmplog_on() && result != 0) cmp_record_bytes(s1, strlen(s1), s2, strlen(s2));
 }
-void __sanitizer_weak_hook_strstr(void*, const char* s1, const char* s2, char* result) {
+STITCH_HOOK void __sanitizer_weak_hook_strstr(void*, const char* s1, const char* s2, char* result) {
     if (cmplog_on() && !result) cmp_record_bytes(s1, strlen(s1), s2, strlen(s2));
 }
-void __sanitizer_weak_hook_strcasestr(void*, const char* s1, const char* s2, char* result) {
+STITCH_HOOK void __sanitizer_weak_hook_strcasestr(void*, const char* s1, const char* s2, char* result) {
     if (cmplog_on() && !result) cmp_record_bytes(s1, strlen(s1), s2, strlen(s2));
 }
-void __sanitizer_weak_hook_memmem(void*, const void* s1, size_t l1, const void* s2, size_t l2, void* result) {
+STITCH_HOOK void __sanitizer_weak_hook_memmem(void*, const void* s1, size_t l1, const void* s2, size_t l2, void* result) {
     if (cmplog_on() && !result) cmp_record_bytes(s1, l1, s2, l2);
 }
 
