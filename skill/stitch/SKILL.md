@@ -11,16 +11,18 @@ next, generates the arguments, and reports crashes, undeclared exceptions and fa
 Everything builds and runs in Docker.
 
 **Start by reading [reference/overview.md](reference/overview.md)**: the concepts, setup, and the
-workflow checklist to follow. Then read your language's file before writing stubs.
+three workflows (set up a project, improve coverage, find and triage bugs). Then read your
+language's file before writing stubs.
 
 The guide:
 
 | File | Read it when |
 |---|---|
-| [overview.md](reference/overview.md) | first: concepts, setup and the workflow |
+| [overview.md](reference/overview.md) | first: concepts, setup and the workflows |
 | [stubs.md](reference/stubs.md) | writing stubs and data types |
 | [probe.md](reference/probe.md) | reading the `stitch probe` / `stitch status` report |
 | [triage.md](reference/triage.md) | deciding whether a crash is a harness bug or a library bug |
+| [severity.md](reference/severity.md) | rating a confirmed library bug (class and priority) |
 | [reproducers.md](reference/reproducers.md) | turning a crash into a short standalone file; frozen reproducers for maintainers (`stitch report`) |
 | [coverage.md](reference/coverage.md) | reading `stitch cov` and closing coverage gaps |
 | [stitch-toml.md](reference/stitch-toml.md) | every key of `stitch.toml`; the pinned STITCH++ version (`stitch_version`) |

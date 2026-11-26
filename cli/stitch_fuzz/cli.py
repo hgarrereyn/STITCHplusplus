@@ -901,7 +901,7 @@ def cmd_shell(a):
 SKILL = STITCH_HOME / "skill" / "stitch"
 # The agent guide: skill/stitch/reference/<topic>.md (the docs site serves the same files).
 GUIDES = {"": "reference/overview.md",
-          **{t: f"reference/{t}.md" for t in ("stubs", "probe", "triage", "reproducers", "coverage", "stitch-toml", "cli",
+          **{t: f"reference/{t}.md" for t in ("stubs", "probe", "triage", "severity", "reproducers", "coverage", "stitch-toml", "cli",
                                               "cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
 
 

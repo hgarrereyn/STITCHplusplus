@@ -1,5 +1,9 @@
 # Triage
 
+While setting up a project or improving coverage (workflows A and B in [overview.md](overview.md)),
+stop after "Classify each crash": fix the harness bugs and write down the ids of the rest.
+Reproducers belong to workflow C.
+
 ## List the crashes
 
 ```sh

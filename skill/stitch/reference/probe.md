@@ -30,7 +30,7 @@ on JSON objects, and `parse` often returns arrays or numbers, which is expected.
 | often skipped | A producer of one of its inputs usually fails. Fix that producer. |
 | never called | No stub produces one of its inputs, or the run was too short. |
 | calls bailing above 50% | Most runs are wasted. Fix the stubs that bail most. |
-| crash or timeout programs saved | Triage them: `stitch crashes probe`. |
+| crash or timeout programs saved | `stitch crashes probe`. Fix the harness bugs among them ([triage.md](triage.md)) and write down the other ids; reproducing them waits for the bug workflow ([overview.md](overview.md)). |
 
 ## Done when
 
@@ -38,4 +38,4 @@ on JSON objects, and `parse` often returns arrays or numbers, which is expected.
 - calls bailing below 50%
 - harness bugs among the probe's crashes are fixed
 
-Then start the campaign: `stitch fuzz --jobs 4`.
+Then go back to your workflow in [overview.md](overview.md).

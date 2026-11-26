@@ -87,20 +87,31 @@ Offline, `stitch guide` prints this file and `stitch guide <name>` any other fil
 (`stitch guide stubs`, `stitch guide python`, ...). Pass `--json` to any command whose output you
 parse.
 
-## Workflow
+## Workflows
 
-Copy this checklist and keep it updated:
+There are three workflows. Do the one your task asks for, and stop at its end:
+
+| Workflow | Do it when | It ends with |
+|---|---|---|
+| A. Set up a project | there is no harness yet, or you are asked to write or fix one | a harness that builds, checks and probes clean |
+| B. Improve coverage | a working harness misses parts of the library | coverage that no longer grows |
+| C. Find and triage bugs | you are asked for bugs, triage or a report | a report of rated library bugs |
+
+A broad request ("fuzz this library") means A, then B, then C. Finish each before you start the
+next. Crashes you see in A and B wait for C: fix the harness bugs among them where you find them,
+and write down the ids of the rest. Do not minimize, reproduce, run against `--rev HEAD`, bisect or
+rate a crash outside C.
+
+Copy the checklist of your workflow and keep it updated.
+
+### A. Set up a project
 
 ```
-- [ ] 1. Project created
-- [ ] 2. Library image builds
-- [ ] 3. Stubs written
-- [ ] 4. Harness builds and `stitch check` is clean
-- [ ] 5. Probe report is clean
-- [ ] 6. Campaign running
-- [ ] 7. Every crash triaged
-- [ ] 8. Coverage reviewed
-- [ ] 9. Report written
+- [ ] A1. Project created
+- [ ] A2. Library image builds
+- [ ] A3. Stubs written
+- [ ] A4. Harness builds and `stitch check` is clean
+- [ ] A5. Probe report is clean
 ```
 
 1. **Create the project.** `stitch init <dir> --lang <lang> --git <url> --rev <tag>` (or
@@ -114,22 +125,69 @@ Copy this checklist and keep it updated:
 4. **Build and check.** `stitch build`, then `stitch check`. Done when both pass without warnings.
 5. **Probe.** `stitch probe --secs 60`, then read the report with [probe.md](probe.md). Fix the
    stubs it names and probe again. Done when no stub that should work is under "never succeeds" or
-   "often skipped", and calls bailing is below 50%.
-6. **Fuzz.** `stitch fuzz --jobs 4` starts campaign `main` in the background (it resumes its
-   corpus); `stitch status` shows progress and the same report. Leave it running while you triage.
-7. **Triage.** `stitch crashes`, then classify every crash with [triage.md](triage.md). Done when
-   each crash is fixed in the harness or confirmed as a library bug with a reproducer
-   ([reproducers.md](reproducers.md)).
-8. **Coverage.** `stitch cov`; add stubs for library functions that were never called, then go
-   back to step 4. See [coverage.md](coverage.md).
-9. **Report.** For each library bug:
+   "often skipped", and calls bailing is below 50%. If the probe saved crashes, run
+   `stitch crashes probe` and `stitch exec <id> --trace`, and decide only whether the stubs broke
+   the API contract ([triage.md](triage.md)). Fix those stubs; write down the other ids for C.
+
+End with a short summary: what the stubs cover, stubs you left out and why, the last probe line,
+and the probe crash ids left for C.
+
+### B. Improve coverage
+
+```
+- [ ] B1. Campaign running
+- [ ] B2. Coverage reviewed
+- [ ] B3. Gaps filled (stubs, seeds, decoders)
+- [ ] B4. Harness builds, checks and probes clean
+```
+
+1. **Fuzz.** `stitch fuzz --jobs 4` starts campaign `main` in the background and resumes its
+   corpus. Watch `stitch status`, and move on once the edge count stops growing.
+2. **Coverage.** `stitch cov`, then read it with [coverage.md](coverage.md).
+3. **Fill the gaps.** Stubs for library functions that were never called, producers for objects
+   nothing makes, seeds or decoders for branches that need a specific input
+   ([stubs.md](stubs.md)).
+4. **Build, check and probe**, as in A4 and A5. New stubs bring new crashes: fix the harness bugs,
+   write down the rest for C.
+
+Repeat from 1. Stop when a round adds no coverage, or the code left uncovered is unreachable
+through the public API or not worth a stub. `stitch stop` when you are done.
+
+End with: coverage before and after (lines, functions, branches), the stubs you added, and what is
+still uncovered and why.
+
+### C. Find and triage bugs
+
+```
+- [ ] C1. Campaign running
+- [ ] C2. Every crash classified
+- [ ] C3. Library bugs minimized, checked at HEAD and reproduced
+- [ ] C4. Library bugs rated
+- [ ] C5. Report written
+```
+
+1. **Fuzz.** `stitch fuzz --jobs 4`, and leave it running while you triage. Include the crash ids
+   written down in A and B.
+2. **Classify.** `stitch crashes`, then classify every crash with [triage.md](triage.md). Fix
+   harness bugs in the stubs and confirm the crash is gone.
+3. **Reproduce.** For each library bug: `stitch minimize`, `stitch exec <id> --rev HEAD`, and a
+   shrunk standalone file ([reproducers.md](reproducers.md)). `stitch report <id>` packages it
+   for the maintainers.
+4. **Rate.** Give each library bug a class and a priority with [severity.md](severity.md).
+5. **Bisect (optional).** `stitch bisect <id>` finds the commit that introduced the bug
+   (`--fixed` the one that fixed it). It builds the library at many commits, so do it only when
+   asked, or when the bug looks like a recent regression.
+6. **Report.** For each library bug, sorted by priority as [severity.md](severity.md) describes:
 
    ```markdown
    ### <crash kind> in <function> (<campaign>:<id>)
 
    - **Location:** <file>:<line> (innermost library frame)
+   - **Severity:** <class> <priority>
+   - **Threat model:** <attacker> controls <input> passed to <call>; they gain <capability>.
+   - **Factors:** <the factors from severity.md>
    - **Upstream:** crashes / fixed at HEAD (`stitch exec <id> --rev HEAD`)
-   - **Introduced by:** <commit> (`stitch bisect <id>`), if known
+   - **Introduced by:** <commit> (`stitch bisect <id>`), if you bisected
    - **Reproducer:** <path to the minimized standalone file>
    - **For the maintainers:** <path to the `stitch report <id>` folder> (frozen: Dockerfile, file,
      `run.sh`, `ISSUE.md`; [reproducers.md](reproducers.md))
@@ -140,7 +198,7 @@ Copy this checklist and keep it updated:
    <the minimized reproducer>
    ```
 
-   Also list harness bugs you fixed and stubs you left out, with the reason.
+   Also list harness bugs you fixed, with the reason.
 
 ## Rules that always apply
 
@@ -155,6 +213,7 @@ Topics:
 - [stubs.md](stubs.md): rules for writing stubs, and data types
 - [probe.md](probe.md): reading the probe report
 - [triage.md](triage.md): harness bug or library bug, and the steps for each crash
+- [severity.md](severity.md): rating a confirmed library bug
 - [reproducers.md](reproducers.md): turning a crash into a short standalone file, and frozen
   reproducers for maintainers
 - [coverage.md](coverage.md): coverage reports and what to do with them

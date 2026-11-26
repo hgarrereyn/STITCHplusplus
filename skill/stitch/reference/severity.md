@@ -153,7 +153,7 @@ does not.
 
 ## In the report
 
-Add three lines to each library bug in the report (step 9 of the [overview](overview.md)):
+Add three lines to each library bug in the report (workflow C in the [overview](overview.md)):
 
 ```markdown
 - **Severity:** security P2
