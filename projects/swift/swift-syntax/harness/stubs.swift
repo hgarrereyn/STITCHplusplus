@@ -2,12 +2,16 @@
 // option, incremental reparsing), operator folding with standard and source-declared operator tables,
 // formatting and indentation, parser diagnostics, fix-its and their formatting, classification, name
 // matching, token/position APIs, rewriters and visitors, trivia, literal values, #if configuration
-// (SwiftIfConfig), lexical scope lookup (SwiftLexicalLookup), and refactorings (SwiftRefactor).
+// (SwiftIfConfig), lexical scope lookup (SwiftLexicalLookup), refactorings (SwiftRefactor), every parser
+// diagnostic message type (diagnostic_messages.swift), BasicFormat hooks, custom operator tables, and
+// SwiftSyntaxBuilder (literals, interpolation, result-builder bodies).
 // Oracles: a tree prints back to exactly its source (byte for byte, with errors and all, whatever the
 // entry point or options); an incremental reparse after edits equals a fresh parse of the edited text;
 // formatting a tree without errors gives source that parses without errors; folding keeps the text;
 // token positions are contiguous; token(at:), previous/next token and SourceLocationConverter agree;
-// ConfiguredRegions.isActive agrees with isActive(in:); a rewriter that keeps tokens prints the same.
+// ConfiguredRegions.isActive agrees with isActive(in:); a rewriter that keeps tokens prints the same;
+// built literals represent their values and reparse to them; a BasicFormat subclass forwarding its hooks
+// formats like BasicFormat; collection edits remove exactly the elements' text.
 // Traps (preconditions, index out of range, force unwraps) are bugs.
 import Stitch
 import SwiftBasicFormat
@@ -20,6 +24,7 @@ import SwiftParser
 import SwiftParserDiagnostics
 import SwiftRefactor
 import SwiftSyntax
+import SwiftSyntaxBuilder
 
 enum Tree: StitchObject { typealias Handle = SourceFileSyntax }
 
@@ -428,7 +433,8 @@ let ifConfig = endpoint("if_config") { (tree: Borrow<Tree>, cond: Pick<Cond>, bi
     _ = regions.diagnostics
     for (clause, state) in regions.prefix(16) {
         _ = clause.condition?.description; _ = state
-        if let decl = clause.parent?.parent?.as(IfConfigDeclSyntax.self) {
+        // (an #if inside an inactive region has no active clause in ConfiguredRegions, by design)
+        if let decl = clause.parent?.parent?.as(IfConfigDeclSyntax.self), regions.isActive(decl) == .active {
             let (active, _) = decl.activeClause(in: cfg)
             try check(regions.activeClause(for: decl) == active, "ConfiguredRegions.activeClause agrees with activeClause(in:)")
         }
@@ -481,6 +487,14 @@ let refactor = endpoint("refactor") { (tree: Borrow<Tree>, start: Between<0, 3>)
     for call in v.calls.prefix(10) {
         if let out = try? CallToTrailingClosures.refactor(syntax: call, in: .init(startAtArgument: start.value)) {
             _ = out.description
+        }
+        // refactored calls print to text that parses back
+        for ctx in [ExpandEditorPlaceholdersToLiteralClosures.Context(indentationWidth: .spaces(start.value)),
+                    .init(format: .custom(BasicFormat(), allowNestedPlaceholders: start.value > 1))] {
+            if let out = try? ExpandEditorPlaceholdersToLiteralClosures.refactor(syntax: call, in: ctx) {
+                let text = out.description
+                try check(Parser.parse(source: text).description == text, "an expanded call's text parses back")
+            }
         }
     }
     for tok in v.placeholders.prefix(10) {
@@ -572,4 +586,178 @@ let buildConfig = endpoint("build_config") { (name: Str<12, Plain>, tree: Borrow
     let fmt = DiagnosticsFormatter()
     _ = DiagnosticsFormatter.annotateSources(in: group)
     _ = fmt.categoryFootnotes(diags.compactMap { $0.diagMessage.category })
+}
+
+// MARK: - diagnostic messages, BasicFormat hooks, syntax text, builders, operator tables, node APIs
+
+// every parser diagnostic and fix-it has a message and an ID; each concrete message type's properties read
+let diagnosticMessages = endpoint("diagnostic_messages") { (tree: Borrow<Tree>, all: Bool) throws in
+    let diags = ParseDiagnosticsGenerator.diagnostics(for: tree.value)
+    let fmt = DiagnosticsFormatter()
+    for d in diags {
+        let m = d.diagMessage
+        try check(!m.message.isEmpty, "a parser diagnostic has a message")
+        _ = m.diagnosticID
+        _ = m.severity; _ = m.category?.documentationURL; _ = m.categoryChain.count
+        _ = fmt.formattedMessage(m)
+        inspectMessage(m)
+        for note in d.notes { inspectMessage(note.noteMessage); _ = note.noteMessage.noteID; _ = note.node.kind }
+        for fix in d.fixIts {
+            try check(!fix.message.message.isEmpty, "a fix-it has a message")
+            _ = fix.message.fixItID
+            inspectMessage(fix.message)
+            _ = fix.edits.count; _ = fix.changes.count
+        }
+        if let e = m as? StaticParserError { _ = e.diagnosticID; _ = e.severity }
+    }
+    // a DiagnosticsError carries its diagnostics through asDiagnostics(at:)
+    // (DiagnosticsError requires at least one error-severity diagnostic)
+    if diags.contains(where: { $0.diagMessage.severity == .error }) {
+        let err = DiagnosticsError(diagnostics: diags)
+        try check(err.asDiagnostics(at: tree.value).count == diags.count, "asDiagnostics keeps every diagnostic")
+    }
+    if all {
+        for e in allStaticParserErrors { try check(!e.message.isEmpty && e.severity == .error, "a static parser error has a message") ; _ = e.diagnosticID }
+        for f in allStaticParserFixIts { try check(!f.message.isEmpty, "a static parser fix-it has a message"); _ = f.fixItID }
+        for n in allStaticParserNotes { try check(!n.message.isEmpty, "a static parser note has a message"); _ = n.noteID }
+    }
+    // FixIt convenience constructors: their edits apply to the text
+    if let tok = tree.value.tokens(viewMode: .sourceAccurate).first(where: { $0.presence == .present && $0.tokenKind != .endOfFile }) {
+        let fix = FixIt.replace(message: StaticParserFixIt.insertSemicolon, oldNode: tok, newNode: tok.with(\.trailingTrivia, [.spaces(1)]))
+        try check(apply(fix.edits, to: tree.value.description) != nil, "a FixIt.replace edit applies")
+        let d = Diagnostic(node: tok, message: StaticParserError.unexpectedSemicolon, fixIts: [fix])
+        _ = d.location(converter: SourceLocationConverter(fileName: "f", tree: tree.value)); _ = d.highlights
+    }
+    if let binding = tree.value.tokens(viewMode: .sourceAccurate).lazy.compactMap({ $0.parent?.ancestorOrSelf { $0.as(PatternBindingSyntax.self) } }).first {
+        let fix = FixIt.replaceChild(message: StaticParserFixIt.insertWhitespace, parent: binding, replacingChildAt: \.typeAnnotation,
+                                     with: TypeAnnotationSyntax(type: IdentifierTypeSyntax(name: .identifier("Int"))))
+        if let text = apply(fix.edits, to: tree.value.description) { _ = Parser.parse(source: text) }
+    }
+}
+
+// a BasicFormat subclass whose hooks only call super formats exactly like BasicFormat; the indentation stack balances
+let formatHooks = endpoint("format_hooks") { (tree: Borrow<Tree>, indent: Between<1, 8>, infer: Bool) throws in
+    final class Forwarding: BasicFormat {
+        var calls = 0
+        override func requiresIndent(_ node: some SyntaxProtocol) -> Bool { calls += 1; return super.requiresIndent(node) }
+        override func requiresNewline(between first: TokenSyntax?, and second: TokenSyntax?) -> Bool { calls += 1; return super.requiresNewline(between: first, and: second) }
+        override func requiresWhitespace(between first: TokenSyntax?, and second: TokenSyntax?) -> Bool { calls += 1; return super.requiresWhitespace(between: first, and: second) }
+        override func isMutable(_ token: TokenSyntax) -> Bool { super.isMutable(token) }
+        override func transformTokenText(_ token: TokenSyntax) -> String? { super.transformTokenText(token) }
+        override func transformTokenPresence(_ token: TokenSyntax) -> SourcePresence? { super.transformTokenPresence(token) }
+        override var inferInitialTokenIndentation: Bool { super.inferInitialTokenIndentation }
+    }
+    let t = tree.value
+    let width = Trivia.spaces(indent.value)
+    let base = t.formatted(using: BasicFormat(indentationWidth: width)).description
+    let fwd = Forwarding(indentationWidth: width)
+    try check(t.formatted(using: fwd).description == base, "a BasicFormat subclass that forwards its hooks formats the same")
+    let f = BasicFormat(indentationWidth: width, initialIndentation: infer ? .tabs(1) : [])
+    let level = f.currentIndentationLevel
+    let depth = f.indentationStack.count
+    f.increaseIndentationLevel()
+    f.increaseIndentationLevel(to: .spaces(3))
+    f.decreaseIndentationLevel(); f.decreaseIndentationLevel()
+    try check(f.currentIndentationLevel == level && f.indentationStack.count == depth, "increase then decrease restores the indentation level")
+    let toks = Array(t.tokens(viewMode: .sourceAccurate).prefix(64))
+    for (a, b) in zip(toks, toks.dropFirst()) {
+        _ = f.requiresWhitespace(between: a, and: b); _ = f.requiresNewline(between: a, and: b)
+        _ = f.isMutable(a); _ = f.transformTokenText(a); _ = f.transformTokenPresence(a); _ = f.requiresIndent(a)
+    }
+    _ = f.inferInitialTokenIndentation
+}
+
+// SwiftSyntaxBuilder: literal syntax represents the value; header + result-builder bodies keep their statements
+let builder = endpoint("builder") { (s: Str<48, Plain>, d: Double, i: UInt64, tree: Borrow<Tree>, name: Str<8, Plain>) throws in
+    let lit = StringLiteralExprSyntax(content: s.value)
+    log("literal: \(lit.description.debugDescription)")
+    try check(lit.representedLiteralValue == s.value, "StringLiteralExprSyntax(content:) represents its content")
+    let reparsed = Parser.parse(source: "_ = " + lit.description)
+    final class Strings: SyntaxVisitor {
+        var found: [StringLiteralExprSyntax] = []
+        override func visit(_ node: StringLiteralExprSyntax) -> SyntaxVisitorContinueKind { found.append(node); return .skipChildren }
+    }
+    let v = Strings(viewMode: .sourceAccurate)
+    v.walk(reparsed)
+    try check(!reparsed.hasError && v.found.count == 1 && v.found[0].representedLiteralValue == s.value,
+              "a built string literal reparses to the same value")
+    let e = ExprSyntax(literal: s.value)
+    try check(e.description == lit.description, "ExprSyntax(literal:) of a String is its string literal")
+    if let il = ExprSyntax(literal: i).as(IntegerLiteralExprSyntax.self), i <= UInt64(Int.max) {
+        try check(il.representedLiteralValue == Int(i), "an integer literal represents its value")
+        _ = il.radix.size; _ = il.radix.literalPrefix
+    }
+    if d.isFinite && d >= 0, let fl = ExprSyntax(literal: d).as(FloatLiteralExprSyntax.self) {
+        try check(fl.representedLiteralValue == d, "a float literal represents its value")
+    }
+    _ = ExprSyntax(literal: [1, 2]).description; _ = ExprSyntax(literal: true).description
+    let items = Array(tree.value.statements.prefix(4))
+    let fname = name.value.isValidSwiftIdentifier(for: .variableName) ? name.value : "f"
+    let fn = try FunctionDeclSyntax("func \(raw: fname)()") {
+        for item in items { item }
+    }
+    try check(fn.body?.statements.count == items.count, "a result-builder body has every statement")
+    let interp: ExprSyntax = "\(literal: s.value) + \(raw: fname)"
+    _ = interp.description
+    _ = fn.formatted().description
+}
+
+// operator tables built from precedence groups and operators fold, and synthesize their declarations
+let operatorTable = endpoint("operator_table") { (tree: Borrow<Tree>, assoc: Between<0, 2>, higher: Bool, assignment: Bool) throws in
+    let a: Associativity = assoc.value == 0 ? .none : assoc.value == 1 ? .left : .right
+    let rel: PrecedenceRelation = higher ? .higherThan("AdditionPrecedence") : .lowerThan("MultiplicationPrecedence")
+    let g = PrecedenceGroup(name: "Fuzz", associativity: a, assignment: assignment, relations: [rel])
+    _ = g.synthesizedSyntax().description; _ = g.description; _ = g.relations.first?.groupName; _ = g.relations.first?.kind
+    var groups: [PrecedenceGroup] = [g]
+    var ops: [Operator] = [Operator(kind: .infix, name: "+++", precedenceGroup: "Fuzz"), Operator(kind: .prefix, name: "**"),
+                           Operator(kind: .postfix, name: "!!")]
+    var std = OperatorTable.standardOperators
+    for name in ["+", "*", "==", "??", "..<"] {
+        if let op = std.infixOperator(named: name) { ops.append(op); _ = op.precedenceGroup }
+    }
+    groups.append(PrecedenceGroup(name: "AdditionPrecedence", associativity: .left))
+    groups.append(PrecedenceGroup(name: "MultiplicationPrecedence", associativity: .left, relations: [.higherThan("AdditionPrecedence")]))
+    var errors = 0
+    let table = OperatorTable(precedenceGroups: groups, operators: ops) { _ in errors += 1 }
+    let folded = table.foldAll(tree.value) { _ in }
+    try check(folded.description == tree.value.description, "folding with a custom table keeps the text")
+    std.addSourceFile(tree.value) { _ in }
+    _ = Parser.defaultSwiftVersion; _ = IncrementalParseTransition.defaultCompactArenaThreshold
+}
+
+// more node and position APIs: structure kinds, collection edits, decl introducers, indexes
+let nodeApis = endpoint("node_apis") { (tree: Borrow<Tree>, s: Choices<8>) throws in
+    let t = tree.value
+    final class Groups: SyntaxVisitor {
+        var lists: [CodeBlockItemListSyntax] = []
+        override func visit(_ node: CodeBlockItemListSyntax) -> SyntaxVisitorContinueKind { lists.append(node); return .visitChildren }
+        override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+        override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+        override func visit(_ node: EnumDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+        override func visit(_ node: ActorDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+        override func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+        override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind { _ = node.introducer; return .visitChildren }
+    }
+    let g = Groups(viewMode: .sourceAccurate)
+    g.walk(t)
+    for var list in g.lists.prefix(4) where list.count >= 2 {
+        let before = list.description.utf8.count
+        try check(list.distance(from: list.startIndex, to: list.endIndex) == list.count, "distance(start, end) == count")
+        let lo = list.index(list.startIndex, offsetBy: s.source.range(0, list.count - 1))
+        let hi = list.index(lo, offsetBy: 1)
+        let removedLen = list[lo].description.utf8.count
+        list.removeSubrange(lo..<hi)
+        try check(list.description.utf8.count == before - removedLen, "removeSubrange removes the elements' text")
+    }
+    for tok in t.tokens(viewMode: .sourceAccurate).prefix(32) {
+        let st = tok.syntaxNodeType.structure
+        _ = st.isLayout; _ = st.isCollection; _ = st.isChoices
+        if let p = tok.parent { let ps = p.kind.syntaxNodeType.structure; _ = ps.isLayout || ps.isCollection || ps.isChoices }
+        _ = tok.id.indexInTree.toOpaque()
+        _ = Syntax(tok).cast(TokenSyntax.self).text
+    }
+    try check(SourceLength.zero.utf8Length == 0, "SourceLength.zero is empty")
+    let e = SourceEdit.remove(t)
+    try check(e.intersectsOrTouchesRange(t.range) && (t.range.isEmpty || e.intersectsRange(t.range)), "removing a node's range intersects it")
+    _ = Parser.parseIncrementally(source: t.description, parseTransition: nil).lookaheadRanges
 }
