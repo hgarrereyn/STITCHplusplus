@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/hgarrereyn/STITCHplusplus?logo=github)](https://github.com/hgarrereyn/STITCHplusplus/releases/latest)
 [![CI](https://github.com/hgarrereyn/STITCHplusplus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hgarrereyn/STITCHplusplus/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-online-blue?logo=readthedocs&logoColor=white)](https://hgarrereyn.github.io/STITCHplusplus/)
-[![Paper](https://img.shields.io/badge/paper-CCS%20'26-b31b1b)](https://doi.org/10.1145/3830454.3846663)
+[![Paper](https://img.shields.io/badge/paper-CCS%202026-b31b1b)](https://doi.org/10.1145/3830454.3846663)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/hgarrereyn/STITCHplusplus/blob/main/LICENSE)
 
 Write small typed stubs defining your API. STITCH++ automatically fuzzes valid combinations of
