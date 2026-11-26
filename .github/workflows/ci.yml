@@ -57,6 +57,8 @@ jobs:
       - name: stitch init scaffolds a project for every language
         working-directory: /tmp
         run: |
+          # each step is its own shell: $v from the step above is not set here
+          v=$(PYTHONPATH=$GITHUB_WORKSPACE/cli python -c 'from stitch_fuzz import __version__; print(__version__)')
           for l in cpp python javascript java go rust ruby swift objc; do
             /tmp/venv/bin/stitch --json init /tmp/init-$l --lang $l --git https://example.com/lib.git --rev v1 > /dev/null \
               || { echo "stitch init --lang $l failed"; exit 1; }
