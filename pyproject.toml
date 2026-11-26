@@ -13,6 +13,8 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/hgarrereyn/STITCHplusplus"
+Documentation = "https://hgarrereyn.github.io/STITCHplusplus/"
+Changelog = "https://github.com/hgarrereyn/STITCHplusplus/blob/main/CHANGELOG.md"
 
 [project.scripts]
 stitch = "stitch_fuzz.cli:main"
