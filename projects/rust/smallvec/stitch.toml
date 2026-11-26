@@ -5,7 +5,10 @@ language = "rust"
 
 [source]
 git = "https://github.com/servo/rust-smallvec"
-rev = "v1.6.0"
+# Head of the `v1` branch (= the v1.16.6 release). `main` is the unreleased 2.0 rewrite
+# (`SmallVec<T, N>`, edition 2024, rust-version 1.100), a different API from the one fuzzed here.
+rev = "347b5c346168f9648bf4298d6ed49deda7e18aeb"
 
 [rust.dependencies]
-smallvec = { path = "/src" }
+smallvec = { path = "/src", features = ["const_generics", "const_new", "write", "drain_filter", "drain_keep_rest", "impl_bincode"] }
+bincode = { version = "2", default-features = false, features = ["alloc"] }
