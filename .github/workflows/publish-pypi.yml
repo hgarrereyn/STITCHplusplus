@@ -1,0 +1,146 @@
+# Release: set __version__ in cli/stitch_fuzz/__init__.py and add its CHANGELOG.md entry on main,
+# then push the tag v<version>. See RELEASING.md.
+#
+#  1. prepare   the tag matches the version, is on main and has a CHANGELOG.md entry; builds the
+#               sdist + wheel once (everything below publishes these files).
+#  2. images    images.yml: builds and pushes the images that are not published yet (amd64 +
+#               arm64), tags them :<version>, and checks they are public.
+#  3. wheel     the built wheel pulls its image instead of building it.
+#  4. pypi      uploads to PyPI with trusted publishing (this file, environment "pypi").
+#  5. github    a GitHub Release with the files and the image digests.
+#
+# A failed run is resumed with "Re-run failed jobs"; running this workflow by hand only works on a
+# tag (Use workflow from: Tags > vX.Y.Z).
+name: publish-pypi
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HASH: PYTHONPATH=cli python3 -c 'import sys; from stitch_fuzz import docker as d; print(getattr(d, sys.argv[1])(*sys.argv[2:]))'
+  LANGS: cpp python javascript java go rust ruby swift objc
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: v
+        run: echo "version=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
+      - name: a tag on main that matches the version and has a changelog entry
+        run: |
+          v=${{ steps.v.outputs.version }}
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::run this on a tag v<version> (it ran on $GITHUB_REF)"; exit 1; }
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME != version $v (cli/stitch_fuzz/__init__.py)"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main: tag a commit that is"; exit 1; }
+          grep -qE "^## +$v( |$)" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## $v' entry"; exit 1; }
+      - run: python3 -m pip install build && python3 -m build
+      - name: the wheel has the version and the sources of this commit
+        run: |
+          python3 -m venv /tmp/venv && /tmp/venv/bin/pip install dist/*.whl
+          [ "$(cd /tmp && /tmp/venv/bin/stitch --version)" = "stitch-fuzz ${{ steps.v.outputs.version }}" ]
+          a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker as d; print(d.engine_hash(), *[d.base_hash(l) for l in d.LANGUAGES])')
+          b=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import docker as d; print(d.engine_hash(), *[d.base_hash(l) for l in d.LANGUAGES])')
+          [ "$a" = "$b" ] || { echo "::error::installed hashes $a != checkout $b"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  images:
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/images.yml
+    with:
+      alias: ${{ needs.prepare.outputs.version }}
+
+  wheel:
+    needs: [prepare, images]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: the released wheel pulls its image instead of building it
+        working-directory: /tmp
+        run: |
+          python3 -m venv /tmp/venv && /tmp/venv/bin/pip install $GITHUB_WORKSPACE/dist/*.whl
+          /tmp/venv/bin/stitch setup --lang python 2>&1 | tee setup.log
+          ! grep -q "building" setup.log || { echo "::error::stitch setup built the image instead of pulling it"; exit 1; }
+
+  pypi:
+    needs: wheel
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/stitch-fuzz/
+    permissions:
+      id-token: write   # trusted publishing: PyPI trusts this workflow file (publish-pypi.yml)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github:
+    needs: [prepare, pypi]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: release notes with the image digests
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; V=${{ needs.prepare.outputs.version }}
+          ref() { echo "$R/$1@$(docker buildx imagetools inspect "$R/$1:$2" --format '{{.Manifest.Digest}}')"; }
+          {
+            echo "\`\`\`sh"
+            echo "pip install stitch-fuzz==$V"
+            echo "\`\`\`"
+            echo
+            echo "Projects pin this release with \`stitch_version = \"$V\"\` in \`stitch.toml\`."
+            echo "\`stitch setup\` pulls the images below (alias tag \`:$V\`)."
+            echo
+            echo "| Language | Image | Toolchain image (reproducers) |"
+            echo "|---|---|---|"
+            for L in $LANGS; do
+              echo "| $L | \`$(ref "stitch-$L" "$(eval "$HASH base_hash $L")")\` | \`$(ref "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")")\` |"
+            done
+            echo
+            echo "Engine: \`$(ref stitch-engine "$(eval "$HASH engine_hash")")\`"
+            echo
+            # this release's CHANGELOG.md entry
+            awk -v v="$V" '/^## /{p = ($2 == v)} p' CHANGELOG.md | tail -n +2
+          } > notes.md
+          cat notes.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md dist/*

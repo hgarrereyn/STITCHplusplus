@@ -84,4 +84,5 @@ Run `bin/stitch` from a checkout, or `pip install -e .`. Tests are in [`tests/`]
 CI ([`.github/workflows/ci.yml`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/.github/workflows/ci.yml)) runs both on every pull request, one job per language, plus a package
 check; the `ci-ok` job passes only when all of them do.
 Pushing a `vX.Y.Z` tag publishes the images to GHCR and the package to PyPI
-([`.github/workflows/release.yml`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/.github/workflows/release.yml)).
+([`.github/workflows/publish-pypi.yml`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/.github/workflows/publish-pypi.yml);
+[RELEASING.md](https://github.com/hgarrereyn/STITCHplusplus/blob/main/RELEASING.md)).

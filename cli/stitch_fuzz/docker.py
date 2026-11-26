@@ -90,7 +90,7 @@ def base_hash(lang="cpp"):
     return hashlib.sha1(f"{toolchain_hash(lang)}:{engine_hash()}".encode()).hexdigest()[:12]
 
 
-# Prebuilt images are published per source hash by .github/workflows/release.yml:
+# Prebuilt images are published per source hash by .github/workflows/images.yml (on release):
 #   <registry>/stitch-<lang>:<base_hash(lang)>   <registry>/stitch-<lang>-toolchain:<toolchain_hash(lang)>
 # STITCH_REGISTRY=none always builds locally.
 DEFAULT_REGISTRY = "ghcr.io/hgarrereyn"
