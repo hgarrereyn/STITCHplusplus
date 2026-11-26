@@ -124,6 +124,8 @@ pub fn generate(dt: usize, seed: u64, prefix: &[u8], cap: usize) -> Vec<u8> {
 
 pub fn dict_add(dt: usize, tok: &[u8]) {
     unsafe { stitch_dict_add(dt as c_int, tok.as_ptr(), tok.len()) }
+    // workers forked by the persistent executor's zygote get it too
+    crate::persistent::forward_dict(dt, tok);
 }
 
 /// (prefix offset, prefix width, content length) of every string drawn by the decoder.
