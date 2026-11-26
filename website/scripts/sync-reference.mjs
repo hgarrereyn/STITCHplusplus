@@ -64,6 +64,13 @@ writeFileSync(
   page(cli, "CLI", 1, "Every stitch command.", "skill/stitch/reference/cli.md"),
 );
 
+// stitch.toml reference
+writeFileSync(
+  join(root, "website/src/content/docs/reference/stitch-toml.md"),
+  page(readFileSync(join(ref, "stitch-toml.md"), "utf8"), "stitch.toml", 2,
+       "Every key of stitch.toml, and how a project pins its STITCH++ version.", "skill/stitch/reference/stitch-toml.md"),
+);
+
 // The agent guide, rendered: every file of skill/stitch/reference/ at /agents/<name>.md/, with links
 // between files kept on the rendered pages.
 rmSync(agentsOut, { recursive: true, force: true });
@@ -85,4 +92,4 @@ for (const name of guide) {
   );
 }
 
-console.log(`synced ${PAGES.length} language pages, the CLI reference and ${guide.length} agent guide pages`);
+console.log(`synced ${PAGES.length} language pages, the CLI and stitch.toml references, and ${guide.length} agent guide pages`);

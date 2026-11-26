@@ -20,6 +20,33 @@ stitch setup --lang all
 `stitch setup` checks that Docker works, then pulls the prebuilt image for your version of
 `stitch-fuzz`. If there is none, it builds the image locally.
 
+## Versions
+
+Each project pins the STITCH++ release it is written for, in `stitch.toml`:
+
+```toml
+[project]
+stitch_version = "0.2.0"
+```
+
+A release is one version of `stitch-fuzz` together with its runtime and Docker images (tagged by a
+hash of their sources, never `latest`), so the pin decides everything that runs. `stitch init`
+writes the installed version, and the CLI refuses a project pinned to another one. To work on a
+project, install its version:
+
+```sh
+pip install stitch-fuzz==0.2.0
+```
+
+To move a project to a newer release, install the new version, read `stitch changelog` (what
+changed since the pinned release, and what a harness has to change), update the harness and run
+`stitch upgrade`. [`CHANGELOG.md`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/CHANGELOG.md)
+lists every release; the [releases page](https://github.com/hgarrereyn/STITCHplusplus/releases)
+lists the images of each one and their digests.
+
+Reproducers from `stitch repro` and `stitch report` are frozen: they run with Docker alone, on
+the images of the release that made them. [`stitch.toml` reference](/STITCHplusplus/reference/stitch-toml/).
+
 ## Use it with a coding agent
 
 STITCH++ ships a guide for coding agents as a skill:

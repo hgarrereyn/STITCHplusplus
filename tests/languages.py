@@ -7,7 +7,8 @@
 
 Per language: build, check, probe, fuzz, crashes (a planted bug in the library), minimize, exec --trace,
 write (the standalone file reproduces the crash; a program with a Val parameter replays), try (a file that does not crash is rejected),
-repro (a verified Docker folder) and cov (lcov with library lines).
+repro (a verified Docker folder), report (a plain reproducer crashes in its own Dockerfile) and cov
+(lcov with library lines).
 """
 import argparse
 import json
@@ -30,6 +31,20 @@ DEMOS = {
     "ruby": ("kvrb.rb", "nocrash.rb", 'puts "ok"\n'),
     "swift": ("KV.swift", "nocrash.swift", "import Stitch\n#if canImport(Glibc)\nimport Glibc\n#endif\nexit(reproMain {})\n"),
     "objc": ("KVStore.m", "nocrash.m", "#import <Foundation/Foundation.h>\n\nint main(void) { return 0; }\n"),
+}
+
+# a plain reproducer of the planted '#!x' bug in load() (library code only, as after shrinking): `stitch report`
+PLAIN = {
+    "python": ("min.py", 'from kvlib import load\n\nload("k=#!x")\n'),
+    "javascript": ("min.js", 'const { load } = require("kvjs");\n\nload("k=#!x");\n'),
+    "java": ("Min.java", "import demo.kv.Store;\n\npublic class Min {\n    public static void main(String[] a) {\n"
+                         "        Store.load(\"k=#!x\");\n    }\n}\n"),
+    "go": ("min.go", 'package main\n\nimport "example.com/kvgo"\n\nfunc main() {\n\tkvgo.Load("k=#!x")\n}\n'),
+    "rust": ("min.rs", 'fn main() {\n    let _ = kvrs::load("k=#!x");\n}\n'),
+    "ruby": ("min.rb", 'require "kvrb"\n\nKvrb.load("k=#!x")\n'),
+    "swift": ("min.swift", 'import KVSwift\n\n_ = try? load("k=#!x")\n'),
+    "objc": ("min.m", '#import <Foundation/Foundation.h>\n#import "KVStore.h"\n\nint main(void) {\n'
+                      '    @autoreleasepool {\n        [KVStore storeWithText:@"k=#!x" error:NULL];\n    }\n    return 0;\n}\n'),
 }
 
 # how each writer replays a Val parameter
@@ -124,6 +139,20 @@ def test(lang, secs):
         run(p, "repro", c, "-o", f"{t}/r")
         if "verified: same crash" not in Path(f"{t}/r/verified.txt").read_text():
             raise Fail("repro not verified")
+
+    step("report")
+    out = p / ".stitch" / "standalone" / "lang-test-plain"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    name, code = PLAIN[lang]
+    (out / name).write_text(code)
+    with tempfile.TemporaryDirectory() as t:
+        d = js(run(p, "report", str(out / name), "-o", f"{t}/r", check=False))
+        if (d.get("check") or {}).get("status") != "crash":
+            raise Fail(f"report: the plain reproducer does not crash in its own Dockerfile: {d}")
+        for f in ("Dockerfile", "run.sh", "ISSUE.md"):
+            if not (Path(t) / "r" / f).exists():
+                raise Fail(f"report: no {f}")
 
     step("cov")
     d = js(run(p, "cov", "lang-test", "--crashes", "--no-html"))

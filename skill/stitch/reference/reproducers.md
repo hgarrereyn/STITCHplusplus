@@ -1,11 +1,55 @@
 # Reproducers
 
-Two kinds, for two purposes:
+Three kinds, for three purposes:
 
 | Command | Output | Use it for |
 |---|---|---|
-| `stitch repro c1` | a folder that rebuilds everything with Docker and runs the crashing program | proving the crash reproduces from scratch; attaching to a report |
+| `stitch repro c1` | a folder that rebuilds everything with Docker and runs the crashing program | proving the crash reproduces from scratch, harness included |
 | `stitch write c1` | one source file in the harness language | shrinking the crash to a few lines of plain library code |
+| `stitch report c1` | `Dockerfile` + that file + `run.sh`, and `ISSUE.md` | reporting the bug to the library's maintainers |
+
+The usual order: `stitch write`, shrink the file to plain library code with `stitch try`, then
+`stitch report`.
+
+## Frozen reproducers
+
+The folders `stitch repro` and `stitch report` write are **frozen**: every input is pinned, and
+they run with Docker alone. They do not need STITCH++ installed, and they do not change when the
+project moves to a newer STITCH++ release (`stitch upgrade`) or the installed CLI changes. Keep
+them as they are: they are the record of the bug.
+
+| Input | Pinned by |
+|---|---|
+| STITCH++ toolchain (compilers, runtime) | the published image of the project's release, by digest (`FROM ...@sha256:...`) |
+| The library | its git commit; a local checkout that is not pushed is included as `source.tar.gz` |
+| How the library is built | the project's `Dockerfile`, copied in |
+| apt, pip and npm packages | the time the library image was built (below) |
+| The program | `crash.stp` (`stitch repro`) or the reproducer file (`stitch report`) |
+
+To make one for a crash:
+
+```sh
+stitch write c1                          # .stitch/standalone/c1/repro.<ext>
+cp .stitch/standalone/c1/repro.c .stitch/standalone/c1/min.c
+# shrink min.c to plain library calls, checking each edit:
+stitch try .stitch/standalone/c1/min.c   # SAME CRASH ... plain library code
+stitch report c1                         # .stitch/reports/c1/: Dockerfile, min file, run.sh, ISSUE.md
+stitch repro c1                          # .stitch/repros/<project>-c1/: the same with the harness
+```
+
+Both commands build and run the result from scratch and say whether it crashes the same way. A
+reproducer is fully frozen when:
+
+- the project's STITCH++ release is published. Made with an unreleased CLI (a checkout of
+  STITCH++), the Dockerfile names a local image and works only on that machine: `stitch report`
+  says so.
+- the library source can be fetched: a `[source] git` URL, or a `[source] path` checkout (such as
+  the repository a `stitch/` folder lives in) whose commit is pushed and has no changes outside the
+  STITCH++ project folder. Otherwise the source is bundled as `source.tar.gz`, which must travel
+  with the folder.
+
+To keep them with a harness that is checked into a repository, copy them out of `.stitch/` (which
+is not committed), for example to `stitch/bugs/<name>/`. Run `./run.sh` there to check one later.
 
 ## stitch repro
 
@@ -25,7 +69,10 @@ cd .stitch/repros/cjson-c1
 ```
 
 The folder (`.stitch/repros/<project>-<id>`) holds the pinned library source, the Dockerfile, the
-harness, the crashing program and its trace. It needs only Docker. `stitch repro` runs it once
+harness, the crashing program and its trace. It needs only Docker. `run.sh` pulls the STITCH++
+toolchain image the reproducer was made with, pinned by digest, so upgrading STITCH++ does not
+change it. If that image cannot be pulled, or `STITCH_REPRO_BUILD=1` is set, `run.sh` builds the
+toolchain from the copy in `stitch/` instead. `stitch repro` runs it once
 from scratch to verify it. Run `stitch repro c1` again after you write a minimized file (below):
 it copies the file into `standalone/`.
 
@@ -151,6 +198,47 @@ int main(void) {
 SAME CRASH: .stitch/standalone/c1/min.c -> heap-use-after-free WRITE in suffix_object
   9 code lines, plain library code
 ```
+
+## stitch report
+
+```sh
+stitch report c1                              # the newest min.* in .stitch/standalone/c1/
+stitch report .stitch/standalone/c1/min.c     # or name the file
+```
+
+```
+report: .stitch/reports/c1  (Dockerfile, repro.c, run.sh; ISSUE.md is the issue text)
+  verified: same crash
+  library pinned to https://github.com/DaveGamble/cJSON @ c859b25da029...; packages as of 2026-11-26T16:28:50Z
+```
+
+A reproducer a maintainer can read and run without STITCH++, small enough to paste into an issue:
+
+- `Dockerfile`: the STITCH++ toolchain image for the language (compilers and runtimes, no fuzzer,
+  pinned by digest), the library at the pinned commit built by the project's own `Dockerfile`
+  (pasted in unchanged), then the reproducer, built and run with plain commands (`clang`,
+  `python3`, `node`, `ruby`, `go build`, `cargo build`, `swift build`, `javac`).
+- `repro.<ext>`: the reproducer file.
+- `run.sh`: `docker build` and `docker run`.
+- `ISSUE.md`: the issue text: where it reproduces, the code, the output, and the Dockerfile in a
+  collapsed section. Fill in what the bug is and why it matters.
+
+`stitch report` builds and runs the folder from scratch, and fails if it does not crash the same
+way. The file must be plain library code: in Go, Rust, Swift, Java and Objective-C, the file
+`stitch write` makes calls the harness, so shrink it first. In C/C++, Python, JavaScript and Ruby
+an unshrunk file works too: the runtime stand-in (`stitch_standalone.h`, `stitch.py`, ...) is
+included as a fourth file.
+
+**Pinned versions.** The library is pinned by commit. A local checkout (`[source] path`) is
+cloned from its `origin` remote when its commit is pushed and unchanged (a `stitch/` folder in the
+library's own repository), and otherwise included as `source.tar.gz`, which the maintainer needs
+too. Packages are pinned to the time the
+project image was built, when the crash was found: `apt-get` installs from the Ubuntu snapshot
+archive of that time, and `pip` and `npm` ignore releases published after it. The same pins apply
+to `stitch repro` folders. Go modules resolve to fixed versions on their own; for Rust and Swift,
+the library's `Cargo.lock` / `Package.resolved` is used when it has one. RubyGems has no date
+option: pin gem versions in the project Dockerfile (or install from the library's `Gemfile.lock`)
+if they matter.
 
 ## When the crash does not survive shrinking
 

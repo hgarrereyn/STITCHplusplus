@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stitch-fuzz"
-version = "0.2.0"
+dynamic = ["version"]
 description = "STITCH++: API fuzzing for C/C++, Objective-C, Python, JavaScript, Java, Go, Rust, Ruby and Swift libraries, built for coding agents"
 readme = "README.md"
 license = { text = "MIT" }
@@ -16,6 +16,11 @@ Homepage = "https://github.com/hgarrereyn/STITCHplusplus"
 
 [project.scripts]
 stitch = "stitch_fuzz.cli:main"
+
+# The one version number: cli/stitch_fuzz/__init__.py (`stitch --version`). A release is the tag
+# v<that version>; see RELEASING.md.
+[tool.hatch.version]
+path = "cli/stitch_fuzz/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cli/stitch_fuzz"]
@@ -31,7 +36,8 @@ exclude = ["**/node_modules", "**/__pycache__", "**/target"]
 "engine/Cargo.lock" = "stitch_fuzz/assets/engine/Cargo.lock"
 "engine/rust-toolchain.toml" = "stitch_fuzz/assets/engine/rust-toolchain.toml"
 "skill" = "stitch_fuzz/assets/skill"
+"CHANGELOG.md" = "stitch_fuzz/assets/CHANGELOG.md"
 
 [tool.hatch.build.targets.sdist]
 include = ["cli/stitch_fuzz", "languages", "engine/Dockerfile", "engine/.dockerignore", "engine/src", "engine/Cargo.toml", "engine/Cargo.lock",
-           "engine/rust-toolchain.toml", "skill", "README.md", "LICENSE", "pyproject.toml"]
+           "engine/rust-toolchain.toml", "skill", "README.md", "LICENSE", "pyproject.toml", "CHANGELOG.md"]

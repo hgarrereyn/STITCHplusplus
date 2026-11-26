@@ -299,6 +299,12 @@ def parse_report(output: str, exit_code: int, timed_out=False) -> dict:
             summary = l
             in_stack = True
             continue
+        m = re.match(r"(?:.*: )?Uncaught exception (\w+), reason: ", l)
+        if m and not kind:
+            # GNUstep's own handler (a plain Objective-C program, no STITCH++ runtime); with
+            # CRASH_ON_ABORT=YES it aborts, and the ASan report of that abort has the stack
+            kind, summary, lang_exception = _norm(m.group(1)), l, True
+            continue
         if "ERROR: LeakSanitizer: detected memory leaks" in l and not kind:
             kind, summary = "memory leak", l
             in_stack = True

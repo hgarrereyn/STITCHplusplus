@@ -1,12 +1,22 @@
-# Release: push a tag vX.Y.Z (matching the version in pyproject.toml).
-#  1. builds the images for amd64 and arm64 and pushes them to ghcr.io/<owner>/:
-#       stitch-engine:<engine hash>                 the fuzzer (build outputs only)
-#       stitch-<lang>:<base hash>                   language toolchain + runtime + engine
-#       stitch-<lang>-toolchain:<toolchain hash>    language toolchain + runtime (reproducers)
-#     The hashes are the source hashes the CLI computes, so `stitch setup` pulls exactly the images
-#     for its version.
-#  2. publishes stitch-fuzz to PyPI (trusted publishing: configure this repo + workflow + the
-#     "pypi" environment on pypi.org once).
+# Release: bump __version__ in cli/stitch_fuzz/__init__.py on main, then push the tag v<version>.
+# See RELEASING.md (one-time setup: PyPI trusted publisher, public GHCR packages).
+#
+#  1. prepare     the tag matches the version and is on main; builds the sdist + wheel once.
+#  2. images      builds amd64 + arm64 images and pushes them to ghcr.io/<owner>/:
+#                   stitch-engine:<engine hash>               the fuzzer (build outputs only)
+#                   stitch-<lang>:<base hash>                 language toolchain + runtime + engine
+#                   stitch-<lang>-toolchain:<toolchain hash>  language toolchain + runtime (reproducers)
+#                 The hashes are the source hashes the CLI computes, so `stitch setup` pulls exactly
+#                 the images for its version. An image whose hash tag is already published is never
+#                 rebuilt or pushed again: a hash tag always names the same bytes, so a pinned CLI
+#                 (or a reproducer) never gets a different image later.
+#                 Tagged releases also get alias tags stitch-<lang>:<version> (for people, not the CLI).
+#  3. verify      every image is public and has both platforms; the built wheel pulls (not builds) them.
+#  4. pypi        publishes the wheel + sdist from step 1 (trusted publishing, environment "pypi").
+#  5. github      a GitHub Release with the image digests.
+#
+# workflow_dispatch (any branch): steps 1-3 only, unless "publish_pypi" is set. Image pushes are
+# harmless there: they are keyed by source hash.
 name: release
 on:
   push:
@@ -14,18 +24,59 @@ on:
   workflow_dispatch:
     inputs:
       publish_pypi:
-        description: "also publish to PyPI"
+        description: "also publish to PyPI (tags only publish automatically)"
         type: boolean
         default: false
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   HASH: PYTHONPATH=cli python3 -c 'import sys; from stitch_fuzz import docker as d; print(getattr(d, sys.argv[1])(*sys.argv[2:]))'
+  LANGS: cpp python javascript java go rust ruby swift objc
+  IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: v
+        run: echo "version=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
+      - name: the tag matches the version and is on main
+        if: env.IS_TAG == 'true'
+        run: |
+          v=${{ steps.v.outputs.version }}
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME != version $v (cli/stitch_fuzz/__init__.py)"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main: tag a commit that is"; exit 1; }
+          grep -qE "^## +$v( |$)" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## $v' entry"; exit 1; }
+      - run: python3 -m pip install build && python3 -m build
+      - name: the wheel has the version and the sources of this commit
+        run: |
+          python3 -m venv /tmp/venv && /tmp/venv/bin/pip install dist/*.whl
+          [ "$(cd /tmp && /tmp/venv/bin/stitch --version)" = "stitch-fuzz ${{ steps.v.outputs.version }}" ]
+          a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker as d; print(d.engine_hash(), *[d.base_hash(l) for l in d.LANGUAGES])')
+          b=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import docker as d; print(d.engine_hash(), *[d.base_hash(l) for l in d.LANGUAGES])')
+          [ "$a" = "$b" ] || { echo "::error::installed hashes $a != checkout $b"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
   engine:
+    needs: prepare
     strategy:
       matrix:
         include:
@@ -46,6 +97,9 @@ jobs:
       - name: engine image
         run: |
           R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; E=$(eval "$HASH engine_hash")
+          if docker buildx imagetools inspect "$R/stitch-engine:$E" >/dev/null 2>&1; then
+            echo "stitch-engine:$E is already published"; exit 0
+          fi
           docker buildx build -f engine/Dockerfile \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -t "$R/stitch-engine:$E-${{ matrix.arch }}" --push engine
@@ -53,6 +107,7 @@ jobs:
   languages:
     needs: engine
     strategy:
+      fail-fast: false
       matrix:
         lang: [cpp, python, javascript, java, go, rust, ruby, swift, objc]
         arch: [amd64, arm64]
@@ -60,6 +115,7 @@ jobs:
           - { arch: amd64, runner: ubuntu-24.04 }
           - { arch: arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
+    name: languages (${{ matrix.lang }}, ${{ matrix.arch }})
     permissions:
       contents: read
       packages: write
@@ -76,16 +132,17 @@ jobs:
           R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; L=${{ matrix.lang }}; A=${{ matrix.arch }}
           E=$(eval "$HASH engine_hash"); T=$(eval "$HASH toolchain_hash $L"); B=$(eval "$HASH base_hash $L")
           label=org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          published() { docker buildx imagetools inspect "$1" >/dev/null 2>&1 && echo "$1 is already published"; }
           # the build context as the CLI assembles it (Swift, Objective-C: + the C/C++ runtime)
-          C=$(PYTHONPATH=cli STITCH_CACHE=/tmp/stitch-cache python -c "from stitch_fuzz import docker; print(docker.language_context('$L'))")
-          docker buildx build -f $C/Dockerfile --target toolchain --label $label \
+          C=$(PYTHONPATH=cli STITCH_CACHE=/tmp/stitch-cache python3 -c "from stitch_fuzz import docker; print(docker.language_context('$L'))")
+          published "$R/stitch-$L-toolchain:$T" || docker buildx build -f $C/Dockerfile --target toolchain --label $label \
             -t "$R/stitch-$L-toolchain:$T-$A" --push $C
-          docker buildx build -f $C/Dockerfile --target base --label $label \
+          published "$R/stitch-$L:$B" || docker buildx build -f $C/Dockerfile --target base --label $label \
             --build-arg "STITCH_ENGINE=$R/stitch-engine:$E-$A" \
             -t "$R/stitch-$L:$B-$A" --push $C
 
   manifests:
-    needs: languages
+    needs: [prepare, languages]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -98,31 +155,108 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: |
-          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
-          multi() { docker buildx imagetools create -t "$1" "$1-amd64" "$1-arm64"; }
-          multi "$R/stitch-engine:$(eval "$HASH engine_hash")"
-          for L in cpp python javascript java go rust ruby swift objc; do
-            multi "$R/stitch-$L-toolchain:$(eval "$HASH toolchain_hash $L")"
-            multi "$R/stitch-$L:$(eval "$HASH base_hash $L")"
+      - name: multi-arch tags (+ version aliases on a tag)
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; V=${{ needs.prepare.outputs.version }}
+          image() {  # image NAME HASH
+            if ! docker buildx imagetools inspect "$R/$1:$2" >/dev/null 2>&1; then
+              docker buildx imagetools create -t "$R/$1:$2" "$R/$1:$2-amd64" "$R/$1:$2-arm64"
+            fi
+            if [ "$IS_TAG" = true ]; then docker buildx imagetools create -t "$R/$1:$V" "$R/$1:$2"; fi
+          }
+          image stitch-engine "$(eval "$HASH engine_hash")"
+          for L in $LANGS; do
+            image "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")"
+            image "stitch-$L" "$(eval "$HASH base_hash $L")"
           done
 
+  verify:
+    needs: [prepare, manifests]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: docker/setup-buildx-action@v3
+      # no docker login: this is what a user sees
+      - name: every image is public and multi-arch
+        run: |
+          O=${GITHUB_REPOSITORY_OWNER,,}; R=ghcr.io/$O; bad=""
+          check() {  # check NAME HASH
+            p=$(docker buildx imagetools inspect --raw "$R/$1:$2" 2>/dev/null \
+                | python3 -c 'import json,sys; print(" ".join(sorted(m["platform"]["architecture"] for m in json.load(sys.stdin).get("manifests",[]) if m.get("platform",{}).get("os")=="linux")))' 2>/dev/null)
+            [ "$p" = "amd64 arm64" ] || { echo "::error::$R/$1:$2: not pullable anonymously or not amd64+arm64 (got '$p')"; bad="$bad $1"; }
+          }
+          check stitch-engine "$(eval "$HASH engine_hash")"
+          for L in $LANGS; do
+            check "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")"
+            check "stitch-$L" "$(eval "$HASH base_hash $L")"
+          done
+          if [ -n "$bad" ]; then
+            echo "New GHCR packages are private. Make each one public, then re-run the failed jobs:"
+            for n in $bad; do echo "  https://github.com/users/$O/packages/container/$n/settings  (Danger Zone > Change visibility)"; done
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: the released wheel pulls its image instead of building it
+        working-directory: /tmp
+        run: |
+          python3 -m venv /tmp/venv && /tmp/venv/bin/pip install $GITHUB_WORKSPACE/dist/*.whl
+          /tmp/venv/bin/stitch setup --lang python 2>&1 | tee setup.log
+          ! grep -q "building" setup.log || { echo "::error::stitch setup built the image instead of pulling it"; exit 1; }
+
   pypi:
-    needs: manifests
+    needs: verify
     if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_pypi
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-      - name: check the tag matches the package version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          v=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
-          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != version $v"; exit 1; }
-      - run: python3 -m pip install build && python3 -m build
+          name: dist
+          path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github:
+    needs: [prepare, pypi]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: release notes with the image digests
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; V=${{ needs.prepare.outputs.version }}
+          ref() { echo "$R/$1@$(docker buildx imagetools inspect "$R/$1:$2" --format '{{.Manifest.Digest}}')"; }
+          {
+            echo "\`\`\`sh"
+            echo "pip install stitch-fuzz==$V"
+            echo "\`\`\`"
+            echo
+            echo "\`stitch setup\` pulls the images below for this version (alias tag \`:$V\`)."
+            echo
+            echo "| Language | Image | Toolchain image (reproducers) |"
+            echo "|---|---|---|"
+            for L in $LANGS; do
+              echo "| $L | \`$(ref "stitch-$L" "$(eval "$HASH base_hash $L")")\` | \`$(ref "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")")\` |"
+            done
+            echo
+            echo "Engine: \`$(ref stitch-engine "$(eval "$HASH engine_hash")")\`"
+            echo
+          } > notes.md
+          cat notes.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes dist/*

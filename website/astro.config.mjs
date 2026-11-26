@@ -88,7 +88,7 @@ export default defineConfig({
           items: [
             // The agent guide (skill/stitch/reference/), rendered by scripts/sync-reference.mjs.
             // Each page links to its raw Markdown at /agents/<name>.raw.md.
-            ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "cli"].map((name) => ({
+            ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "stitch-toml", "cli"].map((name) => ({
               label: `${name}.md`,
               slug: `agents/${name}.md`,
             })),
@@ -106,6 +106,7 @@ export default defineConfig({
           label: "Reference",
           items: [
             { label: "CLI", slug: "reference/cli" },
+            { label: "stitch.toml", slug: "reference/stitch-toml" },
             { label: "Languages", collapsed: true, items: [{ autogenerate: { directory: "reference/languages" } }] },
           ],
         },

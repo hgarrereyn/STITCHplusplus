@@ -229,6 +229,26 @@ def ensure_toolchain(lang="cpp") -> str:
     return tag
 
 
+def published_toolchain(lang) -> str:
+    """Registry reference of the published toolchain image for this version, or None when no
+    registry is configured. Pinned to the digest when the local image was pulled from there, so a
+    reproducer gets these exact bytes even if the tag were ever pushed again."""
+    if not registry():
+        return None
+    ref = f"{registry()}/stitch-{lang}-toolchain:{toolchain_hash(lang)}"
+    local = f"stitch/{lang}-toolchain:{toolchain_hash(lang)}"
+    if not image_exists(local):
+        _try_pull(ref, local, quiet=True)  # not published (yet): the reproducer builds it instead
+    r = _run(["docker", "image", "inspect", local, "--format", "{{json .RepoDigests}}"], capture_output=True)
+    try:
+        digests = json.loads(r.stdout) if r.returncode == 0 else []
+    except json.JSONDecodeError:
+        digests = []
+    repo = ref.rsplit(":", 1)[0]
+    digest = next((d.split("@", 1)[1] for d in digests or [] if d.split("@", 1)[0] == repo), None)
+    return f"{repo}@{digest}" if digest else ref
+
+
 def ensure_dockerignore(project):
     f = project.root / ".dockerignore"
     lines = f.read_text().splitlines() if f.exists() else []

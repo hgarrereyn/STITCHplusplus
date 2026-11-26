@@ -901,7 +901,7 @@ def cmd_shell(a):
 SKILL = STITCH_HOME / "skill" / "stitch"
 # The agent guide: skill/stitch/reference/<topic>.md (the docs site serves the same files).
 GUIDES = {"": "reference/overview.md",
-          **{t: f"reference/{t}.md" for t in ("stubs", "probe", "triage", "reproducers", "coverage", "cli",
+          **{t: f"reference/{t}.md" for t in ("stubs", "probe", "triage", "reproducers", "coverage", "stitch-toml", "cli",
                                               "cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
 
 
@@ -910,6 +910,8 @@ def cmd_guide(a):
     topic = "cpp" if a.spec else (a.topic or "")
     if topic == "api":
         topic = "cpp"
+    if topic in ("config", "toml", "stitch.toml"):
+        topic = "stitch-toml"
     if topic and topic not in GUIDES:
         topic = normalize_language(topic)   # "js" -> "javascript", "c++" -> "cpp"
     if topic not in GUIDES:
@@ -957,6 +959,49 @@ def cmd_setup(a):
         + "\nnext: stitch init DIR --git URL --rev REV   (guide: stitch guide)")
 
 
+def cmd_changelog(a):
+    from . import __version__, changelog
+    since = a.since
+    if since is None and not a.all:  # in a project: what changed since its pinned release
+        try:
+            since = find_project(a.project, check_version=False).stitch_version
+        except ProjectError:
+            pass
+    es = changelog.between(since, a.until or (None if a.all else __version__))
+    if JSON:
+        reports.dump({"ok": True, "since": since, "installed": __version__,
+                      "entries": [{"version": v, "text": t} for v, t in es]})
+        return
+    if not es:
+        print(f"no changelog entries after {since}" if since else "no changelog entries")
+        return
+    print(changelog.render(es))
+
+
+def cmd_upgrade(a):
+    from . import __version__, changelog
+    from .project import version_key
+    p = find_project(a.project, check_version=False)
+    old = p.stitch_version
+    if old == __version__:
+        out({"ok": True, "from": old, "to": __version__, "changed": False}, f"already pinned to {__version__}")
+        return
+    if old and version_key(old) > version_key(__version__):
+        die(f"the project is pinned to {old}, newer than the installed stitch-fuzz {__version__}: "
+            f"install it (pip install stitch-fuzz=={old}) instead of downgrading the project")
+    es = changelog.between(old, __version__)
+    changelog.set_pin(p.root / "stitch.toml", __version__)
+    if JSON:
+        reports.dump({"ok": True, "from": old, "to": __version__, "changed": True,
+                      "entries": [{"version": v, "text": t} for v, t in es]})
+        return
+    if es:
+        print(changelog.render(es) + "\n")
+    print(f"stitch.toml: stitch_version {old or '(none)'} -> {__version__}")
+    print("next: make the harness changes listed under Upgrading above (if any), then "
+          "`stitch build`, `stitch check` and `stitch probe` with this release")
+
+
 def cmd_init(a):
     from .templates import init_project
     root = Path(a.dir).resolve()
@@ -970,6 +1015,37 @@ def cmd_repro(a):
     f, b = resolve_crash(p, a.crash, campaign=a.campaign)
     d = make_repro(p, f, b, Path(a.output) if a.output else None, run=not a.no_run)
     out({"ok": True, "dir": str(d)}, f"reproducer: {d}\n  run it anywhere with docker: {d}/run.sh")
+
+
+def cmd_report(a):
+    from .report import make_report, ReportError
+    p = find_project(a.project)
+    try:
+        res = make_report(p, a.crash, Path(a.output).resolve() if a.output else None, run=not a.no_run)
+    except ReportError as e:
+        die(str(e))
+    if JSON:
+        reports.dump(res)
+        return
+    d = Path(res["dir"])
+    st = (res.get("check") or {}).get("status")
+    if st == "build_failed":
+        sys.stderr.write(res.get("output", "") + "\n")
+        die(f"the reproducer's Dockerfile does not build: {d}/Dockerfile")
+    print(f"report: {p.rel(d)}  (Dockerfile, {res['file']}, run.sh; ISSUE.md is the issue text)")
+    if st:
+        msg = {"same": "verified: same crash", "different": "WARNING: it crashes differently",
+               "no_crash": "WARNING: it does not crash", "diverged": "WARNING: it diverged",
+               "crash": "it crashes (no expected.json next to the file to compare with)"}.get(st, st)
+        got = (res.get("got") or {}).get("signature")
+        print(f"  {msg}" + (f": {got}" if got and st != "same" else ""))
+    print(f"  library pinned to {res['source']}; packages as of {res['pinned_to']}")
+    if not res["plain"]:
+        print("  note: it still uses the STITCH++ stand-in (shim file included); shrink it to plain library code for a cleaner report")
+    if not res["published_toolchain"]:
+        print("  note: no published toolchain image for this stitch-fuzz version: the Dockerfile builds only on this machine")
+    if st and st not in ("same", "crash"):
+        sys.exit(1)
 
 
 def cmd_bisect(a):
@@ -1183,6 +1259,15 @@ def main(argv=None):
     s.add_argument("--lang", action="append", help="language image(s) to get: cpp (default), python, javascript, java, go, rust, ruby, swift, objc, all")
     s.set_defaults(fn=cmd_setup)
 
+    s = sp.add_parser("changelog", help="what changed in each STITCH++ release (in a project: since its pinned release)")
+    s.add_argument("--since", help="only releases after this one")
+    s.add_argument("--until", help="only releases up to this one (default: the installed one)")
+    s.add_argument("--all", action="store_true", help="every release, also outside a project")
+    s.set_defaults(fn=cmd_changelog)
+
+    s = sp.add_parser("upgrade", help="pin the project to the installed STITCH++ release (stitch.toml stitch_version)")
+    s.set_defaults(fn=cmd_upgrade)
+
     s = sp.add_parser("init", help="create a new project (stitch.toml, Dockerfile, harness/)")
     s.add_argument("dir", nargs="?", default=".")
     s.add_argument("--name")
@@ -1259,6 +1344,13 @@ def main(argv=None):
     s.add_argument("--no-run", action="store_true", help="do not verify the reproducer")
     s.set_defaults(fn=cmd_repro)
 
+    s = sp.add_parser("report", help="a reproducer for a GitHub issue: Dockerfile + reproducer file + run.sh (+ ISSUE.md)")
+    s.add_argument("crash", help="a standalone reproducer file (from `stitch write`, shrunk to plain library code), or a crash id: "
+                   "its newest min.* file in .stitch/standalone/<id>/")
+    s.add_argument("-o", "--output", help="output directory (default .stitch/reports/<id>)")
+    s.add_argument("--no-run", action="store_true", help="do not build and run it to verify")
+    s.set_defaults(fn=cmd_report)
+
     s = sp.add_parser("cov", help="run a corpus on a coverage build; write lcov.info, HTML and a summary")
     s.add_argument("inputs", nargs="*", help="campaign names (their corpus) or .stp files/directories (default: latest campaign)")
     s.add_argument("--crashes", action="store_true", help="also run the campaigns' crashing programs")
@@ -1310,7 +1402,7 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the agent guide (topics: stubs, probe, triage, reproducers, coverage, cli, or a language)")
+    s = sp.add_parser("guide", help="print the agent guide (topics: stubs, probe, triage, reproducers, coverage, stitch-toml, cli, or a language)")
     s.add_argument("topic", nargs="?", help="a file of the guide, or a language: its harness API (api is cpp); default: the overview")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)

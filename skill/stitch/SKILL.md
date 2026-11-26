@@ -21,8 +21,9 @@ The guide:
 | [stubs.md](reference/stubs.md) | writing stubs and data types |
 | [probe.md](reference/probe.md) | reading the `stitch probe` / `stitch status` report |
 | [triage.md](reference/triage.md) | deciding whether a crash is a harness bug or a library bug |
-| [reproducers.md](reference/reproducers.md) | turning a crash into a short standalone file |
+| [reproducers.md](reference/reproducers.md) | turning a crash into a short standalone file; frozen reproducers for maintainers (`stitch report`) |
 | [coverage.md](reference/coverage.md) | reading `stitch cov` and closing coverage gaps |
+| [stitch-toml.md](reference/stitch-toml.md) | every key of `stitch.toml`; the pinned STITCH++ version (`stitch_version`) |
 | [cli.md](reference/cli.md) | looking up a command or a file under `.stitch/` |
 
 Languages (project setup, `Dockerfile`, `stitch.toml`, harness syntax, reproducers):

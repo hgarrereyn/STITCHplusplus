@@ -200,7 +200,15 @@ If an edit removes the bug, `stitch try` says so. Here the key is `a` instead of
 
 <RunOutput name="try-bad" />
 
-This short file is what you send to the library's maintainers.
+This short file is what you send to the library's maintainers. `stitch report <id>` (the crash id
+you shrank) packages it for them: a `Dockerfile` that builds the library at the pinned commit (package versions as of when
+the crash was found), the file, `run.sh`, and `ISSUE.md`, the text of a GitHub issue. Nobody needs
+STITCH++ to run it:
+
+```sh
+stitch report <id>
+cd .stitch/reports/<id> && ./run.sh     # docker build + docker run
+```
 
 ## A reproducer with its environment
 
