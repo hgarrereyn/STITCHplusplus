@@ -6,7 +6,7 @@ language = "swift"
 
 [source]
 git = "https://github.com/jpsim/Yams"
-rev = "4.0.6"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "df801bc4f158f107035d2e14f6d0d8d31eb31ddb"   # main HEAD (2 commits after 6.2.2); `stitch build --rev X` overrides it
 
 [swift]
 dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness

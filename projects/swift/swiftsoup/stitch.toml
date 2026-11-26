@@ -6,7 +6,7 @@ language = "swift"
 
 [source]
 git = "https://github.com/scinfu/SwiftSoup"
-rev = "2.3.2"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "8397a860c6955924b584c50c5265c6aac0970015"   # master HEAD (= tag 2.14.4); `stitch build --rev X` overrides it
 
 [swift]
 dependencies = ['.package(path: "/src")']                            # SwiftPM dependencies of the harness
