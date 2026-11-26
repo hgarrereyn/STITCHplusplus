@@ -1,2 +1,0 @@
-verified: same crash
-ArgumentError | String#gsub uri.rb:467 | Addressable::URI.unencode uri.rb | Addressable::URI.normalize_component uri.rb

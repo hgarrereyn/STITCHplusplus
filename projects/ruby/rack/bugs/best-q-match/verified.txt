@@ -1,2 +1,0 @@
-verified: same crash
-NoMethodError | Rack::Mime.match? mime.rb:32 | block  utils.rb | Array#each utils.rb

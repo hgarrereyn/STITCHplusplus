@@ -1,5 +1,6 @@
 # STITCH++ project. Guide: `stitch guide`. Go API: `stitch guide go`.
 [project]
+stitch_version = "0.2.0"
 name = "expr"
 language = "go"
 

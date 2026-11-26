@@ -1,2 +1,0 @@
-verified: same crash
-String index is out of bounds | _assertionFailure  | _StringGuts.validateScalarIndex  | String.subscript.getter  

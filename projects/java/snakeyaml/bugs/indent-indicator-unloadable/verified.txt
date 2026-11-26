@@ -1,2 +1,0 @@
-verified: same crash
-AssertionError | Stubs.dump_all_roundtrip (stub)

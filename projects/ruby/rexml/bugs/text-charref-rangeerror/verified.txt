@@ -1,2 +1,0 @@
-verified: same crash
-RangeError | REXML::Text.expand text.rb:410 | block in REXML::Text.unnormalize text.rb | String#gsub text.rb

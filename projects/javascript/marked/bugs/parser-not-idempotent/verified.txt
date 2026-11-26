@@ -1,2 +1,0 @@
-verified: same crash
-check failed: parser(tokens) twice gives the same html | in check_parser_idempotent

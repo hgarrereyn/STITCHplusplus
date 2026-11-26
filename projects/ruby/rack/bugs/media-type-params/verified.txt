@@ -1,2 +1,0 @@
-verified: same crash
-NoMethodError | Rack::MediaType.params media_type.rb:29 | block in <top (required)> (stub) | <main> stitch-rb

@@ -1,7 +1,0 @@
-{
- "kind": "heap-buffer-overflow READ",
- "frame": "js_parse_for_in_of",
- "signature": "heap-buffer-overflow READ | js_parse_for_in_of quickjs.c:27088 | js_parse_statement_or_decl quickjs.c | js_parse_block quickjs.c",
- "from": ".stitch/repros/parser-overread/crash.stp",
- "crash_id": "crash"
-}

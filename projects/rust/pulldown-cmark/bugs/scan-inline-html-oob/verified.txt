@@ -1,2 +1,0 @@
-verified: same crash
-range start index N out of range for slice of length N | pulldown_cmark::parse::Parser::scan_inline_html parse.rs:2762 | pulldown_cmark::parse::Parser::handle_inline_pass1::{{closure}} parse.rs | pulldown_cmark::parse::Parser::handle_inline_pass1 parse.rs

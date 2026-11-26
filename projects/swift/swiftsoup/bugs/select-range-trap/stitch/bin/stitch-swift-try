@@ -1,3 +1,0 @@
-#!/bin/sh
-# stitch-swift-try: rebuild the harness package with its current main.swift (stitch try) -> /tmp/stitch-try/release/worker
-exec stitch-build --try "$@"

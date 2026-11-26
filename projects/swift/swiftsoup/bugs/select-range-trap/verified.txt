@@ -1,2 +1,0 @@
-verified: same crash
-Range requires lowerBound <= upperBound | String.indexOf String.swift:65 | TokenQueue.consumeTo TokenQueue.swift | TokenQueue.chompTo TokenQueue.swift

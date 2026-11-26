@@ -1,5 +1,6 @@
 # STITCH++ project. Guide: `stitch guide`. Java API: `stitch guide java`.
 [project]
+stitch_version = "0.2.0"
 name = "commons-compress"
 language = "java"
 

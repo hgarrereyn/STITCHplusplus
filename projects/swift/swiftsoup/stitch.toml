@@ -1,5 +1,6 @@
 # STITCH++ project. Guide: `stitch guide`. Swift API: `stitch guide swift`.
 [project]
+stitch_version = "0.2.0"
 name = "swiftsoup"
 language = "swift"
 

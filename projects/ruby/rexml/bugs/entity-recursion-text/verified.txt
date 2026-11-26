@@ -1,2 +1,0 @@
-verified: same crash
-SystemStackError | Kernel#clone <internal:kernel>:48  | REXML::Entity#value entity.rb | REXML::Entity#unnormalized entity.rb

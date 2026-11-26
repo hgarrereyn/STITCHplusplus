@@ -1,2 +1,0 @@
-verified: same crash
-IndexError | StripWhitespaceFilter._stripws_parenthesis others.py:90 | StripWhitespaceFilter._stripws others.py | StripWhitespaceFilter.process others.py

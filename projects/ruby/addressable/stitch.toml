@@ -1,5 +1,6 @@
 # STITCH++ project. Guide: `stitch guide`. Ruby API: `stitch guide ruby`.
 [project]
+stitch_version = "0.2.0"
 name = "addressable"
 language = "ruby"
 
