@@ -1,2 +1,0 @@
-verified: same crash
-heap-buffer-overflow WRITE | smallvec::SmallVec$LT$A$GT$::insert_many lib.rs:1048

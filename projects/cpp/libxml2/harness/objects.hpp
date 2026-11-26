@@ -8,6 +8,7 @@
 #include <libxml/c14n.h>
 #include <libxml/chvalid.h>
 #include <libxml/parser.h>
+#include <libxml/parserInternals.h>
 #include <libxml/tree.h>
 #include <libxml/uri.h>
 #include <libxml/valid.h>
@@ -21,6 +22,8 @@
 #include <string>
 #include <vector>
 #include <string.h>
+#include <unistd.h>
+#include <algorithm>
 
 STITCH_OBJECT(Doc, xmlDocPtr);
 STITCH_DROP(Doc, [](xmlDocPtr d) { xmlFreeDoc(d); });
@@ -81,8 +84,12 @@ inline void silence() {
 #else
     xmlSetStructuredErrorFunc(nullptr, [](void*, xmlError*) {});
 #endif
-    // no file or network access: external entities, DTDs and XIncludes fail to load
-    xmlSetExternalEntityLoader([](const char*, const char*, xmlParserCtxtPtr) -> xmlParserInputPtr { return nullptr; });
+    // no network and no files: external entities, DTDs and XIncludes fail to load, except the
+    // temporary files stubs write themselves (/tmp/stitch_lx_*), so the file entry points work
+    xmlSetExternalEntityLoader([](const char* url, const char*, xmlParserCtxtPtr c) -> xmlParserInputPtr {
+        if (c && url && strncmp(url, "/tmp/stitch_lx_", 15) == 0 && !strstr(url, "..")) return xmlNewInputFromFile(c, url);
+        return nullptr;
+    });
 }
 
 // strict UTF-8 decoder (reference for the libxml2 one): code point and length, or -1
@@ -137,4 +144,133 @@ inline int count_elements(xmlDocPtr d) {
     }
     return n;
 }
+// Namespace-well-formed (what canonical XML requires): no prefixed name without a namespace
+// (libxml2 keeps "p:x" as a plain name when p is undeclared) and no two attributes with the same
+// expanded name on an element.
+inline bool ns_wellformed(xmlDocPtr d) {
+    std::vector<xmlNodePtr> st;
+    for (xmlNodePtr c = d->children; c; c = c->next) st.push_back(c);
+    while (!st.empty()) {
+        xmlNodePtr x = st.back();
+        st.pop_back();
+        if (x->type != XML_ELEMENT_NODE) continue;
+        if (!x->ns && x->name && strchr((const char*)x->name, ':')) return false;
+        for (xmlAttrPtr a = x->properties; a; a = a->next) {
+            if (!a->ns && a->name && strchr((const char*)a->name, ':')) return false;
+            for (xmlAttrPtr b = a->next; b; b = b->next)
+                if (xmlStrEqual(a->name, b->name) && xmlStrEqual(a->ns ? a->ns->href : nullptr, b->ns ? b->ns->href : nullptr))
+                    return false;
+        }
+        for (xmlNodePtr c = x->children; c; c = c->next) st.push_back(c);
+    }
+    return true;
+}
+
+// Two absolute URIs are the same: equal strings, or equal after percent-decoding and removing dot
+// segments, with an empty path read as "/" when
+// there is an authority (RFC 3986 6.2.2 / 6.2.3), and an empty user read as no user.
+inline bool same_uri(const xmlChar* a, const xmlChar* b) {
+    if (xmlStrEqual(a, b)) return true;
+    xmlURIPtr x = xmlParseURI((const char*)a), y = xmlParseURI((const char*)b);
+    auto norm = [](const char* v) {
+        std::string out;
+        if (v) {
+            char* u = xmlURIUnescapeString(v, 0, nullptr);
+            if (u) { out = u; xmlFree(u); }
+        }
+        return out;
+    };
+    bool same = true;  // (a side that does not parse cannot be normalized: no verdict)
+    if (x && y) {
+        auto path = [&](xmlURIPtr u) {
+            std::string p = norm(u->path);
+            if (p.empty() && (u->server || u->user)) p = "/";
+            std::vector<char> b(p.begin(), p.end());
+            b.push_back(0);
+            xmlNormalizeURIPath(b.data());  // (dot segments)
+            return std::string(b.data());
+        };
+        same = norm(x->scheme) == norm(y->scheme) && norm(x->server) == norm(y->server) && x->port == y->port &&
+               norm(x->user) == norm(y->user) && path(x) == path(y) && norm(x->query_raw ? x->query_raw : x->query) == norm(y->query_raw ? y->query_raw : y->query) &&
+               norm(x->fragment) == norm(y->fragment) && norm(x->opaque) == norm(y->opaque);
+    }
+    xmlFreeURI(x);
+    xmlFreeURI(y);
+    return same;
+}
+// An in-memory resource loader (xmlCtxtSetResourceLoader and friends): every external DTD,
+// entity and XInclude gets small fixed content, so these code paths run without files.
+inline xmlParserErrors mem_loader(void*, const char* url, const char*, xmlResourceType type, xmlParserInputFlags flags,
+                                  xmlParserInput** out) {
+    const char* body;
+    switch (type) {
+        case XML_RESOURCE_DTD: body = "<!ELEMENT a ANY><!ATTLIST a x CDATA 'dflt' id ID #IMPLIED><!ENTITY ext 'ext-text'>"; break;
+        case XML_RESOURCE_PARAMETER_ENTITY: body = "<!ENTITY pent 'from-pe'>"; break;
+        case XML_RESOURCE_GENERAL_ENTITY: body = "ext <b>entity</b> content"; break;
+        case XML_RESOURCE_XINCLUDE_TEXT: body = "included text & more"; break;
+        default: body = "<inc xml:id='i1'><a x='1'>included</a><b/></inc>"; break;
+    }
+    if (url && strstr(url, "missing")) return XML_IO_ENOENT;
+    if (url && strncmp(url, "/tmp/stitch_lx_", 15) == 0) return xmlNewInputFromUrl(url, flags, out);  // files stubs wrote
+    *out = xmlNewInputFromString(url, body, (xmlParserInputFlags)(flags | XML_INPUT_BUF_STATIC));
+    return *out ? XML_ERR_OK : XML_ERR_NO_MEMORY;
+}
+// a subtree that uses namespaces (copies of it declare them again)
+inline bool uses_ns(xmlNodePtr n) {
+    if (n->type == XML_ELEMENT_NODE) {
+        if (n->ns || n->nsDef) return true;
+        for (xmlAttrPtr a = n->properties; a; a = a->next) if (a->ns) return true;
+    }
+    for (xmlNodePtr c = n->children; c && n->type != XML_ENTITY_REF_NODE; c = c->next)
+        if (uses_ns(c)) return true;
+    return false;
+}
+// a reference to an entity the document does not declare (possible when the internal subset has
+// unresolved parameter entity references; such references cannot survive serialization)
+inline bool has_undeclared_ref(xmlDocPtr d) {
+    std::vector<xmlNodePtr> st;
+    for (xmlNodePtr c = d->children; c; c = c->next) st.push_back(c);
+    while (!st.empty()) {
+        xmlNodePtr x = st.back();
+        st.pop_back();
+        if (x->type == XML_ENTITY_REF_NODE && !xmlGetDocEntity(d, x->name)) return true;
+        if (x->type == XML_ELEMENT_NODE)
+            for (xmlNodePtr c = x->children; c; c = c->next) st.push_back(c);
+    }
+    return false;
+}
+// Temporary files the stubs write (the entity loader lets the parser read them), in-memory I/O
+// callbacks.
+inline std::string tmp_path(const char* tag) { return std::string("/tmp/stitch_lx_") + tag + "_" + std::to_string(getpid()); }
+inline bool write_file(const std::string& path, const std::string& data) {
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f) return false;
+    fwrite(data.data(), 1, data.size(), f);
+    fclose(f);
+    return true;
+}
+inline std::string read_file(const std::string& path) {
+    std::string out;
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return out;
+    char tmp[4096];
+    size_t k;
+    while ((k = fread(tmp, 1, sizeof tmp, f)) > 0) out.append(tmp, k);
+    fclose(f);
+    return out;
+}
+struct StrIO { std::string data; size_t off = 0; };
+inline int io_read(void* ctx, char* buf, int len) {
+    StrIO* s = (StrIO*)ctx;
+    size_t n = std::min((size_t)len, s->data.size() - s->off);
+    memcpy(buf, s->data.data() + s->off, n);
+    s->off += n;
+    return (int)n;
+}
+inline int io_close(void*) { return 0; }
+inline int str_write(void* ctx, const char* buf, int len) {
+    ((std::string*)ctx)->append(buf, (size_t)len);
+    return len;
+}
+inline int str_close(void*) { return 0; }
 }  // namespace lx

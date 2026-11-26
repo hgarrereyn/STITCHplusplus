@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. Python API: `stitch guide python`.
 [project]
+stitch_version = "0.2.0"
 name = "jinja2"
 language = "python"
 
 [source]
 git = "https://github.com/pallets/jinja"
-rev = "3.0.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "5ef70112a1ff19c05324ff889dd30405b1002044"   # main HEAD (3.2.0.dev, 164 commits after 3.1.6); `stitch build --rev X` overrides it
 
 [python]
 include = ["jinja2"]     # import names of the code under test (coverage and comparison tracing)

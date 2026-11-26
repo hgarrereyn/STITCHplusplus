@@ -15,6 +15,8 @@ void parse_opt_recover(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_RECOVER | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_RECOVER | lx::kQuiet);
     if ((XML_PARSE_RECOVER & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -32,6 +34,8 @@ void parse_opt_noent(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOENT | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOENT | lx::kQuiet);
     if ((XML_PARSE_NOENT & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -49,6 +53,8 @@ void parse_opt_dtdattr(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_DTDATTR | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_DTDATTR | lx::kQuiet);
     if ((XML_PARSE_DTDATTR & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -66,6 +72,8 @@ void parse_opt_dtdvalid(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_DTDVALID | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_DTDVALID | lx::kQuiet);
     if ((XML_PARSE_DTDVALID & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -83,6 +91,8 @@ void parse_opt_noblanks(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOBLANKS | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOBLANKS | lx::kQuiet);
     if ((XML_PARSE_NOBLANKS & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -100,6 +110,8 @@ void parse_opt_sax1(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_SAX1 | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_SAX1 | lx::kQuiet);
     if ((XML_PARSE_SAX1 & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -117,6 +129,8 @@ void parse_opt_nonet(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NONET | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NONET | lx::kQuiet);
     if ((XML_PARSE_NONET & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -134,6 +148,8 @@ void parse_opt_nodict(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NODICT | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NODICT | lx::kQuiet);
     if ((XML_PARSE_NODICT & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -151,6 +167,8 @@ void parse_opt_nsclean(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NSCLEAN | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NSCLEAN | lx::kQuiet);
     if ((XML_PARSE_NSCLEAN & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -168,6 +186,8 @@ void parse_opt_nocdata(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOCDATA | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOCDATA | lx::kQuiet);
     if ((XML_PARSE_NOCDATA & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -185,6 +205,8 @@ void parse_opt_noxincnode(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOXINCNODE | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOXINCNODE | lx::kQuiet);
     if ((XML_PARSE_NOXINCNODE & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -202,6 +224,8 @@ void parse_opt_compact(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_COMPACT | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_COMPACT | lx::kQuiet);
     if ((XML_PARSE_COMPACT & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -219,6 +243,8 @@ void parse_opt_old10(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_OLD10 | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_OLD10 | lx::kQuiet);
     if ((XML_PARSE_OLD10 & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -236,6 +262,8 @@ void parse_opt_nobasefix(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOBASEFIX | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOBASEFIX | lx::kQuiet);
     if ((XML_PARSE_NOBASEFIX & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -253,6 +281,8 @@ void parse_opt_huge(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_HUGE | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_HUGE | lx::kQuiet);
     if ((XML_PARSE_HUGE & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -270,6 +300,8 @@ void parse_opt_oldsax(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_OLDSAX | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_OLDSAX | lx::kQuiet);
     if ((XML_PARSE_OLDSAX & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -287,6 +319,8 @@ void parse_opt_ignore_enc(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_IGNORE_ENC | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_IGNORE_ENC | lx::kQuiet);
     if ((XML_PARSE_IGNORE_ENC & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -304,6 +338,8 @@ void parse_opt_big_lines(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_BIG_LINES | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_BIG_LINES | lx::kQuiet);
     if ((XML_PARSE_BIG_LINES & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -321,6 +357,8 @@ void parse_opt_pedantic(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_PEDANTIC | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_PEDANTIC | lx::kQuiet);
     if ((XML_PARSE_PEDANTIC & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");
@@ -338,6 +376,8 @@ void parse_opt_nowarning(Str<2048, XmlText> text) {
     lx::silence();
     xmlDocPtr d = xmlReadMemory(text.data(), (int)text.size(), "in.xml", nullptr, XML_PARSE_NOWARNING | lx::kQuiet);
     stitch::require(d, "parse error");
+    if (!lx::ns_wellformed(d)) { xmlFreeDoc(d); stitch::bail("not namespace-well-formed"); }
+    if (lx::has_undeclared_ref(d)) { xmlFreeDoc(d); stitch::bail("reference to an undeclared entity"); }
     std::string a = lx::dump(d, 0);
     xmlDocPtr e = xmlReadMemory(a.data(), (int)a.size(), "again.xml", nullptr, XML_PARSE_NOWARNING | lx::kQuiet);
     if ((XML_PARSE_NOWARNING & XML_PARSE_RECOVER) == 0) stitch::check(e != nullptr, "the serialized document parses again with the same option");

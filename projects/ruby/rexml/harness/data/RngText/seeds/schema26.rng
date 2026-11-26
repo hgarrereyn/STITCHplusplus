@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="A">
+      <ref name="B"/>
+    </element>
+  </start>
+
+  <define name="B">
+    <zeroOrMore>
+      <element name="B">
+        <attribute name="X"/>
+      </element>
+    </zeroOrMore>
+  </define>
+</grammar>

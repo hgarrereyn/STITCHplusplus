@@ -1,15 +1,16 @@
 # STITCH++ project. Guide: `stitch guide`. Go API: `stitch guide go`.
 [project]
+stitch_version = "0.2.0"
 name = "expr"
 language = "go"
 
 [source]
 git = "https://github.com/expr-lang/expr"
-rev = "v1.15.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "c4b0946adf1fa530dddc5c0946f7cf74bfd680bb"   # branch, tag or commit; `stitch build --rev X` overrides it
 
 [go]
-module = "github.com/antonmedv/expr" # import path of the library (its source is at /src)
-instrument = ["github.com/antonmedv/expr/..."]   # packages to instrument (default: all but std)
+module = "github.com/expr-lang/expr" # import path of the library (its source is at /src)
+instrument = ["github.com/expr-lang/expr/..."]   # packages to instrument (default: all but std)
 # race = true                       # build with the race detector
 
 [fuzz]

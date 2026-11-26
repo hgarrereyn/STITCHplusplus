@@ -19,8 +19,18 @@ NAV(last_child_element_any, n->LastChildElement())
 NAV(next_sibling_element_any, n->NextSiblingElement())
 NAV(prev_sibling_element_any, n->PreviousSiblingElement())
 
-New<Node> first_child_element(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name) {
+// Mostly the name of an element in [first, ...) so lookups hit; otherwise `fresh`.
+static std::string some_name(const XMLElement* first, stitch::Source& s, const char* fresh) {
+    int cnt = 0;
+    for (const XMLElement* e = first; e; e = e->NextSiblingElement()) cnt++;
+    if (cnt == 0 || !s.coin(0.8)) return fresh;
+    for (size_t i = s.choice(cnt); i > 0; i--) first = first->NextSiblingElement();
+    return first->Name();
+}
+
+New<Node> first_child_element(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> fresh, Src<8> s) {
     stitch::require(live(d, n), "stale node");
+    std::string name = some_name(n->FirstChildElement(), *s, fresh.c_str());
     XMLElement* e = n->FirstChildElement(name.c_str());
     stitch::require(e, "no such child");
     stitch::check(!strcmp(e->Name(), name.c_str()), "child has requested name");
@@ -28,9 +38,11 @@ New<Node> first_child_element(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> na
 }
 STITCH_ENDPOINT(first_child_element);
 
-New<Node> next_sibling_element(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name) {
+New<Node> next_sibling_element(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> fresh, Src<8> s) {
     stitch::require(live(d, n), "stale node");
+    std::string name = some_name(n->NextSiblingElement(), *s, fresh.c_str());
     XMLElement* e = n->NextSiblingElement(name.c_str());
+    if (e) stitch::check(!strcmp(e->Name(), name.c_str()), "sibling has requested name");
     stitch::require(e, "no such sibling");
     return mk(d, e);
 }

@@ -11,19 +11,42 @@ static void need_no_decl_below(const XMLNode* n) {
         need_no_decl_below(c);
     }
 }
-// The parser normalizes CR / CRLF to LF, so text with CR cannot round-trip (XML spec behaviour).
-static void need_no_cr(const XMLNode* n) {
+static bool all_space(const char* s) {
+    for (; *s; s++) if (!XMLUtil::IsWhiteSpace(*s)) return false;
+    return true;
+}
+// Text the parser reads back unchanged in whitespace mode `ws`:
+// - The parser normalizes CR / CRLF to LF, so text with CR cannot round-trip (XML spec behaviour).
+// - An empty text node prints as <f></f> but reparses as <f/>.
+// - Whitespace-only text is dropped by the parser, except in PEDANTIC_WHITESPACE mode when it is
+//   the whole content of an element.
+// - COLLAPSE_WHITESPACE trims text and folds whitespace runs into one space.
+static void need_text_stable(const XMLNode* n, Whitespace ws) {
     if (n->Value()) stitch::require(!strchr(n->Value(), '\r'), "CR in text");
-    // An empty text node prints as <f></f> but reparses as <f/> (see notes.md).
-    if (n->ToText()) stitch::require(*n->Value(), "empty text node");
+    if (const XMLText* t = n->ToText()) {
+        const char* v = t->Value();
+        stitch::require(*v, "empty text node");
+        if (!t->CData()) {
+            if (all_space(v)) {
+                const XMLNode* p = t->Parent();
+                stitch::require(ws == PEDANTIC_WHITESPACE && p && p->ToElement() && p->FirstChild() == t && p->LastChild() == t,
+                                "whitespace-only text");
+            }
+            if (ws == COLLAPSE_WHITESPACE) {
+                stitch::require(!XMLUtil::IsWhiteSpace(v[0]) && !XMLUtil::IsWhiteSpace(v[strlen(v) - 1]), "untrimmed text");
+                for (const char* c = v; *c; c++)
+                    stitch::require(!XMLUtil::IsWhiteSpace(*c) || (*c == ' ' && !XMLUtil::IsWhiteSpace(c[1])), "uncollapsed text");
+            }
+        }
+    }
     if (const XMLElement* e = n->ToElement())
         for (const XMLAttribute* a = e->FirstAttribute(); a; a = a->Next()) stitch::require(!strchr(a->Value(), '\r'), "CR in attribute");
-    for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) need_no_cr(c);
+    for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) need_text_stable(c, ws);
 }
 static void need_wellformed_top(const XMLDocument* d) {
     // With processEntities=false values are printed raw, so quotes/angle brackets break the output (documented).
     stitch::require(d->ProcessEntities(), "processEntities is off");
-    need_no_cr(d);
+    need_text_stable(d, d->WhitespaceMode());
     stitch::require(d->FirstChildElement() != nullptr, "no top-level element");
     bool seen_elem = false;
     for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling()) {
@@ -64,7 +87,7 @@ void roundtrip_node(Borrow<Doc> d, Borrow<Node> n) {
     stitch::require(node->ToElement(), "not an element");
     stitch::require(d->ProcessEntities(), "processEntities is off");
     need_no_decl_below(node);
-    need_no_cr(node);
+    need_text_stable(node, d->WhitespaceMode());
     std::string s1 = print_node(node, true);
     std::unique_ptr<XMLDocument> d2(same_settings(d));
     stitch::check(d2->Parse(s1.c_str()) == XML_SUCCESS, "printed element parses");
@@ -89,6 +112,7 @@ STITCH_ENDPOINT(parse_print_stable);
 void clone_doc(Borrow<Doc> d) {
     XMLDocument d2(d->ProcessEntities(), d->WhitespaceMode());
     for (const XMLNode* c = d->FirstChild(); c; c = c->NextSibling()) d2.InsertEndChild(c->DeepClone(&d2));
+    d2.SetBOM(d->HasBOM());  // a document setting, not a node
     stitch::check(print_node(d, false) == print_node(&d2, false), "cloned document prints the same");
 }
 STITCH_ENDPOINT(clone_doc);
@@ -109,10 +133,15 @@ void save_load(Borrow<Doc> d, Bool compact) {
 STITCH_ENDPOINT(save_load);
 
 // ---- manual XMLPrinter ----
-New<Printer> new_printer(Bool compact) {
-    New<Printer> p(new XMLPrinter(0, compact));
+// Attributes: "depth" (open elements), "open" (a start tag is still open for attributes),
+// "started" (something was written: declarations are only valid before anything else).
+New<Printer> new_printer(Bool compact, Range<0, 3> depth, Bool escape_apos) {
+    New<Printer> p(new XMLPrinter(0, compact, (int)depth,
+                                  escape_apos ? XMLPrinter::ESCAPE_APOS_CHARS_IN_ATTRIBUTES
+                                              : XMLPrinter::DONT_ESCAPE_APOS_CHARS_IN_ATTRIBUTES));
     stitch::set(p, "depth", 0);
     stitch::set(p, "open", 0);
+    stitch::set(p, "started", 0);
     return p;
 }
 STITCH_ENDPOINT(new_printer);
@@ -128,6 +157,7 @@ static const char* keep(const char* s) {
 void printer_open(Borrow<Printer> p, Str<32, XmlName> name) {
     stitch::require(valid_name(name.c_str()), "bad name");
     p->OpenElement(keep(name.c_str()));
+    stitch::set(p, "started", 1);
     stitch::set(p, "depth", (long)stitch::get(p, "depth", 0) + 1);
     stitch::set(p, "open", 1);
 }
@@ -169,8 +199,9 @@ void printer_text_double(Borrow<Printer> p, F64 v) {
 STITCH_ENDPOINT(printer_text_double);
 
 void printer_comment(Borrow<Printer> p, Str<32> v) {
-    stitch::require(!strstr(v.c_str(), "--"), "comment with --");
+    stitch::require(comment_ok(v.c_str()), "comment with --");
     p->PushComment(v.c_str());
+    stitch::set(p, "started", 1);
     stitch::set(p, "open", 0);
 }
 STITCH_ENDPOINT(printer_comment);
@@ -183,12 +214,79 @@ void printer_close(Borrow<Printer> p, Bool peekClosing) {
 }
 STITCH_ENDPOINT(printer_close);
 
+void printer_attr_typed(Borrow<Printer> p, Str<32, XmlName> name, Range<0, 4> kind, U64 v, F64 dv) {
+    stitch::require(valid_name(name.c_str()), "bad name");
+    stitch::require(stitch::get(p, "open", 0) == 1, "no open start tag");
+    switch ((int)kind) {
+        case 0: p->PushAttribute(name.c_str(), (unsigned)v); break;
+        case 1: p->PushAttribute(name.c_str(), (uint64_t)v); break;
+        case 2: p->PushAttribute(name.c_str(), (int64_t)v); break;
+        case 3: p->PushAttribute(name.c_str(), (bool)(v & 1)); break;
+        default: p->PushAttribute(name.c_str(), (double)dv); break;
+    }
+}
+STITCH_ENDPOINT(printer_attr_typed);
+
+void printer_text_typed(Borrow<Printer> p, Range<0, 4> kind, U64 v, F32 fv) {
+    stitch::require(stitch::get(p, "depth", 0) > 0, "no open element");
+    switch ((int)kind) {
+        case 0: p->PushText((unsigned)v); break;
+        case 1: p->PushText((uint64_t)v); break;
+        case 2: p->PushText((int)v); break;
+        case 3: p->PushText((bool)(v & 1)); break;
+        default: p->PushText((float)fv); break;
+    }
+    stitch::set(p, "open", 0);
+}
+STITCH_ENDPOINT(printer_text_typed);
+
+// "<?value?>": only valid before anything else in the document.
+void printer_declaration(Borrow<Printer> p, Str<32> v) {
+    stitch::require(stitch::get(p, "started", 0) == 0, "declaration after content");
+    stitch::require(decl_ok(v.c_str()), "declaration with ?>");
+    p->PushDeclaration(v.c_str());
+}
+STITCH_ENDPOINT(printer_declaration);
+
+// "<!value>"
+void printer_unknown(Borrow<Printer> p, Str<32> v) {
+    stitch::require(unknown_ok(v.c_str()), "unknown with >");
+    p->PushUnknown(v.c_str());
+    stitch::set(p, "open", 0);
+    stitch::set(p, "started", 1);
+}
+STITCH_ENDPOINT(printer_unknown);
+
+// Start over: only between top-level nodes, so the remaining output stays balanced.
+void printer_clear(Borrow<Printer> p, Bool reset_first) {
+    stitch::require(stitch::get(p, "depth", 0) == 0, "elements are open");
+    p->ClearBuffer(reset_first);
+    stitch::check(p->CStrSize() == 1 && p->CStr()[0] == 0, "ClearBuffer empties the buffer");
+    stitch::set(p, "started", 0);
+}
+STITCH_ENDPOINT(printer_clear);
+
+// Print a parsed node through the printer (XMLPrinter as a visitor).
+void printer_visit(Borrow<Printer> p, Borrow<Doc> d, Borrow<Node> n) {
+    stitch::require(live(d, n), "stale node");
+    XMLNode* node = n;
+    stitch::require(!node->ToDocument(), "document");
+    stitch::require(d->ProcessEntities(), "processEntities is off");
+    need_no_decl_below(node);
+    if (node->ToDeclaration()) stitch::require(stitch::get(p, "depth", 0) == 0 && stitch::get(p, "started", 0) == 0, "declaration after content");
+    if (node->ToText()) stitch::require(stitch::get(p, "depth", 0) > 0, "text at the top level");
+    node->Accept(p);
+    stitch::set(p, "open", 0);
+    stitch::set(p, "started", 1);
+}
+STITCH_ENDPOINT(printer_visit);
+
 // When all elements are closed, the output must be well-formed.
 void printer_finish(Borrow<Printer> p) {
     stitch::require(stitch::get(p, "depth", 0) == 0, "unclosed elements");
     std::string out = p->CStr();
     stitch::require(!out.empty(), "empty output");
-    stitch::check(p->CStrSize() == (int)out.size() + 1, "CStrSize matches the buffer");
+    stitch::check(p->CStrSize() == out.size() + 1, "CStrSize matches the buffer");
     XMLDocument d;
     stitch::check(d.Parse(out.c_str()) == XML_SUCCESS, "printer output parses");
 }

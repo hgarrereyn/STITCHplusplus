@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include <set>
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlschemas.h>
 #include <libxml/xmlschemastypes.h>
@@ -25,12 +26,19 @@ void text_writer(Src<128> s, Bool indent) {
     int depth = 0;
     const char* names[] = {"a", "b", "x:y", "item"};
     xmlTextWriterStartElement(w, (const xmlChar*)"root"); depth++;
+    std::set<std::string> used;  // attributes on the open start tag (the writer does not check duplicates)
     while (s->more()) {
         std::string t = lx::clean(s->str(12));
-        switch (s->choice(9)) {
+        int op = (int)s->choice(9);
+        if (op != 2) used.clear();
+        switch (op) {
             case 0: xmlTextWriterStartElement(w, (const xmlChar*)names[s->choice(4)]); depth++; break;
             case 1: if (depth > 1) { xmlTextWriterEndElement(w); depth--; } break;
-            case 2: xmlTextWriterWriteAttribute(w, (const xmlChar*)s->pick({"k", "id", "xml:lang"}), (const xmlChar*)t.c_str()); break;
+            case 2: {
+                const char* an = s->pick({"k", "id", "xml:lang"});
+                if (used.insert(an).second) xmlTextWriterWriteAttribute(w, (const xmlChar*)an, (const xmlChar*)t.c_str());
+                break;
+            }
             case 3: xmlTextWriterWriteString(w, (const xmlChar*)t.c_str()); break;
             case 4: if (t.find("--") == std::string::npos && (t.empty() || t.back() != '-')) xmlTextWriterWriteComment(w, (const xmlChar*)t.c_str()); break;
             case 5: if (t.find("]]>") == std::string::npos) xmlTextWriterWriteCDATA(w, (const xmlChar*)t.c_str()); break;

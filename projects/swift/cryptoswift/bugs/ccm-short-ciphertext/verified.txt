@@ -1,2 +1,0 @@
-verified: same crash
-Negative value is not representable | CCMModeWorker.init CCM.swift:117 | CCMModeWorker.__allocating_init CCM.swift | CCM.worker CCM.swift

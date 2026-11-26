@@ -72,7 +72,7 @@ STITCH_ENDPOINT(element_navigation);
 void copy_node_ops(Borrow<Node> n, Range<0, 2> extended) {
     xmlNodePtr c = xmlCopyNode(*n, (int)extended.v);
     stitch::require(c, "copy failed");
-    if (extended.v == 1) {
+    if (extended.v == 1 && !lx::uses_ns(*n)) {  // (a detached copy declares the namespaces it uses)
         xmlBufferPtr a = xmlBufferCreate(), b = xmlBufferCreate();
         xmlNodeDump(a, (*n)->doc, *n, 0, 0);
         xmlSetTreeDoc(c, (*n)->doc);
@@ -89,6 +89,7 @@ STITCH_ENDPOINT(copy_node_ops);
 void ns_ops(Borrow<Node> n, Str<8, XmlName> prefix, Str<32, UriText> href) {
     stitch::require(xmlValidateNCName((const xmlChar*)prefix.c_str(), 0) == 0, "invalid prefix");
     stitch::require(strcmp(prefix.c_str(), "xml") && strcmp(prefix.c_str(), "xmlns"), "reserved prefix");
+    stitch::require(lx::xml_chars_strict(href.s.substr(0, strlen(href.c_str()))), "href is not UTF-8 text");
     xmlNsPtr ns = xmlNewNs(*n, (const xmlChar*)href.c_str(), (const xmlChar*)prefix.c_str());
     if (ns) {
         stitch::check(xmlSearchNs((*n)->doc, *n, (const xmlChar*)prefix.c_str()) == ns, "xmlSearchNs finds the declaration");

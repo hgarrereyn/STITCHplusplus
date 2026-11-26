@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. Java API: `stitch guide java`.
 [project]
+stitch_version = "0.2.0"
 name = "snakeyaml"
 language = "java"
 
 [source]
 git = "https://bitbucket.org/snakeyaml/snakeyaml"
-rev = "snakeyaml-1.30"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "7b8b171c0dbfa8af665c24a63d91f2b185b8701b"   # master HEAD (2.8-SNAPSHOT); `stitch build --rev X` overrides it
 
 [java]
 classpath = ["/deps/*"]           # the library and its dependencies (jars the Dockerfile puts in /deps)

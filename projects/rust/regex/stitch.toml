@@ -1,15 +1,17 @@
 # STITCH++ project. Guide: `stitch guide`. Rust API: `stitch guide rust`.
 [project]
+stitch_version = "0.2.0"
 name = "regex"
 language = "rust"
 
 [source]
 git = "https://github.com/rust-lang/regex"
-rev = "1.5.4"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "fde4946d4a3cb367338a21493ec91ec7106a12b4"   # master; `stitch build --rev X` overrides it
 
 [rust.dependencies]                 # the harness crate's dependencies (the library is at /src)
 regex = { path = "/src" }
 regex-syntax = { path = "/src/regex-syntax" }
+regex-automata = { path = "/src/regex-automata" }
 
 [fuzz]
 timeout_ms = 2000

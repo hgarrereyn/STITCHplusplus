@@ -1,7 +1,0 @@
-{
- "kind": "check failed: Valid() agrees with encoding/json",
- "frame": "",
- "signature": "check failed: Valid() agrees with encoding/json | in valid",
- "from": ".stitch/campaigns/main/w0/crashes/7f35562a06762775.min.stp",
- "crash_id": "c3"
-}

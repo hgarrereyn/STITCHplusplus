@@ -1,10 +1,11 @@
 # STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
 [project]
+stitch_version = "0.2.0"
 name = "tinyxml2"
 
 [source]
 git = "https://github.com/leethomason/tinyxml2"
-rev = "7.0.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "8224e427b655b83dae5e2298f1e6919523a78737"   # master HEAD (32 commits after 11.0.0); `stitch build --rev X` overrides it
 
 [build]
 # How stubs compile and link. Paths are inside the image; the library source is at /src.

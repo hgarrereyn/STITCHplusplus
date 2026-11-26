@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. Ruby API: `stitch guide ruby`.
 [project]
+stitch_version = "0.2.0"
 name = "addressable"
 language = "ruby"
 
 [source]
 git = "https://github.com/sporkmonger/addressable"
-rev = "addressable-2.7.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "64a4e8a3ee0570f81137d12cbe062af06ad5344b"   # main HEAD (addressable-2.10.0 + 1); `stitch build --rev X` overrides it
 
 [ruby]
 include = ["/src/lib"]     # gem names (or path prefixes) of the code under test

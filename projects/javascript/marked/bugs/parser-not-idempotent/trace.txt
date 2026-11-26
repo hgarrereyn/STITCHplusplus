@@ -1,6 +1,0 @@
-[stitch] running .stitch/campaigns/main/w0/crashes/60f64e080bca0915.min.stp
-[stitch] #0 check_parser_idempotent(md=Str[9]"* [ ] \n\n*", f=34)
-
-[stitch] CHECK FAILED: parser(tokens) twice gives the same html (node 0)
-    #0 0x0 in Endpoint.fn /project/.stitch/build/app/harness/stubs.js:158
-

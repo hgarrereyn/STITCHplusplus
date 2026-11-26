@@ -32,6 +32,8 @@ import stitch.*;
  * a bug (the 1.21 release fixed a series of such CVEs). Output is capped at 4 MB (bigger results
  * bail, so decompression bombs by design are not reported).
  * Oracles: archives and streams written by the library read back to what was written.
+ * Entry accessors, extra fields, 7z/TAR/ZIP random access, LHA, Pack200, utilities and the
+ * examples (Expander/Archiver) are in Api.java.
  */
 public class Stubs {
     static final int CAP = 4 << 20;
@@ -55,10 +57,7 @@ public class Stubs {
         ArchiveEntry e;
         while ((e = in.getNextEntry()) != null) {
             if (++entries > 5000) Stitch.bail("too many entries");
-            e.getName();
-            e.getSize();
-            e.isDirectory();
-            e.getLastModifiedDate();
+            Api.inspectEntry(e);
             if (in.canReadEntryData(e)) drain(in);
         }
         return entries;
@@ -80,8 +79,7 @@ public class Stubs {
             for (Enumeration<ZipArchiveEntry> en = z.getEntriesInPhysicalOrder(); en.hasMoreElements();) {
                 ZipArchiveEntry e = en.nextElement();
                 if (++n > 5000) Stitch.bail("too many entries");
-                e.getExtraFields(true);
-                e.getUnixMode();
+                Api.inspectEntry(e);
                 if (z.canReadEntryData(e)) {
                     try (InputStream in = z.getInputStream(e)) {
                         if (in != null) drain(in);
@@ -112,8 +110,7 @@ public class Stubs {
             long total = 0;
             while ((e = f.getNextEntry()) != null) {
                 if (++n > 5000) Stitch.bail("too many entries");
-                e.getName();
-                e.getContentMethods();
+                Api.inspectEntry(e);
                 if (e.hasStream()) {
                     int r;
                     while ((r = f.read(buf)) > 0) {
@@ -326,7 +323,6 @@ public class Stubs {
         for (int i = 0; i < names.size(); i++) {
             Stitch.check(Arrays.equals(contents.get(i), a.w.contents.get(i)), "entry contents read back as written");
         }
-        Stitch.set(a, "names_ok", names.equals(expect) ? 1 : 0);
     }
 
     @Endpoint(bailsOn = {IOException.class})

@@ -1,6 +1,0 @@
-[stitch] running .stitch/campaigns/main/w1/crashes/16dc167bd6dcf73a.min.stp
-[stitch] #0 createNumber(text=Str[3,decoded]"07f")
-
-[stitch] CHECK FAILED: isCreatable() true for what createNumber() parses (node 0)
-    #0 0x0 in Stubs.createNumber /project/harness/Stubs.java:145
-

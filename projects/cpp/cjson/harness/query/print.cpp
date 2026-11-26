@@ -25,10 +25,10 @@ void print_buffered(Borrow<Json> v, Range<-8, 512> prebuffer, Bool formatted) {
 STITCH_ENDPOINT(print_buffered);
 
 void print_preallocated(Borrow<Json> v, Range<0, 4096> length, Bool formatted) {
-    char* buf = (char*)malloc((size_t)length + 1);
+    char* buf = (char*)cJSON_malloc((size_t)length + 1);
     bool ok = cJSON_PrintPreallocated(v, buf, (int)length, formatted);
     if (ok) stitch::check(strlen(buf) < (size_t)length, "output fits the buffer");
-    free(buf);
+    cJSON_free(buf);
     stitch::require(ok, "buffer too small");
 }
 STITCH_ENDPOINT(print_preallocated);

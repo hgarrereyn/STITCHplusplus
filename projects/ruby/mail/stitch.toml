@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. Ruby API: `stitch guide ruby`.
 [project]
+stitch_version = "0.2.0"
 name = "mail"
 language = "ruby"
 
 [source]
 git = "https://github.com/mikel/mail"
-rev = "2.7.1"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "d645d7b5b7d03218b0bc8971ef041c991a63f5f7"   # master HEAD (tagged 2.9.1); `stitch build --rev X` overrides it
 
 [ruby]
 include = ["/src/lib"]   # gem names (or path prefixes) of the code under test

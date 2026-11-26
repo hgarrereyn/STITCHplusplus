@@ -1,7 +1,0 @@
-[stitch] running .stitch/campaigns/main/w0/crashes/50da3084c92a35a4.min.stp
-[stitch] #0 from_pairs_set(path=Str[1,decoded]"a", v=7)
-[stitch]     -> ok produced o0.0
-[stitch] #1 unset(o=o0.0, path=Str[21,decoded]"__proto__.constructor")
-
-[stitch] EXCEPTION in unset: prototype pollution: Object.prototype.constructor was deleted
-

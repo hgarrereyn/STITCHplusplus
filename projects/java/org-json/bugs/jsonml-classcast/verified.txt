@@ -1,2 +1,0 @@
-verified: same crash
-ClassCastException | JSONML.toJSONArray JSONML.java:257 | Stubs.fromJsonML (stub)

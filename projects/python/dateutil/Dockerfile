@@ -1,4 +1,5 @@
 ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
-RUN pip install --no-cache-dir setuptools_scm six && cd /src && SETUPTOOLS_SCM_PRETEND_VERSION=2.9.0 pip install --no-cache-dir .
+# hatch-vcs reads the version from git tags, which the source context does not carry
+RUN cd /src && SETUPTOOLS_SCM_PRETEND_VERSION=4.0.0 pip install --no-cache-dir .

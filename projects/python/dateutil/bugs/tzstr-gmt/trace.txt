@@ -1,9 +1,0 @@
-[stitch] running .stitch/campaigns/main/w0/crashes/ab9077d9e0bdc717.min.stp
-[stitch] #0 tzstr(text=Str[3]"GMT")
-
-[stitch] EXCEPTION in tzstr: TypeError: unsupported operand type(s) for *=: 'NoneType' and 'int'
-    #0 0x0 in tzstr.__init__ /opt/venv/lib/python3.12/site-packages/dateutil/tz/tz.py:1092
-    #1 0x0 in _TzFactory.instance /opt/venv/lib/python3.12/site-packages/dateutil/tz/_factories.py:22
-    #2 0x0 in _TzStrFactory.__call__ /opt/venv/lib/python3.12/site-packages/dateutil/tz/_factories.py:69
-    #3 0x0 in tzstr /project/.stitch/build/app/harness/stubs.py:176
-

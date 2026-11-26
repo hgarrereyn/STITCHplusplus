@@ -3,7 +3,19 @@
 static int walk(const XMLNode* n, int depth, int& elems) {
     stitch::check(depth < 5000, "tree depth");
     int count = 1;
-    if (n->ToElement()) elems++;
+    if (const XMLElement* e = n->ToElement()) {
+        elems++;
+        (void)e->ClosingType();
+    }
+    stitch::check(n->GetLineNum() >= 0, "line number is not negative");
+    int child_elems = 0;
+    for (const XMLElement* c = n->FirstChildElement(); c; c = c->NextSiblingElement()) child_elems++;
+    stitch::check(n->ChildElementCount() == child_elems, "ChildElementCount() counts child elements");
+    if (const XMLElement* f = n->FirstChildElement()) {
+        int same = 0;
+        for (const XMLElement* c = n->FirstChildElement(f->Name()); c; c = c->NextSiblingElement(f->Name())) same++;
+        stitch::check(n->ChildElementCount(f->Name()) == same, "ChildElementCount(name) counts elements of that name");
+    }
     const XMLNode* prev = nullptr;
     for (const XMLNode* c = n->FirstChild(); c; c = c->NextSibling()) {
         stitch::check(c->Parent() == n, "child's Parent() is the node");

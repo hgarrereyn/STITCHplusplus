@@ -74,7 +74,7 @@ void set_attr_float(Borrow<Doc> d, Borrow<Node> n, Str<32, XmlName> name, F32 v)
     e->SetAttribute(name.c_str(), (float)v);
     float got = 0;
     stitch::check(e->QueryFloatAttribute(name.c_str(), &got) == XML_SUCCESS, "float attribute queries");
-    // 7.0.0 stores floats with 6 significant digits: only check a relative error (see notes.md).
+    // Floats are written with "%.8g", one digit short of an exact round trip: check a relative error.
     stitch::check(std::fabs(got - (float)v) <= std::fabs((float)v) * 2e-6f, "float attribute round-trips approximately");
 }
 STITCH_ENDPOINT(set_attr_float);

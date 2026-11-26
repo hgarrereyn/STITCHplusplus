@@ -7,16 +7,16 @@ static New<Doc> finish(XMLDocument* d, XMLError e) {
     return r;
 }
 
-New<Doc> new_doc(Bool processEntities, Bool collapse) {
-    XMLDocument* d = new XMLDocument(processEntities, collapse ? COLLAPSE_WHITESPACE : PRESERVE_WHITESPACE);
+New<Doc> new_doc(Bool processEntities, WsMode ws) {
+    XMLDocument* d = new XMLDocument(processEntities, (Whitespace)(int)ws);
     New<Doc> r(d);
     stitch::set(r, "tok", fresh_tok());
     return r;
 }
 STITCH_ENDPOINT(new_doc);
 
-New<Doc> parse(Str<4096, XmlText> text, Bool processEntities, Bool collapse) {
-    XMLDocument* d = new XMLDocument(processEntities, collapse ? COLLAPSE_WHITESPACE : PRESERVE_WHITESPACE);
+New<Doc> parse(Str<4096, XmlText> text, Bool processEntities, WsMode ws) {
+    XMLDocument* d = new XMLDocument(processEntities, (Whitespace)(int)ws);
     return finish(d, d->Parse(text.c_str()));
 }
 STITCH_ENDPOINT(parse);

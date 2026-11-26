@@ -14,4 +14,4 @@ WORKDIR /src
 #   RUN cmake -B build -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF && cmake --build build -j$(nproc)
 #   RUN ./configure --disable-shared && make -j$(nproc)
 # Tools that must not be instrumented: RUN STITCH_NO_INSTR=1 make tool
-RUN cmake -B build -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTS=OFF && cmake --build build -j$(nproc) && ls build
+RUN cmake -B build -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -Dtinyxml2_BUILD_TESTING=OFF && cmake --build build -j$(nproc) && ls build

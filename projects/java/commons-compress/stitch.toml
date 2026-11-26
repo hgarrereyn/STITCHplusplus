@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. Java API: `stitch guide java`.
 [project]
+stitch_version = "0.2.0"
 name = "commons-compress"
 language = "java"
 
 [source]
 git = "https://github.com/apache/commons-compress"
-rev = "rel/1.20"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "a9a89fa47c176552a8a91b522ad58db0fee499ce"   # master HEAD (1.29.0-SNAPSHOT); `stitch build --rev X` overrides it
 
 [java]
 classpath = ["/deps/*"]           # the library and its dependencies (jars the Dockerfile puts in /deps)

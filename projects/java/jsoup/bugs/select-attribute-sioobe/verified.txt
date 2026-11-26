@@ -1,2 +1,0 @@
-verified: same crash
-StringIndexOutOfBoundsException | String.checkBoundsBeginEnd String.java:4855 | String.substring String.java | Evaluator$AttributeKeyPair.<init> Evaluator.java

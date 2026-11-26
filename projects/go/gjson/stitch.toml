@@ -1,11 +1,12 @@
 [project]
+stitch_version = "0.2.0"
 name = "gjson"
 language = "go"
 
 [source]
 git = "https://github.com/tidwall/gjson"
-rev = "v1.6.4"
+rev = "eac321fcfa0d566563f1bd173c91fffbc6c48ec2"
 
 [go]
 module = "github.com/tidwall/gjson"
-instrument = ["github.com/tidwall/gjson"]
+instrument = ["github.com/tidwall/gjson", "github.com/tidwall/match", "github.com/tidwall/pretty"]  # match and pretty implement wildcards and @pretty/@ugly

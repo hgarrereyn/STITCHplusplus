@@ -1,11 +1,12 @@
 # STITCH++ project. Guide: `stitch guide`. JavaScript API: `stitch guide javascript`.
 [project]
+stitch_version = "0.2.0"
 name = "handlebars"
 language = "javascript"
 
 [source]
 git = "https://github.com/handlebars-lang/handlebars.js"
-rev = "v4.7.6"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "45ce15255e0f430ac6d19742b18e316b7539264e"   # 4.x branch HEAD = v4.7.10 (master is the unreleased 5.0 alpha)
 
 [javascript]
 include = ["handlebars"]     # package names of the code under test (instrumented while fuzzing)

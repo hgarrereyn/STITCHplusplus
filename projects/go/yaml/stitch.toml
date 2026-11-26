@@ -1,14 +1,17 @@
 [project]
+stitch_version = "0.2.0"
 name = "go-yaml"
 language = "go"
 
 [source]
-git = "https://github.com/go-yaml/yaml"
-rev = "496545a6307b"
+# github.com/go-yaml/yaml is archived; the YAML organization maintains it as github.com/yaml/go-yaml,
+# whose default branch is the released v4 line (module go.yaml.in/yaml/v4).
+git = "https://github.com/yaml/go-yaml"
+rev = "e04af091e330c186db88e729c90adad6a010897f"
 
 [go]
-module = "gopkg.in/yaml.v3"
-instrument = ["gopkg.in/yaml.v3"]
+module = "go.yaml.in/yaml/v4"
+instrument = ["go.yaml.in/yaml/v4/..."]
 
 [fuzz]
 timeout_ms = 2000

@@ -1,15 +1,16 @@
 # STITCH++ project. Guide: `stitch guide`. C/C++ API: `stitch guide cpp`.
 [project]
+stitch_version = "0.2.0"
 name = "libxml2"
 
 [source]
 git = "https://github.com/GNOME/libxml2"
-rev = "v2.11.0"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "21c8223ac091b81d5914c52eb20b1b063e29cb92"   # master HEAD (139 commits after v2.15.0); `stitch build --rev X` overrides it
 
 [build]
 # How stubs compile and link. Paths are inside the image; the library source is at /src.
-cflags = ["-I/src/include", "-I/src/build"]
-ldflags = ["/src/build/libxml2.a", "-lm"]               # e.g. ["/src/build/libfoo.a"] or ["-L/src/build", "-lfoo"]
+cflags = ["-I/src/include", "-I/src/build", "-Wno-deprecated-declarations"]
+ldflags = ["/src/build/libxml2.a", "-lm"]
 sanitizers = ["address"]   # add "undefined" for UBSan
 
 [fuzz]

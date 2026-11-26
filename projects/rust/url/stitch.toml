@@ -1,10 +1,12 @@
 [project]
+stitch_version = "0.2.0"
 name = "url"
 language = "rust"
 
 [source]
 git = "https://github.com/servo/rust-url"
-rev = "v2.2.0"
+rev = "ad1c66cbff6e318393d872641e30589ff9687b9c"
 
 [rust.dependencies]
-url = { path = "/src/url" }
+url = { path = "/src/url", features = ["serde", "expose_internals"] }
+serde_json = "1"

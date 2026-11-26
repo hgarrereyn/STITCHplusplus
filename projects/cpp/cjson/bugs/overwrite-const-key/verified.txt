@@ -1,2 +1,0 @@
-verified: same crash
-heap-use-after-free READ | get_object_item cJSON.c:1948 | replace_item_in_object cJSON.c | replace_item_in_object object.cpp
