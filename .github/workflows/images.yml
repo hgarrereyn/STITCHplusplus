@@ -1,0 +1,151 @@
+# Docker images: builds amd64 + arm64 and pushes them to ghcr.io/<owner>/:
+#   stitch-engine:<engine hash>               the fuzzer (build outputs only)
+#   stitch-<lang>:<base hash>                 language toolchain + runtime + engine
+#   stitch-<lang>-toolchain:<toolchain hash>  language toolchain + runtime (reproducers)
+# The hashes are the source hashes the CLI computes, so `stitch setup` pulls exactly the images for
+# its version. An image whose hash tag is already published is never rebuilt or pushed again: a
+# hash tag always names the same bytes, so a pinned CLI (or a reproducer) never gets a different
+# image later. Then checks that every image can be pulled without logging in, for both platforms.
+#
+# Called by publish-pypi.yml for a release (with `alias`: also tags stitch-<lang>:<version>), or
+# run by hand from any branch (Actions > images > Run workflow): pushes are harmless, they are keyed
+# by source hash.
+name: images
+on:
+  workflow_call:
+    inputs:
+      alias:
+        description: "also tag each image with this (the release version)"
+        type: string
+        default: ""
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HASH: PYTHONPATH=cli python3 -c 'import sys; from stitch_fuzz import docker as d; print(getattr(d, sys.argv[1])(*sys.argv[2:]))'
+  LANGS: cpp python javascript java go rust ruby swift objc
+
+jobs:
+  engine:
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: engine image
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; E=$(eval "$HASH engine_hash")
+          if docker buildx imagetools inspect "$R/stitch-engine:$E" >/dev/null 2>&1; then
+            echo "stitch-engine:$E is already published"; exit 0
+          fi
+          docker buildx build -f engine/Dockerfile \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            -t "$R/stitch-engine:$E-${{ matrix.arch }}" --push engine
+
+  languages:
+    needs: engine
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [cpp, python, javascript, java, go, rust, ruby, swift, objc]
+        arch: [amd64, arm64]
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    name: languages (${{ matrix.lang }}, ${{ matrix.arch }})
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: toolchain and base images
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}; L=${{ matrix.lang }}; A=${{ matrix.arch }}
+          E=$(eval "$HASH engine_hash"); T=$(eval "$HASH toolchain_hash $L"); B=$(eval "$HASH base_hash $L")
+          label=org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          published() { docker buildx imagetools inspect "$1" >/dev/null 2>&1 && echo "$1 is already published"; }
+          # the build context as the CLI assembles it (Swift, Objective-C: + the C/C++ runtime)
+          C=$(PYTHONPATH=cli STITCH_CACHE=/tmp/stitch-cache python3 -c "from stitch_fuzz import docker; print(docker.language_context('$L'))")
+          published "$R/stitch-$L-toolchain:$T" || docker buildx build -f $C/Dockerfile --target toolchain --label $label \
+            -t "$R/stitch-$L-toolchain:$T-$A" --push $C
+          published "$R/stitch-$L:$B" || docker buildx build -f $C/Dockerfile --target base --label $label \
+            --build-arg "STITCH_ENGINE=$R/stitch-engine:$E-$A" \
+            -t "$R/stitch-$L:$B-$A" --push $C
+
+  manifests:
+    needs: languages
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: multi-arch tags (+ the alias)
+        env:
+          ALIAS: ${{ inputs.alias }}
+        run: |
+          R=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
+          image() {  # image NAME HASH
+            if ! docker buildx imagetools inspect "$R/$1:$2" >/dev/null 2>&1; then
+              docker buildx imagetools create -t "$R/$1:$2" "$R/$1:$2-amd64" "$R/$1:$2-arm64"
+            fi
+            if [ -n "$ALIAS" ]; then docker buildx imagetools create -t "$R/$1:$ALIAS" "$R/$1:$2"; fi
+          }
+          image stitch-engine "$(eval "$HASH engine_hash")"
+          for L in $LANGS; do
+            image "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")"
+            image "stitch-$L" "$(eval "$HASH base_hash $L")"
+          done
+
+  public:
+    needs: manifests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # no docker login: this is what a user sees
+      - name: every image is public and multi-arch
+        run: |
+          O=${GITHUB_REPOSITORY_OWNER,,}; R=ghcr.io/$O; bad=""
+          check() {  # check NAME HASH
+            p=$(docker buildx imagetools inspect --raw "$R/$1:$2" 2>/dev/null \
+                | python3 -c 'import json,sys; print(" ".join(sorted(m["platform"]["architecture"] for m in json.load(sys.stdin).get("manifests",[]) if m.get("platform",{}).get("os")=="linux")))' 2>/dev/null)
+            [ "$p" = "amd64 arm64" ] || { echo "::error::$R/$1:$2: not pullable anonymously or not amd64+arm64 (got '$p')"; bad="$bad $1"; }
+          }
+          check stitch-engine "$(eval "$HASH engine_hash")"
+          for L in $LANGS; do
+            check "stitch-$L-toolchain" "$(eval "$HASH toolchain_hash $L")"
+            check "stitch-$L" "$(eval "$HASH base_hash $L")"
+          done
+          if [ -n "$bad" ]; then
+            echo "New GHCR packages are private. Make each one public, then re-run the failed jobs:"
+            for n in $bad; do echo "  https://github.com/users/$O/packages/container/$n/settings  (Danger Zone > Change visibility)"; done
+            exit 1
+          fi

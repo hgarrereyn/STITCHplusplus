@@ -1,0 +1,91 @@
+# Test upload to TestPyPI (test.pypi.org), run by hand from any branch: Actions > publish-testpypi >
+# Run workflow. Rehearses the PyPI upload without touching PyPI or the images.
+#
+# By default it uploads <version>.dev<run number> (TestPyPI never accepts the same version twice):
+#   pip install --pre -i https://test.pypi.org/simple/ stitch-fuzz==0.2.0.dev7
+# With "exact version" off, it uploads the version in cli/stitch_fuzz/__init__.py as it is.
+# A dev build is a different version from what projects pin: run it with STITCH_ANY_VERSION=1.
+#
+# Trusted publishing: TestPyPI trusts this workflow file (publish-testpypi.yml), environment "testpypi".
+name: publish-testpypi
+on:
+  workflow_dispatch:
+    inputs:
+      dev:
+        description: "upload as <version>.dev<run number> (off: the exact version in __init__.py)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: version
+        id: v
+        run: |
+          v=$(PYTHONPATH=cli python3 -c 'from stitch_fuzz import __version__; print(__version__)')
+          if [ "${{ inputs.dev }}" = true ]; then
+            v="$v.dev${{ github.run_number }}"
+            sed -i "s/^__version__ = .*/__version__ = \"$v\"/" cli/stitch_fuzz/__init__.py
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "uploading stitch-fuzz $v"
+      - run: python3 -m pip install build && python3 -m build
+      - name: the wheel installs and runs
+        working-directory: /tmp
+        run: |
+          python3 -m venv /tmp/venv && /tmp/venv/bin/pip install $GITHUB_WORKSPACE/dist/*.whl
+          [ "$(/tmp/venv/bin/stitch --version)" = "stitch-fuzz ${{ steps.v.outputs.version }}" ]
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/stitch-fuzz/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write   # trusted publishing: TestPyPI trusts this workflow file (publish-testpypi.yml)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true   # a re-run of the same run uploads the same version again
+
+  install:
+    needs: [build, testpypi]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install from TestPyPI and run it
+        working-directory: /tmp
+        run: |
+          v=${{ needs.build.outputs.version }}
+          python3 -m venv /tmp/venv
+          # the index can take a minute to list a new upload
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            /tmp/venv/bin/pip install -q --pre --no-cache-dir -i https://test.pypi.org/simple/ "stitch-fuzz==$v" && break
+            [ $i = 10 ] && { echo "::error::stitch-fuzz==$v is not installable from TestPyPI"; exit 1; }
+            sleep 30
+          done
+          [ "$(/tmp/venv/bin/stitch --version)" = "stitch-fuzz $v" ]
+          /tmp/venv/bin/stitch guide > /dev/null
+          /tmp/venv/bin/stitch changelog --all | head -5
