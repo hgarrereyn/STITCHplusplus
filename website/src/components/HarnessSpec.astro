@@ -112,11 +112,21 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
     }
 
     // Place each shape beside its endpoint's line; add space between lines where shapes would touch.
-    // Narrow screens put each shape above its line instead.
+    // The gutter is as wide as the widest shape as drawn (with its labels), so the font a device
+    // ends up using can never push a label into the code. Where the code would be left too narrow,
+    // each shape goes above its line instead.
+    const MIN_CODE = 384;
     function layout() {
       const block = spec!.querySelector<HTMLElement>(`.spec-block[data-for="${currentLang()}"]`);
-      if (!block) return;
-      const above = block.clientWidth < 520;
+      if (!block || !block.clientWidth) return;
+      let widest = 0;
+      for (const g of block.querySelectorAll<SVGGElement>(".spec-glyph svg > g")) {
+        const box = g.getBBox();
+        widest = Math.max(widest, box.x + box.width);
+      }
+      const gutter = Math.ceil(widest) + 10;
+      block.style.setProperty("--gutter", `${gutter}px`);
+      const above = block.clientWidth - gutter < MIN_CODE;
       block.classList.toggle("above", above);
       const code = block.querySelector<HTMLElement>(".spec-code")!;
       const lines = [...block.querySelectorAll<HTMLElement>(".ec-line")];
@@ -146,6 +156,9 @@ const marks = Object.fromEntries(blocks.map((b) => [b.lang, b.marks]));
     const relayout = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; layout(); }); } };
     new ResizeObserver(relayout).observe(spec);
     onLang(() => { hide(); relayout(); });
+    // web fonts change the width of the shapes' labels and where the code wraps
+    document.fonts?.ready.then(relayout);
+    document.fonts?.addEventListener?.("loadingdone", relayout);
     layout();
 
     // Lines of the endpoint a shape stands for: its line, annotations above, and the block below.

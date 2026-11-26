@@ -83,8 +83,9 @@ Reproducers from `stitch repro` and `stitch report` are frozen: they run with Do
 images of the release that made them, whatever release is installed later
 ([reproducers.md](reproducers.md)). Every key of `stitch.toml`: [stitch-toml.md](stitch-toml.md).
 
-Offline, `stitch guide` prints a workflow guide and `stitch guide <lang>` the syntax for one
-language. Pass `--json` to any command whose output you parse.
+Offline, `stitch guide` prints this file and `stitch guide <name>` any other file of the guide
+(`stitch guide stubs`, `stitch guide python`, ...). Pass `--json` to any command whose output you
+parse.
 
 ## Workflow
 
@@ -130,6 +131,9 @@ Copy this checklist and keep it updated:
    - **Upstream:** crashes / fixed at HEAD (`stitch exec <id> --rev HEAD`)
    - **Introduced by:** <commit> (`stitch bisect <id>`), if known
    - **Reproducer:** <path to the minimized standalone file>
+   - **For the maintainers:** <path to the `stitch report <id>` folder> (frozen: Dockerfile, file,
+     `run.sh`, `ISSUE.md`; [reproducers.md](reproducers.md))
+   - **STITCH++:** <the project's `stitch_version`>
 
    <two or three sentences: what the library does wrong, and why the calls are valid use of the API>
 

@@ -4,9 +4,9 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["website/**", "skill/**", "docs/cli.md", ".github/workflows/docs.yml"]
+    paths: ["website/**", "skill/**", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["website/**", "skill/**", "docs/cli.md", ".github/workflows/docs.yml"]
+    paths: ["website/**", "skill/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:

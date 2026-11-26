@@ -43,7 +43,7 @@ jobs:
           [ "$(/tmp/venv/bin/stitch --version)" = "stitch-fuzz $v" ] || { echo "wheel version != __version__ $v"; exit 1; }
           /tmp/venv/bin/stitch --help > /dev/null
           /tmp/venv/bin/stitch guide > /dev/null
-          for t in cpp python javascript java go rust ruby swift objc reproducers stitch-toml; do
+          for t in stubs probe triage reproducers coverage stitch-toml cli cpp python javascript java go rust ruby swift objc; do
             /tmp/venv/bin/stitch guide $t > /dev/null || { echo "stitch guide $t failed"; exit 1; }
           done
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md

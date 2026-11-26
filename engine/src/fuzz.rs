@@ -290,7 +290,7 @@ pub fn run(cfg: FuzzConfig) -> Result<(), Error> {
         }
     });
     let mut mgr = SimpleEventManager::new(monitor);
-    let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, QueueScheduler::new());
+    let scheduler = crate::sched::LazyCull::new(IndexesLenTimeMinimizerScheduler::new(&edges_observer, QueueScheduler::new()));
     let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
 
     if crate::worker::active() {

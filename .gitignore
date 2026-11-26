@@ -13,3 +13,4 @@ website/.astro/
 website/src/content/docs/reference/languages/
 website/src/content/docs/reference/cli.md
 website/src/content/docs/reference/stitch-toml.md
+website/src/content/docs/agents/

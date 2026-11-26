@@ -6,7 +6,44 @@ use crate::program::Program;
 use libafl::executors::ExitKind;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Mutex;
+
+/// FxHash (rustc's hasher): the statistics maps are keyed by small integers and updated on every
+/// execution, where SipHash's DoS resistance buys nothing.
+#[derive(Default, Clone, Copy)]
+pub struct FxHasher(u64);
+
+impl Hasher for FxHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    #[inline]
+    fn write_u8(&mut self, i: u8) {
+        self.write_u64(i as u64);
+    }
+    #[inline]
+    fn write_u32(&mut self, i: u32) {
+        self.write_u64(i as u64);
+    }
+    #[inline]
+    fn write_u64(&mut self, i: u64) {
+        self.0 = (self.0.rotate_left(5) ^ i).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    #[inline]
+    fn write_usize(&mut self, i: usize) {
+        self.write_u64(i as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+pub type FxMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Default, Clone, Debug)]
 pub struct EpStats {
@@ -23,10 +60,10 @@ pub struct EpStats {
 pub struct Health {
     pub ep: Vec<EpStats>,
     /// (consumer endpoint, input slot, endpoint that last touched the object) -> (calls, ok)
-    pub pairs: HashMap<(u32, u8, u32), (u64, u64)>,
-    pub reasons: HashMap<(u32, u32), u64>,
-    pub miss: HashMap<(u32, u32), u64>,
-    pub strings: HashMap<u32, String>,
+    pub pairs: FxMap<(u32, u8, u32), (u64, u64)>,
+    pub reasons: FxMap<(u32, u32), u64>,
+    pub miss: FxMap<(u32, u32), u64>,
+    pub strings: FxMap<u32, String>,
     pub execs: u64,
     pub crashes: u64,
     pub timeouts: u64,
@@ -69,9 +106,12 @@ impl Health {
     pub fn record(&mut self, prog: &Program, exit: &ExitKind, edges: &[u8]) {
         let r = ffi::results();
         self.execs += 1;
-        for (h, s) in ffi::result_strings(r) {
-            self.strings.entry(h).or_insert(s);
-        }
+        let strings = &mut self.strings;
+        ffi::for_each_result_string(r, |h, b| {
+            if !strings.contains_key(&h) {
+                strings.insert(h, String::from_utf8_lossy(b).into_owned());
+            }
+        });
         let crashed = matches!(exit, ExitKind::Crash | ExitKind::Oom);
         let timed_out = matches!(exit, ExitKind::Timeout);
         if crashed {
@@ -80,7 +120,8 @@ impl Health {
         if timed_out {
             self.timeouts += 1;
         }
-        let mut last_touch: HashMap<(u32, u8), u32> = HashMap::new();
+        // object -> node that last used it (programs are short: a list beats a hash map)
+        let mut last_touch: Vec<((u32, u8), u32)> = Vec::with_capacity(16);
         let n = prog.nodes.len().min(ffi::MAX_NODES);
         let mut any_bail = false;
         for i in 0..n {
@@ -113,7 +154,7 @@ impl Health {
                         }
                     }
                     for (k, &obj) in node.inputs.iter().enumerate() {
-                        let toucher = *last_touch.get(&obj).unwrap_or(&obj.0);
+                        let toucher = last_touch.iter().rev().find(|(o, _)| *o == obj).map(|x| x.1).unwrap_or(obj.0);
                         let pe = prog.nodes[toucher as usize].ep;
                         let e = self.pairs.entry((ep as u32, k as u8, pe)).or_default();
                         e.0 += 1;
@@ -127,7 +168,7 @@ impl Health {
                 _ => {}
             }
             for &obj in &node.inputs {
-                last_touch.insert(obj, i as u32);
+                last_touch.push((obj, i as u32));
             }
         }
         if any_bail {

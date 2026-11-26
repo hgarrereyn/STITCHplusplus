@@ -10,7 +10,7 @@ directory below its `stitch.toml`), or pass `-C <dir>`. Add `--json` for machine
 |---|---|
 | `stitch setup [--lang L ...]` | Check Docker and get the language images (`cpp` by default; `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift`, `objc`, or `all`). Pulls prebuilt images when they exist, and otherwise builds them. |
 | `stitch skill [DIR] [--user]` | Install the agent skill into `./.claude/skills` (or `DIR`, or `~/.claude/skills`). |
-| `stitch guide [TOPIC]` | Print the workflow guide, or a language's harness API (`cpp`, `python`, ...), `reproducers`, or `stitch-toml` (every key of `stitch.toml`). |
+| `stitch guide [TOPIC]` | Print the agent guide: `overview.md` by default, or another of its files (`stubs`, `probe`, `triage`, `reproducers`, `coverage`, `stitch-toml` (every key of `stitch.toml`), `cli`, or a language: `cpp`, `python`, ...). |
 | `stitch changelog [--since V] [--all]` | What changed in each release. In a project: the releases after its pinned `stitch_version`. |
 | `stitch upgrade` | Pin the project (`stitch.toml` `stitch_version`) to the installed release, after showing what changed. |
 
@@ -56,14 +56,32 @@ say which). Use `probe:c3` or `--campaign NAME` for another campaign, or pass a 
 | `stitch try FILE [--rev REV] [--show]` | Build and run an edited standalone file and check that it still fails the same way. |
 | `stitch report CRASH\|FILE [-o DIR] [--no-run]` | Package a shrunk standalone file for the library's maintainers: `Dockerfile`, the file, `run.sh` and `ISSUE.md`. Verified from scratch. |
 
-See [`skill/stitch/reference/reproducers.md`](../skill/stitch/reference/reproducers.md) for the
-`write` / `try` / `report` workflow.
+See [reproducers.md](reproducers.md) (`stitch guide reproducers`) for the `write` / `try` / `report` workflow.
+
+## Versions and local code
+
+- `stitch build --rev v1.7.17` builds another version of the library (cached per commit).
+- `[source] path = "../lib"` in `stitch.toml` fuzzes a local checkout, uncommitted changes included.
+  If it is a git checkout, `stitch bisect` walks its history.
+- `[project] stitch_version` in `stitch.toml` pins the STITCH++ release; other CLI versions refuse
+  the project. `stitch changelog` and `stitch upgrade` move it to a newer release
+  ([stitch-toml.md](stitch-toml.md)).
+
+## Files
+
+| Path | Contents |
+|---|---|
+| `.stitch/build/manifest.json` | the stubs as the fuzzer sees them (inputs, outputs, parameters) |
+| `.stitch/campaigns/<name>/` | corpus, crashes, stats |
+| `.stitch/cov/<campaign>/` | `lcov.info`, `html/`, `summary.json`, `report.txt` |
+| `.stitch/repros/`, `.stitch/standalone/`, `.stitch/reports/`, `.stitch/bisect/` | reproducers and bisect results |
+| `~/.cache/stitch/logs/` | image build logs |
 
 ## Development
 
-Run `bin/stitch` from a checkout, or `pip install -e .`. Tests are in [`tests/`](../tests/):
+Run `bin/stitch` from a checkout, or `pip install -e .`. Tests are in [`tests/`](https://github.com/hgarrereyn/STITCHplusplus/tree/main/tests):
 `smoke.sh` runs the whole C/C++ pipeline (`STITCH_SMOKE_SECS` sets its fuzzing time), `languages.py` runs every command for each language.
-CI (`.github/workflows/ci.yml`) runs both on every pull request, one job per language, plus a package
+CI ([`.github/workflows/ci.yml`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/.github/workflows/ci.yml)) runs both on every pull request, one job per language, plus a package
 check; the `ci-ok` job passes only when all of them do.
 Pushing a `vX.Y.Z` tag publishes the images to GHCR and the package to PyPI
-(`.github/workflows/release.yml`).
+([`.github/workflows/release.yml`](https://github.com/hgarrereyn/STITCHplusplus/blob/main/.github/workflows/release.yml)).

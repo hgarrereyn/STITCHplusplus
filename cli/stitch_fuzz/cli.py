@@ -899,8 +899,10 @@ def cmd_shell(a):
 
 
 SKILL = STITCH_HOME / "skill" / "stitch"
-GUIDES = {"": "SKILL.md", "reproducers": "reference/reproducers.md", "stitch-toml": "reference/stitch-toml.md",
-          **{lang: f"reference/{lang}.md" for lang in ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
+# The agent guide: skill/stitch/reference/<topic>.md (the docs site serves the same files).
+GUIDES = {"": "reference/overview.md",
+          **{t: f"reference/{t}.md" for t in ("stubs", "probe", "triage", "reproducers", "coverage", "stitch-toml", "cli",
+                                              "cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
 
 
 def cmd_guide(a):
@@ -914,10 +916,7 @@ def cmd_guide(a):
         topic = normalize_language(topic)   # "js" -> "javascript", "c++" -> "cpp"
     if topic not in GUIDES:
         die(f"unknown topic '{topic}' (one of: {', '.join(t for t in GUIDES if t)})")
-    text = (SKILL / GUIDES[topic]).read_text()
-    if text.startswith("---\n"):  # skill frontmatter
-        text = text.split("\n---\n", 1)[1].lstrip("\n")
-    print(text)
+    print((SKILL / GUIDES[topic]).read_text())
 
 
 def install_skill(dest: Path) -> Path:
@@ -1403,8 +1402,8 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, objc, reproducers, stitch-toml)")
-    s.add_argument("topic", nargs="?", help="a language: its harness API (api is cpp); reproducers: stitch write / try")
+    s = sp.add_parser("guide", help="print the agent guide (topics: stubs, probe, triage, reproducers, coverage, stitch-toml, cli, or a language)")
+    s.add_argument("topic", nargs="?", help="a file of the guide, or a language: its harness API (api is cpp); default: the overview")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)
 
