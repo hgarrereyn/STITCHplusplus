@@ -1,5 +1,11 @@
 //! STITCH++ engine. C/C++ harnesses link it in-process (`main` calls `stitch_engine_main`); the
 //! `stitch-engine` binary drives other languages through the worker protocol (worker.rs).
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+mod alloc;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[global_allocator]
+static ENGINE_ALLOC: alloc::EngineAlloc = alloc::EngineAlloc;
+
 pub mod cmplog;
 pub mod data;
 pub mod ffi;
