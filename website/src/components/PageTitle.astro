@@ -7,3 +7,23 @@ const { entry } = Astro.locals.starlightRoute;
 
 <Default><slot /></Default>
 {entry.data.languages && <LangSelect />}
+{
+  entry.data.raw && (
+    <p class="raw-link">
+      This page is part of the agent guide.{" "}
+      <a href={entry.data.raw}>View the raw Markdown</a>
+      {" "}that agents read.
+    </p>
+  )
+}
+
+<style>
+  .raw-link {
+    margin-top: 0.75rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .raw-link a {
+    color: var(--sl-color-text-accent);
+  }
+</style>

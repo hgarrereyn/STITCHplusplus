@@ -4,6 +4,6 @@ import { agentGuide } from "../agent-guide";
 
 export const GET: APIRoute = ({ site }) => {
   const base = new URL(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/agents/`, site).href;
-  const text = agentGuide().overview.replace(/\]\((\w+)\.md\)/g, `](${base}$1.md)`);
+  const text = agentGuide().overview.replace(/\]\((\w+)\.raw\.md\)/g, `](${base}$1.raw.md)`);
   return new Response(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 };

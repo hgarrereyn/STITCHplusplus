@@ -5,7 +5,7 @@ endpoints, generates arguments, and finds crashes, exceptions, and failed checks
 
 > [!NOTE]
 > **Are you an agent?** Read this instead:
-> https://hgarrereyn.github.io/STITCHplusplus/agents/overview.md
+> https://hgarrereyn.github.io/STITCHplusplus/agents/overview.raw.md
 
 **[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)** ·
 [Tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) ·

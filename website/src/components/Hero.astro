@@ -4,7 +4,7 @@
 import { LANGUAGES } from "./languages";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const agentGuide = new URL(`${base}/agents/overview.md`, Astro.site).href;
+const agentGuide = new URL(`${base}/agents/overview.raw.md`, Astro.site).href;
 const PAPER = "https://doi.org/10.1145/3830454.3846663";
 const BIBTEX = `@inproceedings{green2026stitching,
   title     = {Automatic, Expressive, and Scalable Fuzzing with Stitching},
@@ -46,7 +46,7 @@ const words = order.map((id) => [id, LANGUAGES.find(([l]) => l === id)![1]]);
       <path d="M9.5 15h5" /><path d="M2.5 10.5v3M21.5 10.5v3" />
     </svg>
     <span>Are you an agent? Read this instead:</span>
-    <a href={`${base}/agents/overview.md`}>{agentGuide}</a>
+    <a href={agentGuide}>{agentGuide}</a>
   </p>
 
   <div class="hero-actions">
