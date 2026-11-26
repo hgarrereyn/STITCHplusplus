@@ -94,6 +94,12 @@ pub fn cmplog() -> &'static mut Cmplog {
 /// Parse the string table written by the child for this execution.
 pub fn result_strings(r: &Results) -> Vec<(u32, String)> {
     let mut out = vec![];
+    for_each_result_string(r, |h, b| out.push((h, String::from_utf8_lossy(b).into_owned())));
+    out
+}
+
+/// Visit the string table without copying it (it is re-sent with every execution).
+pub fn for_each_result_string(r: &Results, mut f: impl FnMut(u32, &[u8])) {
     let used = (r.str_used as usize).min(STRINGS_SIZE);
     let mut off = 0;
     while off + 6 <= used {
@@ -102,23 +108,25 @@ pub fn result_strings(r: &Results) -> Vec<(u32, String)> {
         if off + 6 + l > used {
             break;
         }
-        out.push((h, String::from_utf8_lossy(&r.strings[off + 6..off + 6 + l]).into_owned()));
+        f(h, &r.strings[off + 6..off + 6 + l]);
         off += 6 + l;
     }
-    out
 }
 
+// Output buffers below are not zero-filled: the runtime writes the first n entries and returns n
+// (at most the capacity), and only those are exposed.
+
 pub fn decode(dt: usize, choices: &[u8], cap: usize) -> Vec<u8> {
-    let mut out = vec![0u8; cap.max(1)];
+    let mut out = Vec::with_capacity(cap.max(1));
     let n = unsafe { stitch_decode(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), cap) };
-    out.truncate(n);
+    unsafe { out.set_len(n.min(cap)) };
     out
 }
 
 pub fn generate(dt: usize, seed: u64, prefix: &[u8], cap: usize) -> Vec<u8> {
-    let mut out = vec![0u8; cap.max(1)];
+    let mut out = Vec::with_capacity(cap.max(1));
     let n = unsafe { stitch_generate(dt as c_int, seed, prefix.as_ptr(), prefix.len(), out.as_mut_ptr(), cap) };
-    out.truncate(n);
+    unsafe { out.set_len(n.min(cap)) };
     out
 }
 
@@ -130,8 +138,9 @@ pub fn dict_add(dt: usize, tok: &[u8]) {
 
 /// (prefix offset, prefix width, content length) of every string drawn by the decoder.
 pub fn decode_spans(dt: usize, choices: &[u8]) -> Vec<(usize, usize, usize)> {
-    let mut out = vec![0u32; 3 * 512];
-    let k = unsafe { stitch_decode_spans(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 512) };
+    let mut out: Vec<u32> = Vec::with_capacity(3 * 512);
+    let k = unsafe { stitch_decode_spans(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 512) }.min(512);
+    unsafe { out.set_len(3 * k) };
     (0..k).map(|i| (out[3 * i] as usize, out[3 * i + 1] as usize, out[3 * i + 2] as usize)).collect()
 }
 
@@ -149,8 +158,9 @@ pub struct Item {
 }
 
 pub fn decode_items(dt: usize, choices: &[u8]) -> Vec<Item> {
-    let mut out = vec![0u32; 4 * 1024];
-    let k = unsafe { stitch_decode_items(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 1024) };
+    let mut out: Vec<u32> = Vec::with_capacity(4 * 1024);
+    let k = unsafe { stitch_decode_items(dt as c_int, choices.as_ptr(), choices.len(), out.as_mut_ptr(), 1024) }.min(1024);
+    unsafe { out.set_len(4 * k) };
     (0..k)
         .map(|i| Item { site: out[4 * i], inst: out[4 * i + 1], start: out[4 * i + 2] as usize, end: out[4 * i + 3] as usize })
         .filter(|it| it.start <= it.end && it.end <= choices.len())

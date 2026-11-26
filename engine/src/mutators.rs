@@ -272,17 +272,22 @@ impl StitchMutator {
     where
         S: HasRand + HasMaxSize + HasMetadata + HasCorpus<Program> + HasCurrentCorpusId,
     {
-        let cmps: Option<NodeCmps> = match state.current_corpus_id()? {
-            Some(id) => state.corpus().get(id)?.borrow().metadata_map().get::<NodeCmps>().cloned(),
-            None => None,
+        // read the testcase's comparisons in place (cloning them all per mutation was costly)
+        let Some(id) = state.current_corpus_id()? else { return Ok(false) };
+        let nodes: Vec<u32> = {
+            let tc = state.corpus().get(id)?.borrow();
+            let Some(cmps) = tc.metadata_map().get::<NodeCmps>() else { return Ok(false) };
+            cmps.per_node.keys().copied().filter(|&n| (n as usize) < p.nodes.len()).collect()
         };
-        let Some(cmps) = cmps else { return Ok(false) };
-        let nodes: Vec<u32> = cmps.per_node.keys().copied().filter(|&n| (n as usize) < p.nodes.len()).collect();
         if nodes.is_empty() {
             return Ok(false);
         }
         let node = nodes[below(state.rand_mut(), nodes.len())];
-        let list: Vec<_> = cmps.per_node[&node].iter().map(|c| c.to_libafl()).collect();
+        let list: Vec<_> = {
+            let tc = state.corpus().get(id)?.borrow();
+            let cmps = tc.metadata_map().get::<NodeCmps>().expect("checked above");
+            cmps.per_node[&node].iter().map(|c| c.to_libafl()).collect()
+        };
         state.add_metadata(CmpValuesMetadata { list });
         // candidate buffers: the comparing node's params first, then any node's
         let mut sites: Vec<(usize, usize)> = (0..p.nodes[node as usize].params.len()).map(|k| (node as usize, k)).collect();
@@ -316,23 +321,25 @@ impl StitchMutator {
         S: HasRand + HasCorpus<Program> + HasCurrentCorpusId,
     {
         let m = manifest::get();
-        let cmps: Option<NodeCmps> = match state.current_corpus_id()? {
-            Some(id) => state.corpus().get(id)?.borrow().metadata_map().get::<NodeCmps>().cloned(),
-            None => None,
+        // count the candidate pairs, draw one, and copy only that one out of the testcase
+        let Some(id) = state.current_corpus_id()? else { return Ok(false) };
+        let usable = |r: &&crate::cmplog::CmpRec| r.kind == 1 && !r.a.is_empty() && !r.b.is_empty() && r.a != r.b;
+        let n = {
+            let tc = state.corpus().get(id)?.borrow();
+            let Some(cmps) = tc.metadata_map().get::<NodeCmps>() else { return Ok(false) };
+            cmps.per_node.values().flatten().filter(usable).count()
         };
-        let Some(cmps) = cmps else { return Ok(false) };
-        let pairs: Vec<(&Vec<u8>, &Vec<u8>)> = cmps
-            .per_node
-            .values()
-            .flatten()
-            .filter(|r| r.kind == 1 && !r.a.is_empty() && !r.b.is_empty() && r.a != r.b)
-            .map(|r| (&r.a, &r.b))
-            .collect();
-        if pairs.is_empty() {
+        if n == 0 {
             return Ok(false);
         }
-        let (a, b) = pairs[below(state.rand_mut(), pairs.len())];
-        let (from, to) = if below(state.rand_mut(), 2) == 0 { (a, b) } else { (b, a) };
+        let k = below(state.rand_mut(), n);
+        let (a, b) = {
+            let tc = state.corpus().get(id)?.borrow();
+            let cmps = tc.metadata_map().get::<NodeCmps>().expect("checked above");
+            let r = cmps.per_node.values().flatten().filter(usable).nth(k).expect("counted above");
+            (r.a.clone(), r.b.clone())
+        };
+        let (from, to) = if below(state.rand_mut(), 2) == 0 { (&a, &b) } else { (&b, &a) };
         let mut sites = vec![];
         for (i, n) in p.nodes.iter().enumerate() {
             let e = &m.endpoints[n.ep as usize];
