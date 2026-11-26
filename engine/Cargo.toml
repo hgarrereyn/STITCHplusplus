@@ -8,7 +8,7 @@ description = "STITCH++ fuzzing engine (LibAFL)"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-libafl = { version = "0.16.1", default-features = false, features = ["std", "derive", "fork", "serdeany_autoreg", "rand_trait", "prelude"] }
+libafl = { version = "0.16.1", default-features = false, features = ["std", "derive", "fork", "serdeany_autoreg", "rand_trait", "prelude", "simd"] }
 libafl_bolts = { version = "0.16.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
