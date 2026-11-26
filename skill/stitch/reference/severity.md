@@ -151,30 +151,6 @@ With no security angle, rate the bug for the users it hits:
 Silent beats loud: a crash gets noticed and worked around, and data dropped without an error
 does not.
 
-## Examples
-
-Findings from `projects/`, rated with this guide:
-
-| Finding | Label | Why |
-|---|---|---|
-| jsoup `Cleaner` XSS with `preserveRelativeLinks` (CVE-2022-36033) | `security P1` | sanitizer bypass (P0), lowered for a non-default option |
-| lodash `set` / `zipObjectDeep` prototype pollution | `security P1` | prototype pollution from a path string the attacker supplies |
-| handlebars template text breaking out of generated JS (CVE-2021-23369) | `security P1` | code execution (P0), lowered: the attacker must control the template |
-| x/net/html text in svg/math rendered unescaped (CVE-2023-3978) | `security P1` | escaping bypass (P0), lowered: matters only when an app trusts parse-then-render to be safe |
-| semver ReDoS in `Range` (CVE-2022-25883) | `security P2` | data-triggered DoS; ranges come from untrusted package manifests |
-| regex compile blowup (CVE-2022-24713) | `security P2` | DoS; not lowered, since the library promises untrusted patterns are safe |
-| CryptoSwift GCM/CCM decrypt of a short ciphertext traps | `security P2` | crafted data on the main path kills the process |
-| go-yaml nil dereference in the parser (CVE-2022-28948) | `security P2` | data-triggered panic in `Unmarshal` |
-| smallvec `insert_many` heap overflow (RUSTSEC-2021-0003) | `security P2` | memory write (P0), lowered twice: the trigger needs a misbehaving iterator, and `insert_many` is uncommon |
-| cJSON `sort_list` use-after-free WRITE | `security P2` | uncontrolled write (P1), lowered: needs `GeneratePatches` then `ApplyPatches` on the same object |
-| quickjs heap overread in `js_parse_for_in_of` under a memory limit | `security P2` | read reachable by a sandboxed script (P1), lowered: needs an allocation to fail at an exact point |
-| rack `MediaType.params(";")` `NoMethodError` | `functional P3` | network-reachable, but it fails only the attacker's own request |
-| cJSON `decode_pointer_inplace` mis-decodes `~1` | `functional P2` | patches the library generated itself fail on keys containing `/` |
-| BurntSushi/toml drops scalars in a mixed array | `functional P2` | silent data loss on uncommon but valid input |
-| tinyxml2 `InsertAfterChild` null write | `functional P2` | an ordinary call crashes; no attacker controls the call order |
-| sqlparse `format` not idempotent | `nit` | the output is still valid |
-| libyaml asserts when `yaml_parser_load` is called again after an error | `nit` | misuse the docs do not forbid explicitly |
-
 ## In the report
 
 Add three lines to each library bug in the report (step 9 of the [overview](overview.md)):
