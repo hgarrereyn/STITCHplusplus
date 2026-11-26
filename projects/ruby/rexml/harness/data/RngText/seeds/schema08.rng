@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<element name="A" xmlns="http://relaxng.org/ns/structure/1.0">
+  <choice>
+    <attribute name="X"/>
+    <attribute name="Y"/>
+  </choice>
+</element>

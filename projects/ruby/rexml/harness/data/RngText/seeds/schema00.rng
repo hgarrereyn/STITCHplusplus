@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<element name="A" xmlns="http://relaxng.org/ns/structure/1.0">
+  <element name="B">
+    <element name="C">
+      <attribute name="X"/>
+      <zeroOrMore>
+        <element name="E">
+          <empty/>
+        </element>
+      </zeroOrMore>
+    </element>
+    <element name="D">
+      <empty/>
+    </element>
+  </element>
+</element>

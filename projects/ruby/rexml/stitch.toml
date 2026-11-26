@@ -6,7 +6,7 @@ language = "ruby"
 
 [source]
 git = "https://github.com/ruby/rexml"
-rev = "v3.2.5"   # branch, tag or commit; `stitch build --rev X` overrides it
+rev = "e38f44fb7b183040e32acf26a7b82b999c316f1a"   # master HEAD (v3.4.4 + 63); `stitch build --rev X` overrides it
 
 [ruby]
 include = ["/src/lib"]     # gem names (or path prefixes) of the code under test
