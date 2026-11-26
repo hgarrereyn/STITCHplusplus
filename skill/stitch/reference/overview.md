@@ -56,8 +56,9 @@ pip install stitch-fuzz
 stitch setup --lang <lang>    # cpp, objc, python, javascript, java, go, rust, ruby, swift
 ```
 
-Offline, `stitch guide` prints a workflow guide and `stitch guide <lang>` the syntax for one
-language. Pass `--json` to any command whose output you parse.
+Offline, `stitch guide` prints this file and `stitch guide <name>` any other file of the guide
+(`stitch guide stubs`, `stitch guide python`, ...). Pass `--json` to any command whose output you
+parse.
 
 ## Workflow
 

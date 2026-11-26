@@ -16,7 +16,12 @@ stitch crashes probe       # the probe
 ```
 
 - Crashes are grouped by kind and innermost library frames. One bug can still show as several
-  groups: fix or explain the first, then list again.
+  groups: fix or explain the first, then list again. A stack overflow is grouped by its stub
+  instead (it ends wherever the stack runs out).
+- The stub named in the list comes from one example program; other programs in the group may
+  crash in another stub.
+- After you change the harness, `stitch crashes` reruns the crashes with the new build, so crashes
+  caused by fixed stubs disappear.
 - Ids are per campaign: `probe:c1` and `main:c1` are different crashes. A bare `c1` means the
   latest campaign that is not `probe`. Commands print which one they used.
 - A crash marked `[flaky: crashed 2 of 5 runs]` does not reproduce every time.

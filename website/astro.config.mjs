@@ -86,17 +86,18 @@ export default defineConfig({
         {
           label: "For agents",
           items: [
-            // The plain-text guide (website/agents/ and src/agent-guide.ts), served as Markdown
+            // The agent guide (skill/stitch/reference/), rendered by scripts/sync-reference.mjs.
+            // Each page links to its raw Markdown at /agents/<name>.raw.md.
             ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "cli"].map((name) => ({
               label: `${name}.md`,
-              link: `/agents/${name}.md`,
+              slug: `agents/${name}.md`,
             })),
             {
               label: "Languages",
               collapsed: true,
               items: ["cpp", "objc", "python", "javascript", "java", "go", "rust", "ruby", "swift"].map((name) => ({
                 label: `${name}.md`,
-                link: `/agents/${name}.md`,
+                slug: `agents/${name}.md`,
               })),
             },
           ],
