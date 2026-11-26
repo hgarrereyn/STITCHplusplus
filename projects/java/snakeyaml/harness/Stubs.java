@@ -16,7 +16,9 @@ import org.yaml.snakeyaml.tokens.Token;
 import stitch.*;
 
 /**
- * SnakeYAML 1.x. Objects: Yaml (always SafeConstructor), Data (Java values: loaded or built), Node.
+ * SnakeYAML 2.x. Objects: Yaml (SafeConstructor, or 2.x's default Constructor whose tag inspector
+ * refuses global tags), Data (Java values: loaded or built), Node. The low-level pipeline, events,
+ * beans, JSON, env and utilities are in Api.java.
  * Oracles: dump(x) loads back equal; canonical output reparses; compose/serialize round trips;
  * parse events are balanced. YAMLException is the documented bail for malformed input.
  */
@@ -218,9 +220,24 @@ public class Stubs {
         try {
             return y.dump(data);
         } catch (YAMLException e) {
-            if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate");
-            throw e;
+            throw dumpBail(e);
         }
+    }
+
+    /** Documented dump refusals are bails: lone surrogates, dereferenceAliases on a recursive structure. */
+    static RuntimeException dumpBail(YAMLException e) {
+        String m = String.valueOf(e.getMessage());
+        if (m.contains("invalid string value")) throw Stitch.bail("lone surrogate");
+        if (m.contains("Cannot dereferenceAliases for recursive structures")) throw Stitch.bail("dereferenceAliases on a recursive structure");
+        return e;
+    }
+
+    /** For re-composing serializer output: SnakeYAML 2.x rejects global tags by default (a TagInspector
+     *  decision, not a parse error), so round trips of nodes with such tags allow them. */
+    static LoaderOptions composeLoader() {
+        LoaderOptions lo = new LoaderOptions();
+        lo.setTagInspector(tag -> true);
+        return lo;
     }
 
     static final java.util.regex.Pattern ANCHOR = java.util.regex.Pattern.compile("id\\d+");
@@ -416,7 +433,8 @@ public class Stubs {
             b.append("]\n");
         }
         Object o = tolerantLoad(y, b.toString());
-        if (dump && o != null) y.dump(o);
+        // (dereferenceAliases expands the shared references by design: exponential output, not a bug)
+        if (dump && o != null && Stitch.getLong(y, "deref", 0) == 0) y.dump(o);
         Stitch.check(seq || o != null, "loaded");
     }
 
@@ -471,7 +489,7 @@ public class Stubs {
     @Endpoint
     public static void dump_writer(Yaml y, @Obj("Data") Object data) {
         StringWriter w = new StringWriter();
-        try { y.dump(data, w); } catch (YAMLException e) { if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate"); throw e; }
+        try { y.dump(data, w); } catch (YAMLException e) { throw dumpBail(e); }
         String again = dumpOrBail(y, data);
         Stitch.check(ANCHOR.matcher(w.toString()).replaceAll("id").equals(ANCHOR.matcher(again).replaceAll("id")), "dump(data, writer) equals dump(data) modulo anchor numbers");
     }
@@ -513,7 +531,7 @@ public class Stubs {
         Stitch.require(!docs.isEmpty(), "no docs");
         for (Object d : docs) requirePrintable(d, new IdentityHashMap<>(), Stitch.getLong(y, "esc", 0) == 1);
         String out;
-        try { out = y.dumpAll(docs.iterator()); } catch (YAMLException e) { if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate"); throw e; }
+        try { out = y.dumpAll(docs.iterator()); } catch (YAMLException e) { throw dumpBail(e); }
         List<Object> back = new ArrayList<>();
         try {
             for (Object o : new Yaml(new SafeConstructor(new LoaderOptions())).loadAll(out)) back.add(o);
@@ -543,8 +561,7 @@ public class Stubs {
         try {
             return y.represent(data);
         } catch (YAMLException e) {
-            if (String.valueOf(e.getMessage()).contains("invalid string value")) throw Stitch.bail("lone surrogate");
-            throw e;
+            throw dumpBail(e);
         }
     }
 
@@ -601,10 +618,10 @@ public class Stubs {
     @Endpoint
     public static void serialize_roundtrip(Yaml y, @Obj("Node") Node node) {
         StringWriter w = new StringWriter();
-        y.serialize(node, w);
+        try { y.serialize(node, w); } catch (YAMLException e) { throw dumpBail(e); }
         Node back;
         try {
-            back = new Yaml(new SafeConstructor(new LoaderOptions())).compose(new StringReader(w.toString()));
+            back = new Yaml(new SafeConstructor(composeLoader())).compose(new StringReader(w.toString()));
         } catch (YAMLException e) {
             throw new AssertionError("serialize output does not compose: " + e.getMessage().replace('\n', ' '));
         }
@@ -614,7 +631,8 @@ public class Stubs {
 
     @Endpoint
     public static void serialize_events(Yaml y, @Obj("Node") Node node) {
-        List<Event> ev = y.serialize(node);
+        List<Event> ev;
+        try { ev = y.serialize(node); } catch (YAMLException e) { throw dumpBail(e); }
         Stitch.check(ev.size() >= 5, "stream+doc+node events");
     }
 
@@ -634,7 +652,7 @@ public class Stubs {
         y.serialize(n, w);
         Node back;
         try {
-            back = new Yaml(new SafeConstructor(new LoaderOptions())).compose(new StringReader(w.toString()));
+            back = new Yaml(new SafeConstructor(composeLoader())).compose(new StringReader(w.toString()));
         } catch (YAMLException e) {
             throw new AssertionError("serialized tree does not compose: " + e.getMessage().replace('\n', ' '));
         }
@@ -711,6 +729,9 @@ public class Stubs {
     }
 
     static boolean nodeEq(Node a, Node b, IdentityHashMap<Node, Node> seen, int depth) {
+        // the representer marks a repeated object with an AnchorNode wrapping the real node
+        while (a instanceof AnchorNode) a = ((AnchorNode) a).getRealNode();
+        while (b instanceof AnchorNode) b = ((AnchorNode) b).getRealNode();
         if (a == b) return true;
         if (depth > 2000) throw Stitch.bail("too deep");
         if (seen.get(a) == b) return true;
