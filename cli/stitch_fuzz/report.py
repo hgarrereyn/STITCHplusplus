@@ -142,7 +142,7 @@ def recipe(p, fname: str) -> dict:
         jv = p.cfg.get("java", {})
         cp = ":".join(jv.get("classpath", ["/deps/*"]))
         cls = Path(fname).stem
-        jvm = " ".join(jv.get("jvm_options", []))
+        jvm = " ".join(jv.get("jvm_options", ["-Xmx2g", "-Xss8m", "-XX:+UseSerialGC"]))  # as the fuzzing build
         return {"files": {fname: f"/repro/{fname}"},
                 "lines": ["WORKDIR /repro", f'RUN javac -g -cp "{cp}" {fname}',
                           " ".join(x for x in ["CMD java", jvm, f'-cp "/repro:{cp}"', cls] if x)], "run": f"javac {fname} && java {cls}"}
@@ -222,6 +222,7 @@ def dockerfile(p, title, base_ref, source, t: datetime, rec, fname) -> str:
     v = _version()
     L = [f"# {title}",
          "#   docker build -t repro . && docker run --rm repro",
+         f"# Made with STITCH++ {v}. Frozen: every input below is pinned, and it needs only Docker.",
          "",
          f"# {WHAT.get(p.language, p.language)} and build tools: the STITCH++ {p.language} toolchain image (no fuzzer),",
          f"# {REPO}/blob/v{v}/languages/{p.language}/Dockerfile",
@@ -232,7 +233,7 @@ def dockerfile(p, title, base_ref, source, t: datetime, rec, fname) -> str:
         sub = " \\\n  && git -C /src submodule update --init --recursive --quiet" if source.get("submodules") else ""
         L += ["FROM base AS fetch",
               f"RUN git clone --quiet {source['git']} /src && git -C /src checkout --quiet {source['commit']}{sub}",
-              "FROM scratch AS source", "COPY --from=fetch /src /"]
+              "FROM scratch AS source", "COPY --from=fetch " + ("/src/" + source["subdir"] if source.get("subdir") else "/src") + " /"]
     else:
         L += ["FROM scratch AS source", "ADD source.tar.gz /"]
     L += ["", "# the library, built by the fuzzing project's own Dockerfile (unchanged)"]
@@ -274,6 +275,14 @@ def _source(p, image, outdir: Path):
         link = f"[{commit[:12]}]({web}/commit/{commit})" if "github.com" in web or "gitlab" in web else f"`{commit[:12]}`"
         return {"git": url, "commit": commit, "submodules": src.submodules, "what": f"{url} @ {commit}",
                 "md": f"{web} at {link}"}
+    pub = src.published(p.root)  # a checkout (e.g. a harness in the library's repository) at a pushed commit
+    if pub:
+        web = pub["git"][:-4] if pub["git"].endswith(".git") else pub["git"]
+        c = pub["commit"]
+        link = f"[{c[:12]}]({web}/commit/{c})" if "github.com" in web or "gitlab" in web else f"`{c[:12]}`"
+        where = f" (`{pub['subdir']}/`)" if pub["subdir"] else ""
+        return {**pub, "what": f"{pub['git']} @ {c}" + (f", {pub['subdir']}/" if pub["subdir"] else ""),
+                "md": f"{web} at {link}{where}"}
     src.snapshot_tar(outdir / "source.tar.gz")
     return {"archive": "source.tar.gz", "what": f"snapshot of {src.path} (source.tar.gz)" + (f", commit {commit}" if commit else ""),
             "md": f"a snapshot of a local checkout (`source.tar.gz`, attach it)" + (f", commit `{commit[:12]}`" if commit else "")}

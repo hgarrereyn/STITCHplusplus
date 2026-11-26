@@ -10,7 +10,9 @@ directory below its `stitch.toml`), or pass `-C <dir>`. Add `--json` for machine
 |---|---|
 | `stitch setup [--lang L ...]` | Check Docker and get the language images (`cpp` by default; `python`, `javascript`, `java`, `go`, `rust`, `ruby`, `swift`, `objc`, or `all`). Pulls prebuilt images when they exist, and otherwise builds them. |
 | `stitch skill [DIR] [--user]` | Install the agent skill into `./.claude/skills` (or `DIR`, or `~/.claude/skills`). |
-| `stitch guide [TOPIC]` | Print the workflow guide, or a language's harness API (`cpp`, `python`, ...), or `reproducers`. |
+| `stitch guide [TOPIC]` | Print the workflow guide, or a language's harness API (`cpp`, `python`, ...), `reproducers`, or `stitch-toml` (every key of `stitch.toml`). |
+| `stitch changelog [--since V] [--all]` | What changed in each release. In a project: the releases after its pinned `stitch_version`. |
+| `stitch upgrade` | Pin the project (`stitch.toml` `stitch_version`) to the installed release, after showing what changed. |
 
 ## Write a harness
 

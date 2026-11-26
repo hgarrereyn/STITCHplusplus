@@ -87,7 +87,7 @@ export default defineConfig({
           label: "For agents",
           items: [
             // The plain-text guide (website/agents/ and src/agent-guide.ts), served as Markdown
-            ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "cli"].map((name) => ({
+            ...["overview", "stubs", "probe", "triage", "reproducers", "coverage", "stitch-toml", "cli"].map((name) => ({
               label: `${name}.md`,
               link: `/agents/${name}.md`,
             })),
@@ -105,6 +105,7 @@ export default defineConfig({
           label: "Reference",
           items: [
             { label: "CLI", slug: "reference/cli" },
+            { label: "stitch.toml", slug: "reference/stitch-toml" },
             { label: "Languages", collapsed: true, items: [{ autogenerate: { directory: "reference/languages" } }] },
           ],
         },

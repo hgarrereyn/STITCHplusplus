@@ -555,9 +555,14 @@ def init_project(root: Path, name=None, git=None, rev=None, path=None, language=
         # stitch.toml resolves a relative path against the project folder, not the current directory
         stored = path if os.path.isabs(os.path.expanduser(path)) else os.path.relpath(Path(path).resolve(), root)
         source = f'path = "{stored}"   # local checkout, used as-is (uncommitted changes included)'
-    (root / "stitch.toml").write_text(t["toml"].format(name=name, source=source, module=module,
-                                                       gomod=_go_module(git, path, module),
-                                                       swift_product=_swift_product(git, path, name)))
+    from . import __version__
+    toml = t["toml"].format(name=name, source=source, module=module, gomod=_go_module(git, path, module),
+                            swift_product=_swift_product(git, path, name))
+    # the release this harness is written for: the CLI refuses other versions (`stitch upgrade` moves it)
+    pin = (f'stitch_version = "{__version__}"   # STITCH++ release: pip install stitch-fuzz=={__version__}; '
+           '`stitch upgrade` moves to a newer one')
+    toml = toml.replace("[project]\n", f"[project]\n{pin}\n", 1)
+    (root / "stitch.toml").write_text(toml)
     (root / "Dockerfile").write_text(t["dockerfile"].format(name=name))
     (root / ".dockerignore").write_text(".stitch\n")
     (root / ".gitignore").write_text(".stitch/\n")

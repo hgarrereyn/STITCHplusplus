@@ -409,13 +409,20 @@ Steps and pitfalls: `stitch guide reproducers`.
 - `[source] path = "../lib"` in `stitch.toml` fuzzes a local checkout, uncommitted changes
   included. If it is a git checkout, `stitch bisect` walks its history.
 
-**The STITCH++ version.** Each `stitch-fuzz` version uses exactly one set of Docker images (tagged
-by a hash of their sources, never `latest`), so the CLI version decides everything that runs.
-Install a fixed version (`pip install stitch-fuzz==X.Y.Z`; `stitch --version` prints it), keep it
-for the whole task, and write it down next to your results. Do not upgrade STITCH++ in the middle
-of a campaign or between finding a crash and reporting it. A reproducer from `stitch repro`
-records the version it was made with and pins its toolchain image by digest, so `run.sh` keeps
-working after STITCH++ changes.
+**The STITCH++ version.** `stitch.toml` pins the release a project is written for:
+`[project] stitch_version = "0.2.0"`. A release is one version of the CLI with its runtime and
+Docker images, so the pin decides everything that runs, and the CLI refuses a project pinned to
+another release.
+
+- Existing project: install the pinned release (`pip install stitch-fuzz==0.2.0`, or
+  `uvx --from stitch-fuzz==0.2.0 stitch ...`). Never edit the pin to get past the error.
+- New project: `stitch init` pins the installed release.
+- Upgrading (only when asked): with the newer CLI, read `stitch changelog` and make the harness
+  changes listed under **Upgrading**, then `stitch upgrade`, `stitch build`, `stitch check`,
+  `stitch probe`.
+
+Reproducers from `stitch repro` and `stitch report` are frozen: Docker alone runs them, on the
+images of the release that made them. All of `stitch.toml`: `stitch guide stitch-toml`.
 
 ## Commands
 
@@ -439,7 +446,8 @@ working after STITCH++ changes.
 | `stitch bisect ID [--good REV] [--fixed [--fixed-at REV]]` | the commit that introduced a crash, or (`--fixed`) the one that fixed it |
 | `stitch sample TYPE [-n N]` | values a data type's decoder makes |
 | `stitch shell` | shell in the project image |
-| `stitch guide [TOPIC]` | this guide; topics: a language name, `reproducers` |
+| `stitch changelog`, `stitch upgrade` | what changed since the pinned release; move the pin to the installed release |
+| `stitch guide [TOPIC]` | this guide; topics: a language name, `reproducers`, `stitch-toml` |
 
 ## Files
 

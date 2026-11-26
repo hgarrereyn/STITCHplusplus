@@ -70,6 +70,10 @@ stitch setup --lang python
 
 Requires Docker. The library, the harness and the fuzzer run in containers.
 
+A project pins the STITCH++ release it is written for in its `stitch.toml`
+(`stitch_version = "0.2.0"`); install that version to work on it. What changed between releases,
+and what a harness has to change to upgrade: [CHANGELOG.md](CHANGELOG.md).
+
 ## Languages
 
 [C/C++](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/cpp/) ·

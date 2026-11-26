@@ -899,7 +899,7 @@ def cmd_shell(a):
 
 
 SKILL = STITCH_HOME / "skill" / "stitch"
-GUIDES = {"": "SKILL.md", "reproducers": "reference/reproducers.md",
+GUIDES = {"": "SKILL.md", "reproducers": "reference/reproducers.md", "stitch-toml": "reference/stitch-toml.md",
           **{lang: f"reference/{lang}.md" for lang in ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")}}
 
 
@@ -908,6 +908,8 @@ def cmd_guide(a):
     topic = "cpp" if a.spec else (a.topic or "")
     if topic == "api":
         topic = "cpp"
+    if topic in ("config", "toml", "stitch.toml"):
+        topic = "stitch-toml"
     if topic and topic not in GUIDES:
         topic = normalize_language(topic)   # "js" -> "javascript", "c++" -> "cpp"
     if topic not in GUIDES:
@@ -956,6 +958,49 @@ def cmd_setup(a):
         res["skill"] = str(install_skill(skill_dir(a.user, a.skill_dir)))
     out(res, f"ready: base image {tag}" + (f"\nskill installed in {res['skill']}" if "skill" in res else "")
         + "\nnext: stitch init DIR --git URL --rev REV   (guide: stitch guide)")
+
+
+def cmd_changelog(a):
+    from . import __version__, changelog
+    since = a.since
+    if since is None and not a.all:  # in a project: what changed since its pinned release
+        try:
+            since = find_project(a.project, check_version=False).stitch_version
+        except ProjectError:
+            pass
+    es = changelog.between(since, a.until or (None if a.all else __version__))
+    if JSON:
+        reports.dump({"ok": True, "since": since, "installed": __version__,
+                      "entries": [{"version": v, "text": t} for v, t in es]})
+        return
+    if not es:
+        print(f"no changelog entries after {since}" if since else "no changelog entries")
+        return
+    print(changelog.render(es))
+
+
+def cmd_upgrade(a):
+    from . import __version__, changelog
+    from .project import version_key
+    p = find_project(a.project, check_version=False)
+    old = p.stitch_version
+    if old == __version__:
+        out({"ok": True, "from": old, "to": __version__, "changed": False}, f"already pinned to {__version__}")
+        return
+    if old and version_key(old) > version_key(__version__):
+        die(f"the project is pinned to {old}, newer than the installed stitch-fuzz {__version__}: "
+            f"install it (pip install stitch-fuzz=={old}) instead of downgrading the project")
+    es = changelog.between(old, __version__)
+    changelog.set_pin(p.root / "stitch.toml", __version__)
+    if JSON:
+        reports.dump({"ok": True, "from": old, "to": __version__, "changed": True,
+                      "entries": [{"version": v, "text": t} for v, t in es]})
+        return
+    if es:
+        print(changelog.render(es) + "\n")
+    print(f"stitch.toml: stitch_version {old or '(none)'} -> {__version__}")
+    print("next: make the harness changes listed under Upgrading above (if any), then "
+          "`stitch build`, `stitch check` and `stitch probe` with this release")
 
 
 def cmd_init(a):
@@ -1215,6 +1260,15 @@ def main(argv=None):
     s.add_argument("--lang", action="append", help="language image(s) to get: cpp (default), python, javascript, java, go, rust, ruby, swift, objc, all")
     s.set_defaults(fn=cmd_setup)
 
+    s = sp.add_parser("changelog", help="what changed in each STITCH++ release (in a project: since its pinned release)")
+    s.add_argument("--since", help="only releases after this one")
+    s.add_argument("--until", help="only releases up to this one (default: the installed one)")
+    s.add_argument("--all", action="store_true", help="every release, also outside a project")
+    s.set_defaults(fn=cmd_changelog)
+
+    s = sp.add_parser("upgrade", help="pin the project to the installed STITCH++ release (stitch.toml stitch_version)")
+    s.set_defaults(fn=cmd_upgrade)
+
     s = sp.add_parser("init", help="create a new project (stitch.toml, Dockerfile, harness/)")
     s.add_argument("dir", nargs="?", default=".")
     s.add_argument("--name")
@@ -1349,7 +1403,7 @@ def main(argv=None):
     s.add_argument("cmd", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_shell)
 
-    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, objc, reproducers)")
+    s = sp.add_parser("guide", help="print the guide (topics: cpp, python, javascript, java, go, rust, ruby, swift, objc, reproducers, stitch-toml)")
     s.add_argument("topic", nargs="?", help="a language: its harness API (api is cpp); reproducers: stitch write / try")
     s.add_argument("--spec", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_guide)

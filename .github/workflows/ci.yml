@@ -43,10 +43,12 @@ jobs:
           [ "$(/tmp/venv/bin/stitch --version)" = "stitch-fuzz $v" ] || { echo "wheel version != __version__ $v"; exit 1; }
           /tmp/venv/bin/stitch --help > /dev/null
           /tmp/venv/bin/stitch guide > /dev/null
-          for t in cpp python javascript java go rust ruby swift objc reproducers; do
+          for t in cpp python javascript java go rust ruby swift objc reproducers stitch-toml; do
             /tmp/venv/bin/stitch guide $t > /dev/null || { echo "stitch guide $t failed"; exit 1; }
           done
           /tmp/venv/bin/stitch skill /tmp/skills && test -f /tmp/skills/stitch/SKILL.md
+          # every release has a CHANGELOG.md entry (shipped in the package: `stitch changelog`)
+          /tmp/venv/bin/stitch --json changelog --all | python3 -c "import json,sys; v='$v'; assert v in [e['version'] for e in json.load(sys.stdin)['entries']], 'CHANGELOG.md has no ## ' + v"
       - name: installed sources hash like the checkout
         run: |
           a=$(cd /tmp && /tmp/venv/bin/python -c 'from stitch_fuzz import docker; print(docker.engine_hash(), *[docker.base_hash(l) for l in docker.LANGUAGES])')
@@ -58,6 +60,7 @@ jobs:
           for l in cpp python javascript java go rust ruby swift objc; do
             /tmp/venv/bin/stitch --json init /tmp/init-$l --lang $l --git https://example.com/lib.git --rev v1 > /dev/null \
               || { echo "stitch init --lang $l failed"; exit 1; }
+            grep -q "^stitch_version = \"$v\"" /tmp/init-$l/stitch.toml || { echo "stitch init --lang $l: no stitch_version pin"; exit 1; }
             test -f /tmp/init-$l/stitch.toml && test -f /tmp/init-$l/Dockerfile && test -d /tmp/init-$l/harness \
               || { echo "stitch init --lang $l: missing files"; ls -la /tmp/init-$l; exit 1; }
           done

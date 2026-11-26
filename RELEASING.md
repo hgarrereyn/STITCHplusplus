@@ -7,7 +7,11 @@ when you push a tag `v<version>`.
 ## Cutting a release
 
 1. On main, set `__version__` in `cli/stitch_fuzz/__init__.py`. This is the only place the version
-   is set: `pyproject.toml` reads it from there. Merge the change once CI is green.
+   is set: `pyproject.toml` reads it from there. Add a `## <version>` entry to `CHANGELOG.md`
+   with **Changes** and **Upgrading** (what a harness, `stitch.toml` or project `Dockerfile` must
+   change to move to it, or "Nothing"): projects pin a release in `stitch.toml`, and agents read
+   this to upgrade them. CI and the release workflow fail without the entry. Merge the change once
+   CI is green.
 2. Tag that commit on main and push the tag:
    ```sh
    git tag v0.2.0 && git push origin v0.2.0
@@ -33,7 +37,9 @@ and the CLI computes the hashes from the files it ships (`stitch_fuzz/docker.py`
 | `stitch-<lang>` | hash of the toolchain + engine | `stitch setup`, fuzzing |
 | `stitch-<lang>-toolchain` | hash of `languages/<lang>/` | reproducers (`stitch repro`) |
 
-So each `stitch-fuzz` version pulls the images it was released with, and nothing newer. If an
+So each `stitch-fuzz` version pulls the images it was released with, and nothing newer. A project
+pins its release in `stitch.toml` (`[project] stitch_version`), and the CLI refuses another one, so
+a project keeps building on the same images until someone runs `stitch upgrade`. If an
 image's sources did not change between releases, its hash does not change and the new release
 reuses the image already published.
 

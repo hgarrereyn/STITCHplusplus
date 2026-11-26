@@ -25,6 +25,17 @@ def _git(*args, cwd=None, check=True):
     return r.stdout.strip()
 
 
+def https_url(url: str) -> str:
+    """git@host:owner/repo.git and ssh://git@host/owner/repo -> https://host/owner/repo.git, so
+    anyone can clone it. Local paths are not shareable: ''."""
+    import re
+    url = (url or "").strip()
+    m = re.match(r"^(?:ssh://)?[\w.-]+@([\w.-]+)[:/](.+)$", url)
+    if m:
+        return f"https://{m.group(1)}/{m.group(2)}"
+    return url if re.match(r"^https?://", url) else ""
+
+
 class Source:
     """Resolved source for one build: `context` is the directory passed as the `source` build
     context; `ident` is a short id used in image tags."""
@@ -120,6 +131,38 @@ class Source:
                 tar.unlink()
             (dest / ".stitch-complete").write_text(commit)
         return dest, commit[:12], commit
+
+    def published(self, project_root: Path):
+        """A local source that a reproducer can fetch instead of bundling: the `path` is inside a git
+        checkout whose tracked files match HEAD (changes to the STITCH++ project folder itself do not
+        count: a harness checked into the library's repository as `stitch/`), and HEAD is on a remote
+        branch. {"git": URL, "commit": SHA, "subdir": path of the source in the repository,
+        "submodules": bool}, or None."""
+        if self.git_url or not self.path:
+            return None
+        src = Path(self.path).resolve()
+        top = _git("rev-parse", "--show-toplevel", cwd=src, check=False)
+        if not top:
+            return None
+        top = Path(top).resolve()
+        commit = _git("rev-parse", "HEAD", cwd=top, check=False)
+        url = https_url(_git("remote", "get-url", "origin", cwd=top, check=False))
+        if not commit or not url:
+            return None
+        spec = ["--", "."]
+        try:
+            rel = Path(project_root).resolve().relative_to(top)
+            if str(rel) != ".":
+                spec.append(f":(exclude){rel}")
+        except ValueError:
+            pass
+        if _git("status", "--porcelain", "--untracked-files=no", *spec, cwd=top, check=False):
+            return None  # uncommitted changes: the reproducer bundles the files instead
+        if not _git("branch", "-r", "--contains", commit, cwd=top, check=False):
+            return None  # not pushed
+        sub = str(src.relative_to(top))
+        return {"git": url, "commit": commit, "subdir": "" if sub == "." else sub,
+                "submodules": (top / ".gitmodules").exists()}
 
     def snapshot_tar(self, out: Path):
         """Archive the local source directory (for self-contained reproducers)."""

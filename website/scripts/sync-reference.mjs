@@ -60,4 +60,11 @@ writeFileSync(
   page(cli, "CLI", 1, "Every stitch command.", "docs/cli.md"),
 );
 
-console.log(`synced ${PAGES.length} language pages and the CLI reference`);
+// stitch.toml reference
+writeFileSync(
+  join(root, "website/src/content/docs/reference/stitch-toml.md"),
+  page(readFileSync(join(root, "skill/stitch/reference/stitch-toml.md"), "utf8"), "stitch.toml", 2,
+       "Every key of stitch.toml, and how a project pins its STITCH++ version.", "skill/stitch/reference/stitch-toml.md"),
+);
+
+console.log(`synced ${PAGES.length} language pages, the CLI reference and the stitch.toml reference`);

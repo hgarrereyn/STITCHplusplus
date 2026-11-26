@@ -11,6 +11,46 @@ Three kinds, for three purposes:
 The usual order: `stitch write`, shrink the file to plain library code with `stitch try`, then
 `stitch report`.
 
+## Frozen reproducers
+
+The folders `stitch repro` and `stitch report` write are **frozen**: every input is pinned, and
+they run with Docker alone. They do not need STITCH++ installed, and they do not change when the
+project moves to a newer STITCH++ release (`stitch upgrade`) or the installed CLI changes. Keep
+them as they are: they are the record of the bug.
+
+| Input | Pinned by |
+|---|---|
+| STITCH++ toolchain (compilers, runtime) | the published image of the project's release, by digest (`FROM ...@sha256:...`) |
+| The library | its git commit; a local checkout that is not pushed is included as `source.tar.gz` |
+| How the library is built | the project's `Dockerfile`, copied in |
+| apt, pip and npm packages | the time the library image was built (below) |
+| The program | `crash.stp` (`stitch repro`) or the reproducer file (`stitch report`) |
+
+To make one for a crash:
+
+```sh
+stitch write c1                          # .stitch/standalone/c1/repro.<ext>
+cp .stitch/standalone/c1/repro.c .stitch/standalone/c1/min.c
+# shrink min.c to plain library calls, checking each edit:
+stitch try .stitch/standalone/c1/min.c   # SAME CRASH ... plain library code
+stitch report c1                         # .stitch/reports/c1/: Dockerfile, min file, run.sh, ISSUE.md
+stitch repro c1                          # .stitch/repros/<project>-c1/: the same with the harness
+```
+
+Both commands build and run the result from scratch and say whether it crashes the same way. A
+reproducer is fully frozen when:
+
+- the project's STITCH++ release is published. Made with an unreleased CLI (a checkout of
+  STITCH++), the Dockerfile names a local image and works only on that machine: `stitch report`
+  says so.
+- the library source can be fetched: a `[source] git` URL, or a `[source] path` checkout (such as
+  the repository a `stitch/` folder lives in) whose commit is pushed and has no changes outside the
+  STITCH++ project folder. Otherwise the source is bundled as `source.tar.gz`, which must travel
+  with the folder.
+
+To keep them with a harness that is checked into a repository, copy them out of `.stitch/` (which
+is not committed), for example to `stitch/bugs/<name>/`. Run `./run.sh` there to check one later.
+
 ## stitch repro
 
 ```sh
@@ -190,7 +230,9 @@ an unshrunk file works too: the runtime stand-in (`stitch_standalone.h`, `stitch
 included as a fourth file.
 
 **Pinned versions.** The library is pinned by commit. A local checkout (`[source] path`) is
-included as `source.tar.gz`, which the maintainer needs too. Packages are pinned to the time the
+cloned from its `origin` remote when its commit is pushed and unchanged (a `stitch/` folder in the
+library's own repository), and otherwise included as `source.tar.gz`, which the maintainer needs
+too. Packages are pinned to the time the
 project image was built, when the crash was found: `apt-get` installs from the Ubuntu snapshot
 archive of that time, and `pip` and `npm` ignore releases published after it. The same pins apply
 to `stitch repro` folders. Go modules resolve to fixed versions on their own; for Rust and Swift,

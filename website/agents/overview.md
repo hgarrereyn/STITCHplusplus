@@ -56,11 +56,32 @@ pip install stitch-fuzz
 stitch setup --lang <lang>    # cpp, objc, python, javascript, java, go, rust, ruby, swift
 ```
 
-Each `stitch-fuzz` version uses one fixed set of Docker images (tagged by source hash, never
-`latest`), so the CLI version decides what runs. If a project, task or earlier report names a
-version, install exactly that one (`pip install stitch-fuzz==X.Y.Z`). Otherwise note the version
-`stitch --version` prints, keep using it for the whole task, and put it in your report. Reproducers
-from `stitch repro` pin their own image, so they keep working after an upgrade.
+### Versions: use the one in stitch.toml
+
+Every project pins the STITCH++ release it is written for:
+
+```toml
+[project]
+stitch_version = "0.2.0"
+```
+
+A release is one version of the `stitch` CLI together with its runtime and Docker images, so the
+pin decides everything that builds and runs. The CLI refuses a project pinned to another release
+and prints the command to install the right one.
+
+- **Working on an existing project** (a `stitch/` folder checked into a library's repository,
+  say): read `stitch_version` first and install exactly that release:
+  `pip install stitch-fuzz==0.2.0`, or run it without installing with
+  `uvx --from stitch-fuzz==0.2.0 stitch ...`. Never edit the pin to silence the error.
+- **New project:** `stitch init` pins the installed release.
+- **Moving a project to a newer release** (only when asked to): install the newer CLI, read
+  `stitch changelog` (the releases after the pinned one, and what each requires of a harness
+  under **Upgrading**), change the harness accordingly, run `stitch upgrade` (rewrites the pin),
+  then `stitch build`, `stitch check` and `stitch probe`. Start fresh campaigns afterwards.
+
+Reproducers from `stitch repro` and `stitch report` are frozen: they run with Docker alone, on the
+images of the release that made them, whatever release is installed later
+([reproducers.md](reproducers.md)). Every key of `stitch.toml`: [stitch-toml.md](stitch-toml.md).
 
 Offline, `stitch guide` prints a workflow guide and `stitch guide <lang>` the syntax for one
 language. Pass `--json` to any command whose output you parse.
@@ -130,8 +151,10 @@ Topics:
 - [stubs.md](stubs.md): rules for writing stubs, and data types
 - [probe.md](probe.md): reading the probe report
 - [triage.md](triage.md): harness bug or library bug, and the steps for each crash
-- [reproducers.md](reproducers.md): turning a crash into a short standalone file
+- [reproducers.md](reproducers.md): turning a crash into a short standalone file, and frozen
+  reproducers for maintainers
 - [coverage.md](coverage.md): coverage reports and what to do with them
+- [stitch-toml.md](stitch-toml.md): every key of `stitch.toml`; the pinned STITCH++ version
 - [cli.md](cli.md): every command
 
 Languages (project setup, harness syntax, reproducers):

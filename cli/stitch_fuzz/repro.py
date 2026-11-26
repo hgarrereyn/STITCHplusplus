@@ -12,6 +12,7 @@ Layout of a reproducer directory:
   trace.txt           every call with its arguments + the sanitizer report, as recorded
 """
 import json
+import shlex
 import re
 import shutil
 import subprocess
@@ -32,6 +33,7 @@ cd "$(dirname "$0")"
 ID={rid}
 # on Linux, run as the calling user so files written into this folder stay yours
 U=""; [ "$(uname)" = Linux ] && U="--user $(id -u):$(id -g) -e HOME=/tmp"
+P="{platform}"   # stitch.toml [docker] platform
 # the STITCH++ toolchain: the published image this reproducer was made with (pinned), else built
 # from stitch/ (also when STITCH_REPRO_BUILD=1, e.g. after editing stitch/)
 TOOLCHAIN={toolchain}
@@ -48,13 +50,13 @@ EOF
 if [ ! -d source ]; then
 {fetch}
 fi
-docker buildx build --load -q -f project/Dockerfile --build-context source=source \
-  --build-arg STITCH_BASE=stitch-repro-base:$ID -t stitch-repro:$ID project >/dev/null
+docker buildx build --load -q $P -f project/Dockerfile --build-context source={context} \
+  --build-arg STITCH_BASE=stitch-repro-base:$ID{buildargs} -t stitch-repro:$ID project >/dev/null
 if [ "$1" = "--standalone" ]; then
 {standalone}
   exit $?
 fi
-docker run --rm $U -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
+docker run --rm $U $P -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
   sh -c 'stitch-build --target repro --out /tmp/stitch-build >/dev/null &&
     (timeout -s KILL {limit} /tmp/stitch-build/repro --trace /repro/crash.stp; rc=$?;
      if [ $rc = 137 ]; then echo "[stitch] TIMEOUT: still running after {limit} s" >&2; fi; exit $rc)'
@@ -62,9 +64,9 @@ docker run --rm $U -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitc
 
 # `./run.sh --standalone`: C/C++ compiles a plain program against the library; other languages
 # build the file next to the harness (it may use the harness's module or crate).
-STANDALONE_CPP = ('  docker run --rm $U -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
+STANDALONE_CPP = ('  docker run --rm $U $P -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
                   '    sh -c "$(cat standalone/build.sh)"')
-STANDALONE_LANG = ('  docker run --rm $U -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
+STANDALONE_LANG = ('  docker run --rm $U $P -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
                    '    stitch-repro:$ID sh standalone/build.sh')
 
 # report section title and code fence, per language
@@ -113,7 +115,14 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     # source
     src = Source(p)
     commit = info.get("commit")
-    if src.git_url and commit and info.get("ident") != "local":
+    pub = None if src.git_url else src.published(p.root)  # a local checkout at a pushed commit
+    context = "source"
+    if pub:
+        sj = {"git": pub["git"], "commit": pub["commit"], **({"subdir": pub["subdir"]} if pub["subdir"] else {})}
+        fetch = (f"  git clone --quiet {pub['git']} source\n  git -C source checkout --quiet {pub['commit']}"
+                 + ("\n  git -C source submodule update --init --recursive --quiet" if pub["submodules"] else ""))
+        context = f"source/{pub['subdir']}" if pub["subdir"] else "source"
+    elif src.git_url and commit and info.get("ident") != "local":
         sj = {"git": src.git_url, "commit": commit}
         fetch = (f"  git clone --quiet {src.git_url} source\n  git -C source checkout --quiet {commit}"
                  + ("\n  git -C source submodule update --init --recursive --quiet" if src.submodules else ""))
@@ -138,7 +147,10 @@ def make_repro(p, crash: Path, bucket, outdir: Path = None, run=True) -> Path:
     from .report import pin_time, pin_lines
     pins = "\n".join(l for l in pin_lines(pin_time(image, f"stitch/{p.language}-toolchain:{docker.toolchain_hash(p.language)}"))
                       if not l.startswith("#"))
-    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, limit=limit, toolchain=f'"{toolchain}"', version=__version__, pins=pins,
+    plat = p.cfg["docker"].get("platform") or ""
+    buildargs = "".join(f" --build-arg {shlex.quote(f'{k}={v}')}" for k, v in (p.cfg["docker"].get("build_args") or {}).items())
+    sh.write_text(RUN_SH.format(title=title, rid=tag_id, fetch=fetch, context=context,
+                                platform=f"--platform {plat}" if plat else "", buildargs=buildargs, limit=limit, toolchain=f'"{toolchain}"', version=__version__, pins=pins,
                                 standalone=STANDALONE_CPP if p.language == "cpp" else STANDALONE_LANG))
     sh.chmod(0o755)
     attach_standalone(p, d)
