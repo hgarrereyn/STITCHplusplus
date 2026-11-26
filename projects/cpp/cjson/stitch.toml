@@ -5,7 +5,7 @@ name = "cjson"
 
 [source]
 git = "https://github.com/DaveGamble/cJSON"
-rev = "c859b25da02955fef659d658b8f324b5cde87be3"           # branch, tag or commit; `stitch build --rev X` overrides
+rev = "6d9f2443ab071f86e5d9b43025a40929ec41c46c"   # master HEAD (6 commits after v1.7.19); `stitch build --rev X` overrides
 
 [build]
 # How the harness compiles and links against the library *inside the project image*.

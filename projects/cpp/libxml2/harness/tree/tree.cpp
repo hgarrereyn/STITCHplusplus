@@ -57,6 +57,7 @@ New<Doc> copy_doc(Borrow<Doc> d, Bool xinclude) {
     if (xinclude) xmlXIncludeProcessFlags(c, lx::kQuiet);  // (on the copy: it replaces nodes)
     New<Doc> out(c);
     stitch::set(out, "wellformed", 0);
+    if (stitch::get(d, "html", 0)) stitch::set(out, "html", 1);
     return out;
 }
 STITCH_ENDPOINT(copy_doc);

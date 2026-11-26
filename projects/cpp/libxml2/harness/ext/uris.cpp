@@ -18,6 +18,7 @@
 #include <strings.h>
 
 void uri_escape_unescape(Str<64, UriText> text, Str<4> keep) {
+    stitch::require(!strchr(keep.c_str(), '%'), "'%' kept unescaped cannot round-trip");
     xmlChar* e = xmlURIEscapeStr((const xmlChar*)text.c_str(), (const xmlChar*)keep.c_str());
     stitch::require(e, "no result");
     char* u = xmlURIUnescapeString((const char*)e, 0, nullptr);
@@ -52,7 +53,7 @@ void uri_relative(Str<64, UriText> uri, Str<64, UriText> base) {
         xmlURIPtr bu = xmlParseURI(base.c_str());
         xmlURIPtr uu = xmlParseURI(uri.c_str());
         if (abs && abs2 && bu && uu && bu->scheme && uu->scheme && !strcmp(bu->scheme, uu->scheme) && !strchr(uri.c_str(), '%') && !strchr(base.c_str(), '%'))
-            stitch::check(xmlStrEqual(abs, abs2), std::string("resolving the relative URI gives the URI back: ") + (char*)rel);
+            stitch::check(lx::same_uri(abs, abs2), std::string("resolving the relative URI gives the URI back: ") + (char*)rel);
         xmlFreeURI(bu); xmlFreeURI(uu); xmlFree(abs); xmlFree(abs2);
     }
     xmlFree(rel);

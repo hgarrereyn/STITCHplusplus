@@ -1,9 +1,10 @@
 # Example projects
 
-STITCH++ harnesses for real libraries: three per language, each pinned to an old release of the
-library with known bugs so the fuzzer has something to find. Every project is a `stitch.toml`
-(library source, version, build settings; pinned to STITCH++ 0.2.0), a `Dockerfile` that builds
-the library, and a `harness/` of endpoints (plus seeds in `harness/data/`).
+STITCH++ harnesses for real libraries, three per language. Each library is pinned to a recent
+upstream commit, and each harness exercises most of the library's public API. Every project is a
+`stitch.toml` (library source and commit, build settings; pinned to STITCH++ 0.2.0), a
+`Dockerfile` that builds the library, and a `harness/` of endpoints (plus seeds in
+`harness/data/`).
 
 To run one:
 
@@ -13,32 +14,31 @@ stitch build
 stitch fuzz
 ```
 
-| Language | Project | Library version | Endpoints | What the harness exercises |
-|---|---|---|---|---|
-| C/C++ | [cjson](cpp/cjson) | cJSON c859b25 | 65 | parse/print, tree editing, JSON Pointer and Patch (cJSON_Utils) |
-| | [tinyxml2](cpp/tinyxml2) | tinyxml2 7.0.0 | 75 | parse/print, DOM editing, attributes and typed queries |
-| | [libxml2](cpp/libxml2) | libxml2 v2.11.0 | 253 | XML/HTML parsing, push parser, reader/writer, tree editing, XPath, URIs |
-| Python | [tomlkit](python/tomlkit) | tomlkit 0.13.2 | 16 | parse/dump round trips, editing tables, arrays and comments |
-| | [dateutil](python/dateutil) | python-dateutil 2.9.0 | 17 | date parsing, `isoparse`, time zones, `rrule` |
-| | [jinja2](python/jinja2) | Jinja2 3.0.0 | 9 | template compile and render, sync vs async rendering, native types, AST analysis |
-| JavaScript | [lodash](javascript/lodash) | lodash 4.17.15 | 13 | path helpers (`set`, `get`, `unset`, `zipObjectDeep`), cloning; prototype pollution |
-| | [semver](javascript/semver) | semver 7.5.1 | 11 | version and range parsing, comparison, range simplification |
-| | [handlebars](javascript/handlebars) | handlebars 4.7.6 | 6 | compile and render (checked against `precompile`), partials, parse/print |
-| Java | [jsoup](java/jsoup) | jsoup 1.15.2 | 11 | HTML parsing, selectors, DOM editing, `Cleaner` |
-| | [snakeyaml](java/snakeyaml) | SnakeYAML 1.30 | 54 | load/dump round trips, dumper options, events and nodes |
-| | [commons-compress](java/commons-compress) | Commons Compress 1.20 | 24 | archive and compressor readers and writers (zip, tar, cpio, 7z, lz4, ...) |
-| Go | [yaml](go/yaml) | go-yaml v3 (496545a) | 10 | `Unmarshal`/`Marshal` round trips, node API |
-| | [gjson](go/gjson) | gjson 1.6.4 | 7 | `Valid`, `Get`, `Parse` and path queries |
-| | [expr](go/expr) | expr v1.15.0 | 6 | compile and run expressions against typed environments, printer |
-| Rust | [smallvec](rust/smallvec) | smallvec 1.6.0 | 11 | vector operations (`insert_many`, `drain`, capacity changes, ...) under ASan |
-| | [url](rust/url) | url 2.2.0 | 7 | parsing, setters, serialization round trips |
-| | [regex](rust/regex) | regex 1.5.4 | 7 | compile, match, captures, engine agreement |
-| Ruby | [rexml](ruby/rexml) | rexml 3.2.5 | 20 | DOM and stream parsing, entities, XPath, writing |
-| | [addressable](ruby/addressable) | addressable 2.7.0 | 16 | URI parsing and normalization, URI templates, IDNA |
-| | [mail](ruby/mail) | mail 2.7.1 | 9 | message parsing, headers, encodings, multipart |
-| Swift | [swiftsoup](swift/swiftsoup) | SwiftSoup 2.3.2 | 19 | HTML parsing, selectors, DOM editing |
-| | [yams](swift/yams) | Yams 4.0.6 | 10 | compose/load/dump round trips, serializer options, Codable, node editing |
-| | [swift-syntax](swift/swift-syntax) | swift-syntax 509.0.0 | 6 | parse and print back, incremental reparse, formatting, operator folding, diagnostics |
+`stitch build --rev <commit>` builds a project against another version of the library.
 
-The larger harnesses (libxml2, jinja2, handlebars, commons-compress, expr, regex, mail,
-swift-syntax) take longer to build; the others build in a minute or two.
+| Language | Project | Library at | Endpoints | What the harness exercises |
+|---|---|---|---|---|
+| C/C++ | [cjson](cpp/cjson) | cJSON master (1.7.19+) | 67 | every parse variant, print/parse round trips, tree building and editing, JSON Pointer, Patch and Merge Patch |
+| | [tinyxml2](cpp/tinyxml2) | tinyxml2 master (11.0.0+) | 108 | parsing from memory and files, DOM navigation and editing, handles, typed attributes, XMLPrinter, deep copy, XMLUtil |
+| | [libxml2](cpp/libxml2) | libxml2 master (2.16 dev) | 307 | XML/HTML parsing through every entry point (push, reader, SAX2), tree editing, serializers and c14n, XPath, XInclude, DTD/RelaxNG/XSD/Schematron, xmlTextWriter, URIs |
+| Python | [tomlkit](python/tomlkit) | tomlkit 0.15.3 | 76 | parse/edit/print of documents, tables, arrays, arrays of tables, items and keys; text-preserving round trips |
+| | [dateutil](python/dateutil) | python-dateutil master (4.0.0+) | 50 | `parse` and `isoparse`, relativedelta arithmetic, rrule/rruleset/rrulestr, every tz class including fuzzed TZif and iCal input |
+| | [jinja2](python/jinja2) | Jinja2 main (3.2.0.dev) | 28 | templates rendered sync, async, streamed, native, sandboxed and i18n, all loaders and bytecode caches, every filter and test |
+| JavaScript | [lodash](javascript/lodash) | lodash main (4.18.1+) | 51 | nearly all of lodash 4: deep paths and merges (prototype pollution), array/set ops, lazy chains, type checks, clone/isEqual, strings and `_.template` |
+| | [semver](javascript/semver) | semver 7.8.6 | 23 | versions, comparators and ranges: parse/coerce/inc, compare and sort, satisfies, minVersion, subset, intersects, simplifyRange |
+| | [handlebars](javascript/handlebars) | handlebars 4.7.10 | 12 | compile/precompile/render with helpers, partials and decorators, parser, visitors and compilers; code-injection canary |
+| Java | [jsoup](java/jsoup) | jsoup master (1.24.1+) | 69 | HTML/XML parsing (strings, bytes, streaming), DOM traversal and editing, CSS/XPath selection, entities, W3C DOM, `Cleaner` and safelists |
+| | [snakeyaml](java/snakeyaml) | SnakeYAML master (2.7+) | 86 | load/compose/parse/scan with Loader and Dumper options, the emitter and serializer, constructors, JavaBeans, comments |
+| | [commons-compress](java/commons-compress) | Commons Compress master (1.29 dev) | 66 | every archive format and compressor, read and write, ZIP extra fields, random-access readers, metadata round trips, path-traversal checks |
+| Go | [yaml](go/yaml) | go-yaml v4 main (yaml/go-yaml) | 26 | `Unmarshal`/`Marshal`, `Load`/`Dump`, Loader/Dumper with every option and plugin, the node API; round trips |
+| | [gjson](go/gjson) | gjson 1.20.7 | 18 | `Get`/`Parse`/`GetMany`, path syntax (wildcards, queries, modifiers), `Result` accessors, `Valid`, `Escape` |
+| | [expr](go/expr) | expr master (1.18.1+) | 14 | compile and run expressions against typed and map environments with every compile option, `Eval`, the printer |
+| Rust | [smallvec](rust/smallvec) | smallvec 1.16.6 | 35 | every vector operation against a `Vec` model, iterators, `drain_filter`, bincode decoding; ASan |
+| | [url](rust/url) | url 2.5.9 | 17 | WHATWG parsing and joining, every setter, path/query editing, `make_relative`, form encoding; `check_invariants()` |
+| | [regex](rust/regex) | regex master (1.13.2+) | 32 | regex, regex-syntax and regex-automata: matching APIs and every engine cross-checked, AST/HIR round trips, DFA serialization |
+| Ruby | [rexml](ruby/rexml) | rexml master (3.4.4+) | 63 | DOM, pull, stream and SAX2 parsing, writing and formatters, XPath, tree edits, DOCTYPE and entities, RELAX NG |
+| | [addressable](ruby/addressable) | addressable 2.10.0 | 40 | URI parsing, every component setter, normalize/join/route/omit, encoding helpers, IDNA, RFC 6570 templates |
+| | [mail](ruby/mail) | mail 2.9.1 | 41 | parsing, building and encoding messages, header fields, parts and attachments, delivery-status reports, encodings |
+| Swift | [swiftsoup](swift/swiftsoup) | SwiftSoup 2.14.4 | 55 | HTML/XML parsing, CSS selectors, tree edits, cleaner and whitelists, output settings, entities |
+| | [yams](swift/yams) | Yams main (6.2.2+) | 23 | load/compose, serialize/dump with every emitter option, Node editing, Codable |
+| | [swift-syntax](swift/swift-syntax) | swift-syntax main | 23 | parser and incremental reparse, operator folding, formatting, diagnostics and fix-its, syntax builder, rewriters, SwiftIfConfig, lexical lookup, refactoring |

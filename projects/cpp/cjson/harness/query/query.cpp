@@ -8,7 +8,8 @@ void inspect(Borrow<Json> v) {
     (void)cJSON_GetNumberValue(v);
     int size = cJSON_GetArraySize(v);
     int counted = 0;
-    for (cJSON* c = v->child; c; c = c->next) counted++;
+    cJSON* c = nullptr;
+    cJSON_ArrayForEach(c, v) counted++;
     stitch::check(size == counted, "array size matches children");
 }
 STITCH_ENDPOINT(inspect);
@@ -71,12 +72,31 @@ void set_item_string(Borrow<Item> it, Str<256> value) {
 }
 STITCH_ENDPOINT(set_item_string);
 
-void set_item_number(Borrow<Item> it, F64 value) {
+void set_item_number(Borrow<Item> it, F64 value, Bool via_macro) {
     cJSON* v = cj::live_item(it, true);
     stitch::require(cJSON_IsNumber(v), "not a number");
-    cJSON_SetNumberHelper(v, value);
+    double r = via_macro ? cJSON_SetNumberValue(v, (double)value) : cJSON_SetNumberHelper(v, value);
+    if (value == value) stitch::check(r == (double)value && v->valuedouble == (double)value, "number value updated");
 }
 STITCH_ENDPOINT(set_item_number);
+
+void set_item_int(Borrow<Item> it, I32 value) {
+    cJSON* v = cj::live_item(it, true);
+    stitch::require(cJSON_IsNumber(v), "not a number");
+    cJSON_SetIntValue(v, (int)value);
+    stitch::check(v->valueint == (int)value && v->valuedouble == (double)(int)value, "int value updated");
+}
+STITCH_ENDPOINT(set_item_int);
+
+// cJSON_SetBoolValue only changes booleans; anything else gives cJSON_Invalid and is unchanged.
+void set_item_bool(Borrow<Item> it, Bool value) {
+    cJSON* v = cj::live_item(it, true);
+    int before = v->type;
+    int r = cJSON_SetBoolValue(v, (bool)value);
+    if (cJSON_IsBool(v)) stitch::check(r != cJSON_Invalid && (cJSON_IsTrue(v) != 0) == (bool)value, "bool value updated");
+    else stitch::check(r == cJSON_Invalid && v->type == before, "non-bool left unchanged");
+}
+STITCH_ENDPOINT(set_item_bool);
 
 New<Json> duplicate_item(Borrow<Item> it, Bool recurse) {
     cJSON* d = cJSON_Duplicate(cj::live_item(it), recurse);

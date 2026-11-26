@@ -25,7 +25,9 @@ void str_dup_sub(Str<64> a, Range<0, 70> i, Range<0, 70> n) {
     
     stitch::require(i.v + n.v <= len, "range beyond the string");  // (xmlStrsub / xmlStrndup read len bytes)
     xmlChar* s = xmlStrsub(d, (int)i.v, (int)n.v);
-    if (i.v + n.v <= len) stitch::check(s && std::string((char*)s) == std::string(a.c_str()).substr(i.v, n.v), "xmlStrsub == substr");
+    // (an empty substring at the very end comes back as NULL)
+    if (i.v + n.v <= len && !(s == nullptr && n.v == 0 && i.v == len))
+        stitch::check(s && std::string((char*)s) == std::string(a.c_str()).substr(i.v, n.v), "xmlStrsub == substr");
     xmlChar* nd = xmlStrndup(d, (int)n.v);
     stitch::check(nd && std::string((char*)nd) == std::string(a.c_str()).substr(0, n.v), "xmlStrndup");
     xmlFree(s); xmlFree(nd); xmlFree(d);
@@ -71,7 +73,8 @@ STITCH_ENDPOINT(str_cat);
 
 void str_qequal(Str<16> pre, Str<16> name, Str<32> str) {
     std::string q = std::string(pre.c_str()) + ":" + name.c_str();
-    int r = xmlStrQEqual((const xmlChar*)pre.c_str(), (const xmlChar*)name.c_str(), (const xmlChar*)str.c_str());
+    // (no prefix is NULL: an empty prefix string is a prefix that never matches)
+    int r = xmlStrQEqual(*pre.c_str() ? (const xmlChar*)pre.c_str() : nullptr, (const xmlChar*)name.c_str(), (const xmlChar*)str.c_str());
     stitch::check((r != 0) == (*pre.c_str() ? q == str.c_str() : std::string(name.c_str()) == str.c_str()), "xmlStrQEqual");
     
     xmlChar* b = xmlBuildQName((const xmlChar*)name.c_str(), *pre.c_str() ? (const xmlChar*)pre.c_str() : nullptr, nullptr, 0);

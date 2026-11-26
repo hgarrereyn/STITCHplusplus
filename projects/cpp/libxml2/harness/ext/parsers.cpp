@@ -122,6 +122,8 @@ STITCH_ENDPOINT(html_encode);
 void entities_ops(Borrow<Doc> d, Str<16, XmlName> name, Str<32> content) {
     std::string c = lx::clean(content.s);
     stitch::require(xmlValidateName((const xmlChar*)name.c_str(), 0) == 0, "invalid name");
+    // (the content is an entity value: '&' and '%' start references and must be escaped)
+    stitch::require(c.find('&') == std::string::npos && c.find('%') == std::string::npos, "unescaped & or %");
     stitch::require((*d)->intSubset != nullptr || xmlCreateIntSubset(*d, (const xmlChar*)"r", nullptr, nullptr) != nullptr, "no DTD");
     xmlEntityPtr e = xmlAddDocEntity(*d, (const xmlChar*)name.c_str(), XML_INTERNAL_GENERAL_ENTITY, nullptr, nullptr, (const xmlChar*)c.c_str());
     if (e) {
@@ -145,7 +147,7 @@ void c14n_variants(Borrow<Doc> d, Range<0, 2> mode, Bool comments, Str<32, XPath
     if (out) {
         std::string s = (char*)out;
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        if (again && !set) {
+        if (again && !set && lx::ns_wellformed(*d)) {
             xmlChar* out2 = nullptr;
             xmlC14NDocDumpMemory(again, nullptr, (int)mode.v, nullptr, comments ? 1 : 0, &out2);
             stitch::check(out2 && s == (char*)out2, "canonical XML is a fixed point");
@@ -174,7 +176,10 @@ void save_options(Borrow<Doc> d, Flags<XML_SAVE_FORMAT, XML_SAVE_NO_DECL, XML_SA
     stitch::require(s, "no save context");
     xmlSaveDoc(s, *d);
     xmlSaveClose(s);
-    if (!((int)opts & (XML_SAVE_AS_HTML | XML_SAVE_XHTML)) && (int)enc <= 1 && stitch::get(d, "wellformed", 0) && !stitch::get(d, "html", 0)) {
+    // (without a declaration, output in the document's own non-UTF-8 encoding cannot be read back)
+    bool utf8 = (int)enc == 1 || !(*d)->encoding || !xmlStrcasecmp((*d)->encoding, (const xmlChar*)"UTF-8");
+    bool needs_decl = ((int)opts & XML_SAVE_NO_DECL) && !utf8;
+    if (!((int)opts & (XML_SAVE_AS_HTML | XML_SAVE_XHTML)) && (int)enc <= 1 && !needs_decl && stitch::get(d, "wellformed", 0) && !stitch::get(d, "html", 0)) {
         std::string out((const char*)xmlBufferContent(b), xmlBufferLength(b));
         xmlDocPtr again = xmlReadMemory(out.data(), (int)out.size(), "s.xml", nullptr, lx::kQuiet);
         stitch::check(again != nullptr, "saved output parses (" + std::to_string((int)opts) + ")");

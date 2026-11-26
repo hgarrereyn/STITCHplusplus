@@ -9,12 +9,13 @@ void c14n_c14n_1_0_plain(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 0, nullptr, 0, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 0, nullptr, 0, &out2);
@@ -31,12 +32,13 @@ void c14n_c14n_1_0_comments(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 0, nullptr, 1, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 0, nullptr, 1, &out2);
@@ -53,12 +55,13 @@ void c14n_exclusive_1_0_plain(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 1, nullptr, 0, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 1, nullptr, 0, &out2);
@@ -75,12 +78,13 @@ void c14n_exclusive_1_0_comments(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 1, nullptr, 1, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 1, nullptr, 1, &out2);
@@ -97,12 +101,13 @@ void c14n_c14n_1_1_plain(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 2, nullptr, 0, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 2, nullptr, 0, &out2);
@@ -119,12 +124,13 @@ void c14n_c14n_1_1_comments(Borrow<Doc> d) {
     
     
     stitch::require((*d)->intSubset == nullptr && !stitch::get(d, "html", 0), "has a DTD or is HTML");  // (canonical XML drops the DTD: entity references and defaults would not survive)
+    stitch::require(xmlDocGetRootElement(*d) && lx::ns_wellformed(*d), "no root element, or not namespace-well-formed");
     xmlChar* out = nullptr;
     int n = xmlC14NDocDumpMemory(*d, nullptr, 2, nullptr, 1, &out);
     if (n >= 0 && out) {
         std::string s((const char*)out, n);
         xmlDocPtr again = xmlReadMemory(s.data(), (int)s.size(), "c.xml", nullptr, lx::kQuiet);
-        stitch::check(again != nullptr, "canonical XML parses");
+        if (stitch::get(d, "wellformed", 0)) stitch::check(again != nullptr, "canonical XML parses");  // (recovered trees can hold anything)
         if (again) {
             xmlChar* out2 = nullptr;
             int n2 = xmlC14NDocDumpMemory(again, nullptr, 2, nullptr, 1, &out2);

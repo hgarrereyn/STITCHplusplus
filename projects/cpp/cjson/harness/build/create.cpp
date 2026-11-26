@@ -1,4 +1,15 @@
 #include "../objects.hpp"
+#include <stdio.h>
+
+// Install the default allocator explicitly (cJSON_InitHooks with malloc/free), and check that the
+// version string agrees with the header.
+STITCH_INIT {
+    cJSON_Hooks hooks = {malloc, free};
+    cJSON_InitHooks(&hooks);
+    char want[32];
+    snprintf(want, sizeof want, "%d.%d.%d", CJSON_VERSION_MAJOR, CJSON_VERSION_MINOR, CJSON_VERSION_PATCH);
+    if (strcmp(cJSON_Version(), want) != 0) abort();
+}
 
 New<Json> create_null() { return cJSON_CreateNull(); }
 STITCH_ENDPOINT(create_null);
