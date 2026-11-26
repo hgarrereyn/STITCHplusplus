@@ -16,6 +16,7 @@ pub mod manifest;
 pub mod mutators;
 pub mod persistent;
 pub mod program;
+pub mod sched;
 pub mod triage;
 pub mod worker;
 
