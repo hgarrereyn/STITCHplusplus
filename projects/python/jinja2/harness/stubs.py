@@ -10,23 +10,33 @@ Oracles:
 - a sandboxed template never reaches open / exec / os / subprocess / import (audit hook).
 """
 import asyncio
+import gettext
+import io
+import json
+import logging
 import re
 import random
 import os
 import sys
+import tempfile
 
 import jinja2
+import jinja2.ext
+import jinja2.filters
 import jinja2.meta
 import jinja2.nativetypes
 import jinja2.sandbox
+import jinja2.tests
+import jinja2.utils
 import stitch
 from jinja2 import nodes
 from markupsafe import Markup
-from stitch import Bool, Borrow, New, OneOf, Src, Str
+from stitch import Bool, Borrow, New, OneOf, Range, Src, Str, Val
 
 Env = stitch.object("Env")
 Tmpl = stitch.object("Tmpl")
 JinjaText = stitch.datatype("JinjaText")
+ExprText = stitch.datatype("ExprText")     # a single Jinja expression
 
 JINJA_DIR = os.path.dirname(jinja2.__file__) + os.sep
 # Where Jinja applies template data to Python operations (iterating, calling, hashing, filters,
@@ -35,6 +45,7 @@ DATA_MODULES = ("filters.py", "tests.py", "defaults.py", "utils.py", "sandbox.py
 # Environment.select_template iterates whatever an {% include %} / {% import %} names
 ENV_DATA = {"select_template"}
 RUNTIME_DATA = {"call", "__call__", "_invoke", "_to_iterator", "__init__", "cycle", "changed", "__getitem__", "__getattr__"}
+LOADER_DATA = {"get_template_key", "split_template_path", "get_loader"}
 NAMES = ("index.html", "base.html", "macros.html", "part.html")
 
 sys.setrecursionlimit(3000)
@@ -55,6 +66,9 @@ def blame(e):
         return "template"  # template code, builtins, markupsafe
     rel = last[len(JINJA_DIR):]
     if rel in DATA_MODULES or (rel == "runtime.py" and func in RUNTIME_DATA) or (rel == "environment.py" and func in ENV_DATA and isinstance(e, TypeError)):
+        return "template"
+    # a template that extends/includes a non-string name: loaders that build a path or key from it
+    if rel == "loaders.py" and func in LOADER_DATA and isinstance(e, (AttributeError, TypeError)):
         return "template"
     return "jinja"
 
@@ -147,8 +161,7 @@ def context(s):
     return ctx
 
 
-@stitch.decoder(JinjaText)
-def jinja_text(s):
+def _gen(s, mode):
     names = ["x", "y", "items", "user", "html", "obj", "n", "v", "loop", "range", "dict", "lipsum", "cycler", "joiner", "namespace", "self", "caller", "varargs", "kwargs"]
     filters = ["upper", "lower", "title", "capitalize", "trim", "striptags", "escape", "e", "safe", "length", "first", "last", "list", "sort",
                "reverse", "unique", "min", "max", "sum", "join(',')", "join", "default('d')", "default(x, true)", "int", "float", "abs", "round(1)",
@@ -158,7 +171,8 @@ def jinja_text(s):
                "dictsort", "dictsort(false, 'value')", "items", "map('upper')", "map(attribute='name')", "map(attribute='name', default='q')",
                "select('odd')", "select('defined')", "reject('none')", "selectattr('a')", "selectattr('id', 'gt', 1)", "rejectattr('name')",
                "attr('name')", "attr('__class__')", "xmlattr", "xmlattr(false)", "random", "filesizeformat", "filesizeformat(true)", "count",
-               "forceescape", "unique(attribute='a')", "min(attribute='a')", "sum(attribute='id', start=1)", "trim('x')", "split" , "items|list"]
+               "forceescape", "unique(attribute='a')", "min(attribute='a')", "sum(attribute='id', start=1)", "trim('x')", "split" , "items|list",
+               "ctxname", "envname", "evalauto"]
     tests = ["defined", "undefined", "none", "number", "string", "mapping", "sequence", "iterable", "callable", "odd", "even",
              "divisibleby 3", "divisibleby(0)", "sameas x", "escaped", "in items", "eq 1", "lt 3", "ge x", "boolean", "true", "false", "integer", "float", "upper", "lower", "filter", "test"]
 
@@ -241,16 +255,50 @@ def jinja_text(s):
                 out.append(tag("autoescape " + s.pick(["true", "false", "x"])) + block(d + 1) + tag("endautoescape"))
         return "".join(out)
 
-    return block()
+    return expr() if mode == "expr" else block()
+
+
+@stitch.decoder(JinjaText)
+def jinja_text(s):
+    return _gen(s, "block")
+
+
+@stitch.decoder(ExprText)
+def expr_text(s):
+    return _gen(s, "expr")
+
+
+@jinja2.pass_context
+def _ctxname(ctx, value):
+    return f"{value}@{ctx.name}"
+
+
+@jinja2.pass_environment
+def _envname(env, value):
+    return f"{env.block_start_string}{value}"
+
+
+@jinja2.pass_eval_context
+def _evalauto(eval_ctx, value):
+    return f"{value}:{eval_ctx.autoescape}"
+
+
+def env_class(sandboxed):
+    return {None: jinja2.Environment, False: jinja2.Environment, True: jinja2.sandbox.SandboxedEnvironment,
+            "sandbox": jinja2.sandbox.SandboxedEnvironment,
+            "immutable": jinja2.sandbox.ImmutableSandboxedEnvironment}[sandboxed]
 
 
 def make_env(cls, autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix, **kw):
+    if autoescape == "select":
+        autoescape = jinja2.select_autoescape(["html", "xml"], default_for_string=True)
     undef = {"default": jinja2.Undefined, "strict": jinja2.StrictUndefined, "chainable": jinja2.ChainableUndefined, "debug": jinja2.DebugUndefined}[undefined]
     exts = [e for bit, e in ((1, "jinja2.ext.do"), (2, "jinja2.ext.loopcontrols"), (4, "jinja2.ext.i18n"), (8, "jinja2.ext.debug")) if ext & bit]
     env = cls(autoescape=autoescape, trim_blocks=trim, lstrip_blocks=lstrip, keep_trailing_newline=keep_nl, undefined=undef, extensions=exts,
               line_statement_prefix=line_prefix, line_comment_prefix="##" if line_prefix else None, **kw)
     if ext & 4:
         env.install_null_translations(newstyle=bool(ext & 16))
+    env.filters.update(ctxname=_ctxname, envname=_envname, evalauto=_evalauto)
     return env
 
 
@@ -266,9 +314,10 @@ def _loader(env):
 
 
 @stitch.endpoint
-def environment(autoescape: Bool, trim: Bool, lstrip: Bool, keep_nl: Bool, undefined: UNDEF, ext: stitch.Flags[1, 2, 4, 8, 16],
-                line_prefix: OneOf[None, "#", "%%"], sandboxed: Bool, optimized: Bool) -> New[Env]:
-    cls = jinja2.sandbox.SandboxedEnvironment if sandboxed else jinja2.Environment
+def environment(autoescape: OneOf[[False, True, "select"]], trim: Bool, lstrip: Bool, keep_nl: Bool, undefined: UNDEF,
+                ext: stitch.Flags[1, 2, 4, 8, 16], line_prefix: OneOf[None, "#", "%%"],
+                sandboxed: OneOf[[None, "sandbox", "immutable"]], optimized: Bool) -> New[Env]:
+    cls = env_class(sandboxed)
     env = make_env(cls, autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix, optimized=optimized)
     _loader(env)
     stitch.set(env, "opts", repr((autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix, sandboxed, optimized)))
@@ -350,7 +399,7 @@ def async_agrees(env: Borrow[Env], source: Str[512, JinjaText], s: Src[128]):
     """The async renderer gives the same result as the sync one."""
     opts = eval(stitch.get(env, "opts"))  # (rebuild both from the same options)
     autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix, sandboxed, optimized = opts
-    cls = jinja2.sandbox.SandboxedEnvironment if sandboxed else jinja2.Environment
+    cls = env_class(sandboxed)
     ctx = context(s)
     results = []
     for is_async in (False, True):
@@ -360,7 +409,9 @@ def async_agrees(env: Borrow[Env], source: Str[512, JinjaText], s: Src[128]):
         try:
             t = e.from_string(source)
             out = asyncio.run(t.render_async(dict(ctx))) if is_async else t.render(dict(ctx))
-            results.append(("ok", re.sub(r" at 0x[0-9a-f]+", " at 0x", out)))  # (object reprs)
+            # (object reprs; a filter's lazy result is an async generator in async mode)
+            out = re.sub(r"<(async_)?generator object (async_)?(\w+) at 0x[0-9a-f]+>", r"<generator \3>", out)
+            results.append(("ok", re.sub(r" at 0x[0-9a-f]+", " at 0x", out)))
         except Exception as ex:  # noqa: BLE001
             if blame(ex) == "jinja":
                 raise
@@ -389,3 +440,455 @@ def analyze(env: Borrow[Env], source: Str[1024, JinjaText]):
         list(ast.find_all(nodes.Name))
         toks = list(env.lex(source))
         stitch.check(all(isinstance(v, str) for _, _, v in toks), "token values are text")
+        stitch.check(isinstance(env.preprocess(source), str), "preprocess() gives text")
+        g = env.make_globals({"extra": 1})
+        stitch.check(g["extra"] == 1 and "range" in g, "make_globals() layers over the globals")
+
+
+# ---- more of the Environment / Template API ----
+
+def _addr(x):
+    return re.sub(r" at 0x[0-9a-f]+", " at 0x", x)  # (object reprs)
+
+
+def _outcome(fn):
+    """("ok", output) or ("error", exception type) for template-caused failures; Jinja bugs propagate."""
+    random.seed(1)
+    try:
+        with stitch.time_limit(1.0):   # (lipsum(10**20) and the like)
+            return ("ok", _addr(str(fn())))
+    except Exception as ex:  # noqa: BLE001
+        if blame(ex) == "jinja":
+            raise
+        return ("error", type(ex).__name__)
+
+
+def _contexts(s):
+    """A function that builds the same fresh template context each time (rendering may mutate it)."""
+    raw = s.rest()
+    return lambda: context(stitch.Source(raw))
+
+
+@stitch.endpoint
+def overlay(env: Borrow[Env], trim: Bool, autoescape: OneOf[[None, False, True]], keep_nl: Bool) -> New[Env]:
+    kw = {"trim_blocks": trim, "keep_trailing_newline": keep_nl}
+    if autoescape is not None:
+        kw["autoescape"] = autoescape
+    o = env.overlay(**kw)
+    stitch.check(o.overlayed, "overlay() marks the copy as an overlay")
+    stitch.check(type(o) is type(env), "overlay() keeps the environment class")
+    opts = list(eval(stitch.get(env, "opts")))
+    opts[1], opts[3] = trim, keep_nl
+    if autoescape is not None:
+        opts[0] = autoescape
+    stitch.set(o, "opts", repr(tuple(opts)))
+    return o
+
+
+@stitch.endpoint
+def add_extension(env: Borrow[Env], ext: OneOf[[1, 2, 8]]):
+    env.add_extension({1: "jinja2.ext.do", 2: "jinja2.ext.loopcontrols", 8: "jinja2.ext.debug"}[ext])
+    opts = list(eval(stitch.get(env, "opts")))
+    opts[5] |= ext
+    stitch.set(env, "opts", repr(tuple(opts)))
+    stitch.check(any(type(e).__module__ == "jinja2.ext" for e in env.iter_extensions()), "the extension is listed")
+
+
+SPECIAL = re.compile(r"\b(self|loop|super|caller|varargs|kwargs)\b")
+
+
+@stitch.endpoint
+def compile_expression(env: Borrow[Env], source: Str[256, ExprText], undefined_to_none: Bool, s: Src[128]):
+    """An expression evaluates to what `{{ (expr) }}` prints."""
+    ctx = _contexts(s)
+    with Guard():
+        fn = env.compile_expression(source, undefined_to_none=undefined_to_none)
+    with Guard():
+        random.seed(1)
+        with stitch.time_limit(1.0):
+            val = fn(ctx())
+    if undefined_to_none:
+        stitch.check(not isinstance(val, jinja2.Undefined), "undefined_to_none turns Undefined into None")
+        return
+    if env.autoescape is not False or SPECIAL.search(source) or isinstance(env, jinja2.nativetypes.NativeEnvironment):
+        return
+    try:
+        t = env.from_string("{{ (" + source + ") }}")
+    except jinja2.TemplateSyntaxError:
+        return
+    got = _outcome(lambda: t.render(ctx()))
+    stitch.require(got[0] == "ok", "the template fails")
+    want = _outcome(lambda: val)
+    stitch.log(f"expression: {want!r:.200}  template: {got!r:.200}")
+    stitch.check(got == want, "compile_expression() agrees with {{ expr }}")
+
+
+@stitch.endpoint
+def select_template(env: Borrow[Env], s: Src[16], with_template: Bool):
+    names = [s.pick(list(NAMES) + ["missing.html", "x/../base.html"]) for _ in range(s.range(1, 3))]
+    if with_template:
+        with Guard():
+            names.append(env.from_string("tmpl"))
+    with Guard():
+        try:
+            t = env.select_template(names) if s.coin() else env.get_or_select_template(names)
+        except jinja2.TemplatesNotFound as e:
+            stitch.check(not any(n in _loader(env) for n in names if isinstance(n, str)), "an existing template is found")
+            stitch.bail("not found")
+        stitch.check(t.name in names or t in names, "the template is one of the names")
+
+
+@stitch.endpoint
+def list_templates(env: Borrow[Env], ext: OneOf[[None, "html", "txt"]]):
+    got = env.list_templates(extensions=[ext] if ext else None)
+    want = sorted(n for n in _loader(env) if ext is None or n.endswith("." + ext))
+    stitch.check(got == want, "list_templates() lists the loader's templates")
+    env.join_path("part.html", "index.html")
+
+
+@stitch.endpoint
+def stream(t: Borrow[Tmpl], size: Range[0, 6], s: Src[256]):
+    """TemplateStream with and without buffering gives the render() output."""
+    ctx = _contexts(s)
+    want = _outcome(lambda: t.render(ctx()))
+    stitch.require(want[0] == "ok", "render fails")
+
+    def streamed():
+        st = t.stream(ctx())
+        if size > 1:
+            st.enable_buffering(size)
+        else:
+            st.disable_buffering()
+        if size % 2:
+            out = io.StringIO()
+            st.dump(out)
+            return out.getvalue()
+        return "".join(st)
+
+    got = _outcome(streamed)
+    stitch.check(got == want, "stream() agrees with render()")
+
+
+@stitch.endpoint
+def new_context(t: Borrow[Tmpl], shared: Bool, s: Src[128]):
+    vars = context(s)
+    with Guard():
+        ctx = t.new_context(vars, shared=shared)
+        for k, v in vars.items():
+            stitch.check(ctx[k] is v and k in ctx and ctx.get(k) is v, "the context holds the variables")
+            stitch.check(ctx.resolve_or_missing(k) is v, "resolve_or_missing() finds a variable")
+        all_vars = ctx.get_all()
+        stitch.check(all(k in all_vars for k in vars), "get_all() has the variables")
+        if not shared:
+            stitch.check("range" in all_vars, "an unshared context sees the globals")
+        t.make_module(vars, shared=shared)
+
+
+@stitch.endpoint
+def template_info(t: Borrow[Tmpl], line: Range[0, 200]):
+    t.get_corresponding_lineno(line)
+    t.debug_info
+    t.is_up_to_date
+    with Guard():
+        str(t.module)
+
+
+def _arity(fn):
+    """Call a filter or test; passing it the wrong number of arguments is the caller's mistake."""
+    try:
+        return fn()
+    except TypeError as e:
+        tb = e.__traceback__
+        while tb.tb_next is not None:
+            tb = tb.tb_next
+        if tb.tb_frame.f_code.co_name == "_filter_test_common":
+            stitch.bail("wrong arguments")
+        raise
+
+
+FILTER_NAMES = tuple(sorted(jinja2.filters.FILTERS)) + ("ctxname", "envname", "evalauto")
+TEST_NAMES = tuple(sorted(jinja2.tests.TESTS))
+ARGS = (1, 2, -1, 0, "a", "name", "id", True, None, "x,y", 2.5, "upper", "odd")
+
+
+@stitch.endpoint
+def call_filter(env: Borrow[Env], name: OneOf[FILTER_NAMES], s: Src[128], nargs: Range[0, 3]):
+    ctx = context(s)
+    value = s.pick(list(ctx.values()))
+    args = [s.pick(ARGS) for _ in range(nargs)]
+    with Guard():
+        c = env.from_string("").new_context(ctx)
+        _arity(lambda: env.call_filter(name, value, args, context=c, eval_ctx=nodes.EvalContext(env)))
+
+
+@stitch.endpoint
+def call_test(env: Borrow[Env], name: OneOf[TEST_NAMES], s: Src[128], nargs: Range[0, 1]):
+    ctx = context(s)
+    value = s.pick(list(ctx.values()))
+    args = [s.pick(ARGS) for _ in range(nargs)]
+    with Guard():
+        c = env.from_string("").new_context(ctx)
+        r = _arity(lambda: env.call_test(name, value, args, context=c, eval_ctx=nodes.EvalContext(env)))
+    if name not in ("filter", "test"):   # (these two give whatever a name lookup gives)
+        stitch.check(isinstance(r, bool) or r is NotImplemented or r in (0, 1), "tests return booleans")
+
+
+ATTRS = ("name", "method", "_private", "__class__", "__globals__", "__code__", "mro", "format", "format_map",
+         "append", "update", "pop", "clear", "items", "gi_frame", "cr_frame", "f_locals", "func_code", "__init__",
+         "__subclasses__", "__reduce__", "copy", "upper", "real")
+
+
+def _target(kind):
+    def gen():
+        yield 1
+
+    return {"canary": Canary(), "str": "abc", "list": [1, 2], "dict": {"a": 1}, "set": {1}, "func": _target,
+            "int": 7, "gen": gen(), "class": Canary, "markup": Markup("<b>")}[kind]
+
+
+@stitch.endpoint
+def sandbox_attr(env: Borrow[Env], kind: OneOf[["canary", "str", "list", "dict", "set", "func", "int", "gen", "class", "markup"]],
+                 attr: OneOf[ATTRS], item: Bool):
+    """The sandbox hides internal and private attributes (and mutators, when immutable)."""
+    obj = _target(kind)
+    with Guard():
+        v = env.getitem(obj, attr) if item else env.getattr(obj, attr)
+    internal = jinja2.sandbox.is_internal_attribute(obj, attr)
+    mutates = jinja2.sandbox.modifies_known_mutable(obj, attr)
+    if isinstance(env, jinja2.sandbox.SandboxedEnvironment) and not isinstance(obj, dict):
+        if attr.startswith("_") or internal:
+            stitch.check(isinstance(v, jinja2.Undefined), "the sandbox hides an unsafe attribute")
+        if isinstance(env, jinja2.sandbox.ImmutableSandboxedEnvironment) and mutates:
+            stitch.check(isinstance(v, jinja2.Undefined), "the immutable sandbox hides a mutating method")
+
+
+BASE = "<{% block b %}base{% endblock %}|{% block c %}{% endblock %}>"
+PART = "[{{ x }}]"
+MACROS = "{% macro m(a=1) %}({{ a }}{{ caller() if caller }}){% endmacro %}"
+
+
+@stitch.endpoint
+def loader_agrees(source: Str[1024, JinjaText], kind: OneOf[["function", "prefix", "choice", "filesystem", "module", "zip",
+                                                              "bytecode"]], s: Src[128]):
+    """Every loader (and the bytecode cache) gives the template DictLoader gives."""
+    mapping = {"index.html": source, "base.html": BASE, "part.html": PART, "macros.html": MACROS}
+    ctx = _contexts(s)
+    ref = jinja2.Environment(loader=jinja2.DictLoader(mapping))
+    want = _outcome(lambda: ref.get_template("index.html").render(ctx()))
+    name = "index.html"
+    with tempfile.TemporaryDirectory() as tmp:
+        if kind == "function":
+            loader = jinja2.FunctionLoader(lambda n: mapping.get(n))
+        elif kind == "prefix":
+            stitch.require("self" not in source, "the template name differs")
+            loader = jinja2.ChoiceLoader([jinja2.PrefixLoader({"p": jinja2.DictLoader(mapping)}), jinja2.DictLoader(mapping)])
+            name = "p/index.html"
+        elif kind == "choice":
+            loader = jinja2.ChoiceLoader([jinja2.DictLoader({}), jinja2.FunctionLoader(lambda n: None),
+                                          jinja2.DictLoader(mapping)])
+        elif kind == "filesystem":
+            stitch.require("\r" not in source, "text files translate line endings")
+            for n, src in mapping.items():
+                with open(os.path.join(tmp, n), "w", encoding="utf-8", newline="") as f:
+                    f.write(src)
+            loader = jinja2.FileSystemLoader([os.path.join(tmp, "none"), tmp])
+            stitch.check(sorted(loader.list_templates()) == sorted(mapping), "FileSystemLoader lists the files")
+        elif kind in ("module", "zip"):
+            target = os.path.join(tmp, "out.zip" if kind == "zip" else "out")
+            logged = []
+            ref.compile_templates(target, zip="deflated" if kind == "zip" else None, ignore_errors=True,
+                                  log_function=logged.append)
+            loader = jinja2.ModuleLoader(target)
+        else:
+            loader = jinja2.DictLoader(mapping)
+        env = jinja2.Environment(loader=loader, bytecode_cache=jinja2.FileSystemBytecodeCache(tmp) if kind == "bytecode" else None)
+
+        def run():
+            t = env.get_template(name)
+            if kind == "bytecode":
+                env.cache.clear()
+                t = env.get_template(name)     # (from the bytecode cache)
+            return t.render(ctx())
+
+        got = _outcome(run)
+        if kind == "bytecode":
+            env.bytecode_cache.clear()
+    stitch.log(f"dict: {want!r:.200}  {kind}: {got!r:.200}")
+    # (errors may differ in type: a missing or non-string template name fails differently per loader)
+    stitch.check(got[0] == want[0], f"{kind} loader fails like DictLoader")
+    if got[0] == "ok":
+        stitch.check(got == want, f"{kind} loader renders like DictLoader")
+
+
+@stitch.endpoint
+def direct_template(source: Str[1024, JinjaText], s: Src[128]):
+    """jinja2.Template(source) renders like Environment().from_string(source)."""
+    ctx = _contexts(s)
+    want = _outcome(lambda: jinja2.Environment().from_string(source).render(ctx()))
+    got = _outcome(lambda: jinja2.Template(source).render(ctx()))
+    stitch.check(got == want, "Template(source) agrees with Environment().from_string(source)")
+
+
+def _upper_gettext(text):
+    return text.upper()
+
+
+def _upper_ngettext(singular, plural, n):
+    return (singular if n == 1 else plural).upper()
+
+
+@stitch.endpoint
+def i18n(source: Str[512, JinjaText], mode: OneOf[["null", "translations", "callables", "uninstall"]], newstyle: Bool,
+         s: Src[128]):
+    env = jinja2.Environment(extensions=["jinja2.ext.i18n", "jinja2.ext.do"], loader=jinja2.DictLoader(
+        {"base.html": BASE, "part.html": PART, "macros.html": MACROS}))
+    if mode == "translations":
+        env.install_gettext_translations(gettext.NullTranslations(), newstyle=newstyle)
+    elif mode == "callables":
+        env.install_gettext_callables(_upper_gettext, _upper_ngettext, newstyle=newstyle,
+                                      pgettext=lambda c, m: f"{c}:{m}", npgettext=lambda c, a, b, n: f"{c}:{a if n == 1 else b}")
+    else:
+        env.install_null_translations(newstyle=newstyle)
+        if mode == "uninstall":
+            env.uninstall_gettext_translations(None)
+    with Guard():
+        list(env.extract_translations(source))
+    with Guard():
+        list(jinja2.ext.babel_extract(io.BytesIO(source.encode("utf-8", "surrogatepass")), ("_", "gettext", "ngettext"),
+                                      ["NOTE:"], {"extensions": "jinja2.ext.do", "trimmed": "true", "newstyle_gettext": "1"}))
+    with Guard():
+        random.seed(1)
+        env.from_string(source).render(context(s))
+
+
+@stitch.endpoint
+def helpers(s: Src[128], n: Range[1, 5], lo: Range[1, 30], hi: Range[1, 100], html: Bool):
+    """Template globals and utils: cycler, joiner, namespace, lipsum, htmlsafe_json_dumps."""
+    ctx = context(s)
+    items = [s.pick(ARGS) for _ in range(s.range(1, 4))]
+    c = jinja2.utils.Cycler(*items)
+    for i in range(n):
+        stitch.check(c.current == items[i % len(items)], "cycler.current follows next()")
+        c.next()
+    c.reset()
+    stitch.check(c.current == items[0], "cycler.reset() starts over")
+    j = jinja2.utils.Joiner(", ")
+    stitch.check(j() == "" and j() == ", ", "joiner skips the first call")
+    ns = jinja2.utils.Namespace({"a": 1}, b=2)
+    stitch.check(ns.a + ns.b == 3 and "a" in repr(ns), "namespace attributes")
+    stitch.require(lo < hi, "min not below max")   # (words are drawn from range(min, max))
+    random.seed(1)
+    text = jinja2.utils.generate_lorem_ipsum(n=n, html=html, min=lo, max=hi)
+    stitch.check(text.count("<p>") == n if html else text.count("\n\n") == n - 1, "lipsum gives n paragraphs")
+    value = s.pick(list(ctx.values()))
+    try:
+        plain = json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return
+    out = jinja2.utils.htmlsafe_json_dumps(value)
+    stitch.check(not any(ch in out for ch in "<>&'"), "htmlsafe_json_dumps() escapes HTML characters")
+    stitch.check(json.dumps(json.loads(out)) == json.dumps(plain), "htmlsafe_json_dumps() is JSON for the value")
+    stitch.check(jinja2.is_undefined(jinja2.Undefined()) and not jinja2.is_undefined(value), "is_undefined()")
+    jinja2.clear_caches()
+
+
+@stitch.endpoint
+def urlize(text: Str[256, JinjaText], trim: OneOf[[None, 0, 5, 30]], rel: OneOf[[None, "nofollow", "a b"]],
+           target: OneOf[[None, "_blank"]], schemes: OneOf[[None, ("ftp:",), ("x-y:", "tel:")]]):
+    """urlize() escapes everything but the links it makes."""
+    out = jinja2.utils.urlize(text, trim_url_limit=trim, rel=rel, target=target, extra_schemes=schemes)
+    rest = re.sub(r'<a href="[^"<>]*"( rel="[^"<>]*")?( target="[^"<>]*")?>|</a>', "", out)
+    stitch.check("<" not in rest and ">" not in rest, "urlize() output has no markup besides its links")
+
+
+LruOps = stitch.datatype("LruOps")
+
+
+@stitch.decoder(LruOps)
+def lru_ops(s):
+    ops = []
+    while s.more():
+        ops.append((s.choice(7), s.range(0, 6), s.range(0, 99)))
+    return ops
+
+
+@stitch.endpoint
+def lru_cache(capacity: Range[1, 5], ops: Val[LruOps, 256]):
+    """LRUCache against a model: the least recently used key goes first."""
+    c = jinja2.utils.LRUCache(capacity)
+    model = {}   # key -> value, in use order (oldest first)
+
+    def touch(k):
+        model[k] = model.pop(k)
+
+    for op, k, v in ops:
+        if op == 0:
+            c[k] = v
+            model.pop(k, None)
+            model[k] = v
+            while len(model) > capacity:
+                del model[next(iter(model))]
+        elif op == 1:
+            got = c.get(k)
+            stitch.check(got == model.get(k), "get() agrees with the model")
+            if k in model:
+                touch(k)
+        elif op == 2:
+            got = c.setdefault(k, v)
+            if k in model:
+                stitch.check(got == model[k], "setdefault() returns the stored value")
+                touch(k)
+            else:
+                model[k] = v
+                while len(model) > capacity:
+                    del model[next(iter(model))]
+        elif op == 3:
+            if k in model:
+                del c[k]
+                del model[k]
+        elif op == 4:
+            stitch.check((k in c) == (k in model), "`in` agrees with the model")
+        elif op == 5:
+            c = c.copy()
+        else:
+            stitch.check(c.keys() == list(reversed(model)), "keys() lists the most recent first")
+        stitch.check(len(c) == len(model), "len() agrees with the model")
+    c.items(), c.values(), repr(c)
+    c.clear()
+
+
+@stitch.endpoint
+def logging_undefined(name: OneOf[["x", "y", "obj"]], op: OneOf[["str", "iter", "bool", "len", "attr"]]):
+    logger = logging.getLogger("stitch-jinja")
+    logger.propagate = False
+    U = jinja2.make_logging_undefined(logger, jinja2.Undefined)
+    u = U(name=name)
+    try:
+        {"str": str, "iter": list, "bool": bool, "len": len, "attr": lambda u: u.anything}[op](u)
+    except jinja2.UndefinedError:
+        pass
+    stitch.check(jinja2.is_undefined(u), "a logging undefined is undefined")
+
+
+@stitch.endpoint
+def async_stream(env: Borrow[Env], source: Str[512, JinjaText], s: Src[128]):
+    """generate_async() and make_module_async() agree with render_async()."""
+    autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix, sandboxed, optimized = eval(stitch.get(env, "opts"))
+    e = make_env(env_class(sandboxed), autoescape, trim, lstrip, keep_nl, undefined, ext, line_prefix,
+                 optimized=optimized, enable_async=True)
+    e.loader = jinja2.DictLoader(dict(_loader(env)))
+    ctx = _contexts(s)
+    with Guard():
+        t = e.from_string(source)
+
+    async def gen():
+        return "".join([x async for x in t.generate_async(ctx())])
+
+    async def module():
+        m = await t.make_module_async(ctx())
+        return str(m)
+
+    want = _outcome(lambda: asyncio.run(t.render_async(ctx())))
+    got = _outcome(lambda: asyncio.run(gen()))
+    stitch.check(got == want, "generate_async() agrees with render_async()")
+    _outcome(lambda: asyncio.run(module()))

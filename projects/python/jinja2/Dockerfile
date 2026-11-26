@@ -4,4 +4,4 @@
 ARG STITCH_BASE
 FROM ${STITCH_BASE}
 COPY --from=source . /src
-RUN pip install --no-cache-dir "markupsafe==2.0.1" /src
+RUN pip install --no-cache-dir /src

@@ -5,7 +5,7 @@ language = "python"
 
 [source]
 git = "https://github.com/dateutil/dateutil"
-rev = "2.9.0"
+rev = "261e2913961865300032cf30df1d59f4f0ff6f1a"   # master HEAD, 2 commits after 4.0.0
 
 [python]
 include = ["dateutil"]

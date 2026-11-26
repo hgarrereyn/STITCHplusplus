@@ -5,7 +5,7 @@ language = "python"
 
 [source]
 git = "https://github.com/python-poetry/tomlkit"
-rev = "0.13.2"
+rev = "d2aa305673a01eafd0edda54ef07ebcb8902f4d4"   # master HEAD (release 0.15.3)
 
 [python]
 include = ["tomlkit"]
