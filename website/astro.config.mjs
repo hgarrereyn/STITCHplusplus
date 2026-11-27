@@ -57,6 +57,13 @@ export default defineConfig({
           content:
             "try{var l=localStorage.getItem('stitch-lang');if(l)document.documentElement.dataset.stitchLang=l}catch(e){}",
         },
+        { tag: "meta", attrs: { name: "twitter:card", content: "summary" } },
+        { tag: "meta", attrs: { property: "og:image", content: "https://stitch.c.mov/og-image.png" } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "600" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "600" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: "STITCH++ program graph connecting typed API endpoints" } },
+        { tag: "meta", attrs: { name: "twitter:image", content: "https://stitch.c.mov/og-image.png" } },
+        { tag: "meta", attrs: { name: "twitter:image:alt", content: "STITCH++ program graph connecting typed API endpoints" } },
       ],
       components: {
         PageTitle: "./src/components/PageTitle.astro",
