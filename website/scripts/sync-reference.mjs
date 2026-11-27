@@ -58,7 +58,7 @@ PAGES.forEach(([name, title], i) => {
 
 // CLI reference: links to other files of the guide go to the reference pages.
 const cli = readFileSync(join(ref, "cli.md"), "utf8")
-  .replace("](reproducers.md)", "](/STITCHplusplus/reference/languages/reproducers/)");
+  .replace("](reproducers.md)", "](/reference/languages/reproducers/)");
 writeFileSync(
   join(root, "website/src/content/docs/reference/cli.md"),
   page(cli, "CLI", 1, "Every stitch command.", "skill/stitch/reference/cli.md"),
@@ -80,14 +80,14 @@ for (const name of guide) {
   const source = `skill/stitch/reference/${name}.md`;
   const md = readFileSync(join(root, source), "utf8").replace(/\]\((\w+)\.md\)/g, (m, target) => {
     if (!guide.includes(target)) throw new Error(`${source}: link to missing ${target}.md`);
-    return `](/STITCHplusplus/agents/${target}.md/)`;
+    return `](/agents/${target}.md/)`;
   });
   const title = md.match(/^# (.*)/)?.[1].replace(/`/g, "") ?? name;
   writeFileSync(
     join(agentsOut, `${name}.md`),
     page(md, title, 0, `${name}.md from the STITCH++ agent guide, as agents read it.`, source, [
       `slug: agents/${name}.md`,
-      `raw: /STITCHplusplus/agents/${name}.raw.md`,
+      `raw: /agents/${name}.raw.md`,
     ]),
   );
 }

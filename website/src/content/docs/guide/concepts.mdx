@@ -320,7 +320,7 @@ an object should copy its attributes too.
 | data type, decoder | `Tag = stitch.datatype("Tag")`, `@stitch.decoder(Tag)` |
 | attributes | `stitch.set(x, k, v)`, `stitch.get(x, k, default)` |
 
-Full reference: [Python](/STITCHplusplus/reference/languages/python/).
+Full reference: [Python](/reference/languages/python/).
 </Lang>
 
 <Lang id="cpp">
@@ -338,7 +338,7 @@ Full reference: [Python](/STITCHplusplus/reference/languages/python/).
 | data type, decoder | `STITCH_DATATYPE(Tag);`, `STITCH_DECODER(Tag, fn);` |
 | attributes | `stitch::set(x, k, v)`, `stitch::get(x, k, default)` |
 
-Full reference: [C/C++](/STITCHplusplus/reference/languages/cpp/).
+Full reference: [C/C++](/reference/languages/cpp/).
 </Lang>
 
 <Lang id="javascript">
@@ -356,7 +356,7 @@ Full reference: [C/C++](/STITCHplusplus/reference/languages/cpp/).
 | data type, decoder | `const Tag = stitch.datatype("Tag")`, `stitch.decoder(Tag, (s) => ...)` |
 | attributes | `stitch.set(x, k, v)`, `stitch.get(x, k, default)` |
 
-Full reference: [JavaScript](/STITCHplusplus/reference/languages/javascript/).
+Full reference: [JavaScript](/reference/languages/javascript/).
 </Lang>
 
 <Lang id="java">
@@ -374,7 +374,7 @@ Full reference: [JavaScript](/STITCHplusplus/reference/languages/javascript/).
 | data type, decoder | `@Decoder("Tag")` on a `public static` method taking a `Source` |
 | attributes | `Stitch.set(x, k, v)`, `Stitch.getLong(x, k, default)` |
 
-Full reference: [Java](/STITCHplusplus/reference/languages/java/).
+Full reference: [Java](/reference/languages/java/).
 </Lang>
 
 <Lang id="go">
@@ -392,7 +392,7 @@ Full reference: [Java](/STITCHplusplus/reference/languages/java/).
 | data type, decoder | `stitch.Decoder("Tag", fn)` |
 | attributes | `stitch.Set(x, k, v)`, `stitch.GetInt(x, k, default)` |
 
-Full reference: [Go](/STITCHplusplus/reference/languages/go/).
+Full reference: [Go](/reference/languages/go/).
 </Lang>
 
 <Lang id="rust">
@@ -410,7 +410,7 @@ Full reference: [Go](/STITCHplusplus/reference/languages/go/).
 | data type, decoder | `datatype!(Tag);`, `decoder!(Tag, fn name(s: &mut Source) -> T { ... });` |
 | attributes | `set_int(&x, k, v)`, `get_int(&x, k)`, `has(&x, k)` |
 
-Full reference: [Rust](/STITCHplusplus/reference/languages/rust/).
+Full reference: [Rust](/reference/languages/rust/).
 </Lang>
 
 <Lang id="ruby">
@@ -428,7 +428,7 @@ Full reference: [Rust](/STITCHplusplus/reference/languages/rust/).
 | data type, decoder | `Tag = Stitch.datatype("Tag")`, `Stitch.decoder(Tag) do \|s\| ... end` |
 | attributes | `Stitch.set(x, k, v)`, `Stitch.get(x, k, default)` |
 
-Full reference: [Ruby](/STITCHplusplus/reference/languages/ruby/).
+Full reference: [Ruby](/reference/languages/ruby/).
 </Lang>
 
 <Lang id="swift">
@@ -446,7 +446,7 @@ Full reference: [Ruby](/STITCHplusplus/reference/languages/ruby/).
 | data type, decoder | `enum Tag: Decoded { static func decode(_ s: Source) -> T }` |
 | attributes | `x.set(k, v)`, `x.int(k)` |
 
-Full reference: [Swift](/STITCHplusplus/reference/languages/swift/).
+Full reference: [Swift](/reference/languages/swift/).
 </Lang>
 
 <Lang id="objc">
@@ -464,5 +464,5 @@ Full reference: [Swift](/STITCHplusplus/reference/languages/swift/).
 | data type, decoder | `STITCH_DATATYPE(Tag);`, `STITCH_DECODER(Tag) { ... }` |
 | attributes | `STSetInt(x, k, v)`, `STGetIntOr(x, k, default)` |
 
-Full reference: [Objective-C](/STITCHplusplus/reference/languages/objc/).
+Full reference: [Objective-C](/reference/languages/objc/).
 </Lang>

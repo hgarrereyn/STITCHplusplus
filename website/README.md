@@ -4,7 +4,7 @@ The STITCH++ documentation, built with [Starlight](https://starlight.astro.build
 
 ```sh
 npm install
-npm run dev      # http://localhost:4321/STITCHplusplus/
+npm run dev      # http://localhost:4321/
 npm run build    # static site in dist/
 ```
 

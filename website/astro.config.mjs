@@ -2,8 +2,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
 export default defineConfig({
-  site: "https://hgarrereyn.github.io",
-  base: "/STITCHplusplus",
+  site: "https://stitch.c.mov",
   integrations: [
     starlight({
       title: "STITCH++",

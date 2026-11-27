@@ -13,7 +13,7 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/hgarrereyn/STITCHplusplus"
-Documentation = "https://hgarrereyn.github.io/STITCHplusplus/"
+Documentation = "https://stitch.c.mov/"
 Changelog = "https://github.com/hgarrereyn/STITCHplusplus/blob/main/CHANGELOG.md"
 
 [project.scripts]
