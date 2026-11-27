@@ -3,6 +3,9 @@ import starlight from "@astrojs/starlight";
 
 export default defineConfig({
   site: "https://stitch.c.mov",
+  redirects: {
+    "/agents": "/agents/overview.raw.md",
+  },
   integrations: [
     starlight({
       title: "STITCH++",
