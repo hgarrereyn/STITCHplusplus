@@ -1,0 +1,694 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>STITCH++ launch</title>
+<style>
+  html, body { margin: 0; background: #0c0e12; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 56.25vw; max-height: 100vh; max-width: 177.78vh; margin: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// STITCH++ launch film. Everything is a pure function of time: renderAt(t) draws frame t.
+// Open this file directly to preview; render.mjs drives it frame by frame.
+const W = 1920, H = 1080, DUR = 20;
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+
+const COL = {
+  bg: "#0c0e12", card: "#13161d", cardEdge: "#262b34", hole: "#07080b", holeEdge: "#353b48",
+  fn: "#eef1f6", punct: "#6b7383", obj: "#7d9bff", ph: "#4f5664", fuzz: "#f59e42",
+  thread: "#eef1f6", red: "#f2555a", cap: "#9aa1ae", capHi: "#eef1f6", logo: "#2f5fc4", accent: "#6f93ff",
+};
+const MONO = '"JetBrains Mono", monospace', SANS = '"Inter", sans-serif', DISP = '"Inter Display", "Inter", sans-serif';
+const FS = 26, PAD = 58, CH = 84, HOLE = 20, NL = 118, NW = 4.2, EYE = NL - 20;
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, u) => a + (b - a) * u;
+const eio = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const eo = (u) => 1 - Math.pow(1 - u, 3);
+const eo5 = (u) => 1 - Math.pow(1 - u, 5);
+const ei = (u) => u * u * u;
+const back = (u, c1 = 1.4) => { const c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); };
+const springT = (dt, f = 2, d = 6) => (dt <= 0 ? 0 : 1 - Math.exp(-d * dt) * Math.cos(2 * Math.PI * f * dt));
+function hash(a, b, c) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, u) => { const A = hex(a), B = hex(b); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], u))).join(",")})`; };
+
+// ---------- paths ----------
+class Path {
+  constructor() { this.p = []; this.s = []; }
+  add(x, y) {
+    const n = this.p.length;
+    if (n) { const q = this.p[n - 1]; const d = Math.hypot(x - q[0], y - q[1]); if (d < 1e-6) return; this.s.push(this.s[n - 1] + d); }
+    else this.s.push(0);
+    this.p.push([x, y]);
+  }
+  bez(a, b, c, d, N = 72) {
+    if (!this.p.length) this.add(a[0], a[1]);
+    for (let i = 1; i <= N; i++) {
+      const u = i / N, v = 1 - u;
+      this.add(v * v * v * a[0] + 3 * v * v * u * b[0] + 3 * v * u * u * c[0] + u * u * u * d[0],
+               v * v * v * a[1] + 3 * v * v * u * b[1] + 3 * v * u * u * c[1] + u * u * u * d[1]);
+    }
+  }
+  line(a, b) { if (!this.p.length) this.add(a[0], a[1]); this.add(b[0], b[1]); }
+  get len() { return this.s[this.s.length - 1]; }
+  at(s) {
+    const p = this.p, S = this.s, n = p.length;
+    if (s <= 0) { const d = norm(sub(p[1], p[0])); return [p[0][0] + d[0] * s, p[0][1] + d[1] * s]; }
+    if (s >= this.len) { const d = norm(sub(p[n - 1], p[n - 2])); const e = s - this.len; return [p[n - 1][0] + d[0] * e, p[n - 1][1] + d[1] * e]; }
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] <= s) lo = m; else hi = m; }
+    const u = (s - S[lo]) / (S[hi] - S[lo]);
+    return [lerp(p[lo][0], p[hi][0], u), lerp(p[lo][1], p[hi][1], u)];
+  }
+  slice(s0, s1) {
+    s0 = clamp(s0, 0, this.len); s1 = clamp(s1, 0, this.len);
+    if (s1 <= s0) return [];
+    const out = [this.at(s0)];
+    for (let i = 0; i < this.p.length; i++) if (this.s[i] > s0 && this.s[i] < s1) out.push(this.p[i]);
+    out.push(this.at(s1));
+    return out;
+  }
+}
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const norm = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
+function keyed(keys, t) {
+  if (t <= keys[0].t) return keys[0].s;
+  for (let i = 1; i < keys.length; i++) {
+    const a = keys[i - 1], b = keys[i];
+    if (t < b.t) return lerp(a.s, b.s, (b.e || eio)((t - a.t) / (b.t - a.t)));
+  }
+  return keys[keys.length - 1].s;
+}
+
+// ---------- text / cards ----------
+const CW = FS * 0.6; // JetBrains Mono advance is 600/1000 em
+const O = (v) => ({ k: "obj", v });
+const F = (from, to) => ({ k: "fuzz", from, to });
+const Fz = (v) => F(v, v);
+const call = (name, ...args) => ({ name, args });
+function textLen(c, fin) {
+  let n = c.name.length + 2;
+  c.args.forEach((a, i) => { n += (a.k === "obj" ? a.v.length : fin ? a.to.length : a.from.length) + (i ? 2 : 0); });
+  return n;
+}
+const cardW = (c) => Math.max(textLen(c, true), textLen(c, false)) * CW + 2 * PAD;
+const CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789"%$#@!&*{}[]<>/\\=?~^';
+
+function cardParts(k, t) {
+  const c = k.c, parts = [[c.name, COL.fn], ["(", COL.punct]];
+  c.args.forEach((a, i) => {
+    if (i) parts.push([", ", COL.punct]);
+    if (a.k === "obj") parts.push([a.v, COL.obj]);
+    else {
+      const u = k.fz;
+      if (u <= 0) parts.push([a.from, COL.ph]);
+      else if (u >= 1) parts.push([a.to, COL.fuzz]);
+      else {
+        const n = a.to.length, r = Math.floor(eo(u) * (n + 0.999));
+        let s = a.to.slice(0, r);
+        const q = Math.floor(t * 26);
+        for (let j = r; j < n; j++) s += CHARS[Math.floor(hash(k.seed, j + i * 31, q) * CHARS.length)];
+        parts.push([s, COL.fuzz]);
+      }
+    }
+  });
+  parts.push([")", COL.punct]);
+  return parts;
+}
+
+function rr(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function drawCard(k, t) {
+  if (k.alpha <= 0.001) return;
+  ctx.save();
+  ctx.globalAlpha *= k.alpha;
+  ctx.translate(k.x, k.y); ctx.rotate(k.rot || 0); ctx.scale(k.sc || 1, k.sc || 1);
+  const w = k.w, h = CH;
+  rr(-w / 2, -h / 2, w, h, 16);
+  if (k.shadow > 0) { ctx.shadowColor = `rgba(0,0,0,${0.6 * k.shadow})`; ctx.shadowBlur = 44; ctx.shadowOffsetY = 18 * k.shadow; }
+  ctx.fillStyle = COL.card; ctx.fill();
+  ctx.shadowColor = "transparent";
+  const red = k.red || 0;
+  if (red > 0) {
+    ctx.save(); ctx.globalAlpha *= 0.55 * red; ctx.shadowColor = COL.red; ctx.shadowBlur = 36;
+    ctx.lineWidth = 2; ctx.strokeStyle = COL.red; ctx.stroke(); ctx.restore();
+  }
+  ctx.lineWidth = 1.5; ctx.strokeStyle = red > 0 ? mix(COL.cardEdge, COL.red, red) : COL.cardEdge; ctx.stroke();
+  // a faint top sheen
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  g.addColorStop(0, "rgba(255,255,255,0.035)"); g.addColorStop(0.5, "rgba(255,255,255,0)");
+  ctx.fillStyle = g; rr(-w / 2, -h / 2, w, h, 16); ctx.fill();
+  for (const hx of [-w / 2 + HOLE, w / 2 - HOLE]) {
+    ctx.beginPath(); ctx.arc(hx, 0, 5.5, 0, 7); ctx.fillStyle = COL.hole; ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = COL.holeEdge; ctx.stroke();
+  }
+  const parts = cardParts(k, t);
+  const total = parts.reduce((n, p) => n + p[0].length, 0) * CW;
+  ctx.font = `500 ${FS}px ${MONO}`; ctx.textBaseline = "middle";
+  let x = -total / 2;
+  for (const [s, c] of parts) { ctx.fillStyle = c; ctx.fillText(s, x, 1.5); x += s.length * CW; }
+  ctx.restore();
+}
+function holeW(k, side) { // world position of a card's left (-1) or right (+1) hole
+  const lx = side * (k.w / 2 - HOLE) * (k.sc || 1), r = k.rot || 0;
+  return [k.x + lx * Math.cos(r), k.y + lx * Math.sin(r)];
+}
+
+// ---------- thread & needle ----------
+function polyPath(pts) { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); }
+function drawThread(pts, color = COL.thread, alpha = 1, width = 3) {
+  if (pts.length < 2 || alpha <= 0) return;
+  ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  polyPath(pts);
+  ctx.globalAlpha *= alpha * 0.09; ctx.lineWidth = width * 3.4; ctx.strokeStyle = color; ctx.stroke();
+  ctx.globalAlpha /= 0.09; ctx.lineWidth = width; ctx.stroke();
+  // twist: a fine dashed shade so it reads as spun thread
+  ctx.setLineDash([2.4, 4.4]); ctx.lineWidth = width * 0.5; ctx.strokeStyle = "rgba(12,14,18,0.33)"; ctx.stroke();
+  ctx.restore();
+}
+function sagPts(a, b, m, N = 28) {
+  const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 2 * m], out = [];
+  for (let i = 0; i <= N; i++) { const u = i / N, v = 1 - u; out.push([v * v * a[0] + 2 * v * u * c[0] + u * u * b[0], v * v * a[1] + 2 * v * u * c[1] + u * u * b[1]]); }
+  return out;
+}
+function needleShape() {
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-NL * 0.3, -NW); ctx.lineTo(-NL + NW, -NW);
+  ctx.arc(-NL + NW, 0, NW, -Math.PI / 2, Math.PI / 2, true); ctx.lineTo(-NL * 0.3, NW); ctx.closePath();
+  const g = ctx.createLinearGradient(0, -NW, 0, NW);
+  g.addColorStop(0, "#6d7584"); g.addColorStop(0.32, "#f4f6fa"); g.addColorStop(0.7, "#a4acba"); g.addColorStop(1, "#555c69");
+  ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-NL + 20, 0, 9, 1.4, 0, 0, 7); ctx.fillStyle = "#0c0e12"; ctx.fill();
+}
+// Draw the parts of the needle on one side of the fabric. unders: [[sa, sb], ...] path spans that run beneath a card.
+function drawNeedle(path, s, unders, layer, alpha = 1) {
+  if (alpha <= 0) return;
+  const tip = path.at(s), tail = path.at(s - NL), ang = Math.atan2(tip[1] - tail[1], tip[0] - tail[0]);
+  const under = [];
+  for (const [a, b] of unders) { const x0 = Math.max(a, s - NL), x1 = Math.min(b, s); if (x1 > x0) under.push([x0 - s, x1 - s]); }
+  let ranges = under;
+  if (layer === "over") {
+    ranges = []; let x = -NL - 2;
+    for (const [a, b] of under.sort((p, q) => p[0] - q[0])) { if (a > x) ranges.push([x, a]); x = Math.max(x, b); }
+    if (x < 1) ranges.push([x, 1]);
+  }
+  if (!ranges.length) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(tip[0], tip[1]); ctx.rotate(ang);
+  for (const [a, b] of ranges) { ctx.save(); ctx.beginPath(); ctx.rect(a, -12, b - a, 24); ctx.clip(); needleShape(); ctx.restore(); }
+  ctx.restore();
+}
+// Visible thread: path from 0 to sEnd with the under-card spans removed
+function threadRuns(path, sEnd, unders) {
+  const runs = []; let s = 0;
+  for (const [a, b] of unders) { if (a > s) runs.push([s, Math.min(a, sEnd)]); s = Math.max(s, b); if (s >= sEnd) break; }
+  if (s < sEnd) runs.push([s, sEnd]);
+  return runs.filter(([a, b]) => b > a).map(([a, b]) => path.slice(a, b));
+}
+
+// ---------- scene 1: the four pieces, sewn ----------
+const MAIN = [
+  { c: call("load", F("text", '"a=1"')), sx: -585, sy: -190, sr: -0.10 },
+  { c: call("remove_key", O("st"), F("key", '"b"')), sx: -150, sy: 175, sr: 0.07 },
+  { c: call("put", O("st"), F("key", '"k"'), F("value", '"v"')), sx: 300, sy: -205, sr: -0.05 },
+  { c: call("snapshot", O("st")), sx: 655, sy: 120, sr: 0.11 },
+];
+const GAP = 100;
+MAIN.forEach((m, i) => { m.w = cardW(m.c); m.seed = 100 + i; });
+{
+  const total = MAIN.reduce((n, m) => n + m.w, 0) + GAP * (MAIN.length - 1);
+  let x = -total / 2;
+  for (const m of MAIN) { m.rx = x + m.w / 2; x += m.w + GAP; }
+}
+const T_IN = [0.5, 0.78, 1.06, 1.34];
+const T_SEW0 = 2.8, T_TIGHT = 6.2, T_FUZZ = 6.7;
+// the needle's journey through the scattered cards
+const J = new Path(), JU = [], JK = [{ t: T_SEW0, s: 0 }], JT = { L: [], R: [] };
+{
+  const sc = MAIN.map((m) => ({ ...m, x: m.sx, y: m.sy, rot: m.sr, sc: 1 }));
+  const S = [-1230, -60];
+  let prev = S, pd = [1, 0];
+  let t = T_SEW0;
+  const fly = [0.46, 0.42, 0.42, 0.4], und = 0.2;
+  sc.forEach((k, i) => {
+    const L = holeW(k, -1), R = holeW(k, 1), d = [Math.cos(k.rot), Math.sin(k.rot)];
+    const lift = i === 0 ? -40 : -150;
+    J.bez(prev, [prev[0] + pd[0] * 190, prev[1] + pd[1] * 190 + lift], [L[0] - d[0] * 190, L[1] - d[1] * 190 + lift * 0.7], L);
+    const sL = J.len; t += fly[i]; JK.push({ t, s: sL }); JT.L.push(t);
+    J.line(L, R);
+    const sR = J.len; t += und; JK.push({ t, s: sR }); JT.R.push(t);
+    JU.push([sL, sR]);
+    prev = R; pd = d;
+  });
+  const E = [1250, 40];
+  J.bez(prev, [prev[0] + pd[0] * 200, prev[1] + pd[1] * 200 - 90], [E[0] - 260, E[1] - 30], E);
+  t += 0.42; JK.push({ t, s: J.len + NL + 10, e: (u) => u * (2 - u) }); JT.E = t;
+  // segment boundaries in path length: lead, links, tail
+  JT.segs = [[0, JU[0][0]]];
+  for (let i = 0; i < 3; i++) JT.segs.push([JU[i][1], JU[i + 1][0]]);
+  JT.segs.push([JU[3][1], J.len]);
+  JT.relax = [JT.L[0], JT.L[1], JT.L[2], JT.L[3], JT.E - 0.12];
+}
+
+function mainCards(t) {
+  const tight = T_TIGHT;
+  return MAIN.map((m, i) => {
+    const a = seg(t, T_IN[i], T_IN[i] + 0.45);
+    const sp = springT(t - tight - i * 0.045, 1.7, 7.5);
+    return {
+      c: m.c, w: m.w, seed: m.seed,
+      x: lerp(m.sx, m.rx, sp), y: lerp(m.sy - 26 * (1 - eo(a)), 0, sp), rot: lerp(m.sr * (1 + 0.6 * (1 - eo(a))), 0, sp),
+      sc: 0.93 + 0.07 * back(a), alpha: eo(a), shadow: 1 - 0.65 * clamp(sp),
+      fz: seg(t, T_FUZZ + i * 0.13, T_FUZZ + i * 0.13 + 0.5),
+    };
+  });
+}
+
+function drawMain(t, alpha) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const cards = mainCards(t);
+  const s = keyed(JK, t);
+  const needleOn = t > T_SEW0 && t < JT.E + 0.1;
+  if (needleOn) drawNeedle(J, s, JU, "under");
+  for (const k of cards) drawCard(k, t);
+  // thread
+  const sEye = s - EYE;
+  if (t < T_TIGHT) {
+    JT.segs.forEach(([a, b], i) => {
+      if (sEye <= a) return;
+      const traj = J.slice(a, Math.min(b, sEye));
+      const r = eo(seg(t, JT.relax[i] + 0.06, JT.relax[i] + 0.56));
+      if (r <= 0 || sEye < b) { drawThread(traj); return; }
+      const A = J.at(a), B = J.at(b), m = 0.11 * Math.hypot(B[0] - A[0], B[1] - A[1]);
+      const sag = sagPts(A, B, m, 40);
+      // resample trajectory to the same count
+      const N = 40, out = [];
+      for (let j = 0; j <= N; j++) { const p = J.at(lerp(a, b, j / N)); out.push([lerp(p[0], sag[j][0], r), lerp(p[1], sag[j][1], r)]); }
+      drawThread(out);
+    });
+  } else {
+    const k = seg(t, T_TIGHT, T_TIGHT + 0.32), tight = eio(k);
+    const dt = t - (T_TIGHT + 0.32);
+    const tw = dt > 0 ? Math.exp(-7 * dt) * Math.sin(2 * Math.PI * 6.5 * dt) : 0;
+    const ends = [];
+    const S0 = J.at(0), S1 = [-2700, 0], E0 = J.at(J.len), E1 = [2700, 0];
+    ends.push([[lerp(S0[0], S1[0], tight), lerp(S0[1], S1[1], tight)], holeW(cards[0], -1)]);
+    for (let i = 0; i < 3; i++) ends.push([holeW(cards[i], 1), holeW(cards[i + 1], -1)]);
+    ends.push([holeW(cards[3], 1), [lerp(E0[0], E1[0], tight), lerp(E0[1], E1[1], tight)]]);
+    ends.forEach(([A, B], i) => {
+      const len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+      const m = 0.11 * len * (1 - tight) + (i > 0 && i < 4 ? 9 * tw * Math.min(1, len / 90) : 0);
+      drawThread(sagPts(A, B, m, 32));
+    });
+  }
+  if (needleOn) drawNeedle(J, s, JU, "over");
+  ctx.restore();
+}
+
+// ---------- scene 2: fuzzing, over and over ----------
+const T_MON = 7.95, T_FREEZE = 11.2, CRASH_ROW = 2, ROWH = 150;
+const KEYS = ['"a"', '"tmp"', '""', '"k9"', '"\\0"', '"zz"', '"%n"', '"key"', '"x"', '"ÿÿ"', '"b"'];
+const VALS = ['""', '"1"', '"aaaa"', '"v"', '"\\n"', '"=="', '"0"', '"tmp"'];
+const TEXTS = ['"a=1"', '""', '"k=v\\n"', '"=x"', '"[[["', '"a=1;b=2"', '"\\0"', '"x="'];
+function genCall(R, first) {
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  if (first) return call("load", Fz(pick(TEXTS)));
+  const r = R();
+  if (r < 0.3) return call("put", O("st"), Fz(pick(KEYS)), Fz(pick(VALS)));
+  if (r < 0.5) return call("get", O("st"), Fz(pick(KEYS)));
+  if (r < 0.7) return call("remove_key", O("st"), Fz(pick(KEYS)));
+  if (r < 0.88) return call("snapshot", O("st"));
+  return call("dump", O("st"));
+}
+function makeProg(calls, x0, y, ts, D, seed) {
+  const cards = []; let x = x0;
+  calls.forEach((c, i) => { const w = cardW(c); cards.push({ c, w, x: x + w / 2, y, seed: seed * 7 + i }); x += w + GAP; });
+  const path = new Path(), unders = [], keys = [{ t: ts, s: 0 }];
+  const sew = 0.62 * D, unit = sew / (cards.length + 0.6);
+  const start = [cards[0].x - cards[0].w / 2 + HOLE - 80, y];
+  path.add(start[0], start[1]);
+  let t = ts;
+  cards.forEach((k) => {
+    const L = [k.x - k.w / 2 + HOLE, y], R = [k.x + k.w / 2 - HOLE, y];
+    path.line(path.p[path.p.length - 1], L); const sL = path.len; t += unit * 0.58; keys.push({ t, s: sL });
+    k.tA = t - unit * 0.75;
+    path.line(L, R); const sR = path.len; t += unit * 0.42; keys.push({ t, s: sR });
+    unders.push([sL, sR]); k.tL = keys[keys.length - 2].t;
+  });
+  const last = cards[cards.length - 1];
+  const end = [last.x + last.w / 2 - HOLE + 150, y];
+  path.line(path.p[path.p.length - 1], end);
+  t += unit * 0.6; keys.push({ t, s: path.len + NL + 4, e: (u) => u });
+  return { cards, path, unders, keys, ts, D, tEnd: t, sEnd: path.len - 66 };
+}
+const PROGS = [];
+let CRASH;
+{
+  const R = rng(7);
+  for (let r = -9; r <= 9; r++) {
+    for (const lane of [-1, 1]) {
+      let t = (r === 0 ? 9.45 : T_MON + Math.abs(r) * 0.075) + R() * 0.32;
+      const limit = r === CRASH_ROW ? 10.1 : T_FREEZE + 0.6;
+      while (true) {
+        const D = lerp(1.1, 0.3, eio(seg(t, T_MON, 10.9))) * (0.85 + 0.3 * R());
+        if (t + D * 0.9 > limit && r === CRASH_ROW) break;
+        if (t > limit) break;
+        const n = 2 + Math.floor(R() * 3);
+        const calls = [genCall(R, true)];
+        for (let i = 1; i < n; i++) calls.push(genCall(R, false));
+        const w = calls.reduce((s, c) => s + cardW(c), 0) + GAP * (n - 1);
+        const lo = lane < 0 ? -2560 : 140, hi = lane < 0 ? -140 : 2560;
+        const x0 = lo + R() * Math.max(0, hi - lo - w - 120) + 60;
+        PROGS.push(makeProg(calls, x0, r * ROWH, t, D, PROGS.length + 1));
+        t += D + R() * 0.06;
+      }
+    }
+  }
+  const calls = [call("load", Fz('""')), call("put", O("st"), Fz('"tmp"'), Fz('""')), call("remove_key", O("st"), Fz('"tmp"')), call("snapshot", O("st"))];
+  const w = calls.reduce((s, c) => s + cardW(c), 0) + GAP * 3;
+  CRASH = makeProg(calls, -w / 2, CRASH_ROW * ROWH, 10.3, 0.95, 999);
+  CRASH.crash = true;
+}
+
+function progCardState(P, k, t) {
+  const a = eo(seg(t, k.tA, k.tA + 0.14));
+  return { ...k, alpha: a, sc: 0.9 + 0.1 * a, fz: seg(t, k.tA, k.tA + 0.32), shadow: 0 };
+}
+function drawProg(P, t, alpha) {
+  const u = (t - P.ts) / P.D;
+  if (u < 0) return;
+  let a = alpha;
+  if (!P.crash && u > 1) return;
+  if (!P.crash && u > 0.86) a *= 1 - eio((u - 0.86) / 0.14);
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a;
+  const s = keyed(P.keys, t);
+  const needleA = 1 - seg(s, P.path.len, P.path.len + NL);
+  drawNeedle(P.path, s, P.unders, "under", needleA);
+  for (const k of P.cards) drawCard(progCardState(P, k, t), t);
+  for (const run of threadRuns(P.path, Math.min(s - EYE, P.sEnd), P.unders)) drawThread(run);
+  drawNeedle(P.path, s, P.unders, "over", needleA);
+  ctx.restore();
+}
+
+// ---------- scene 3: the tear ----------
+const T_RED = 12.75, T_SNAP = 13.05;
+function drawCrash(t, alpha) {
+  const P = CRASH;
+  if (t < T_RED) { drawProg(P, Math.min(t, T_FREEZE), alpha); return; }
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const red = eo(seg(t, T_RED, T_SNAP));
+  const dt = t - T_SNAP;
+  const cards = P.cards.map((k) => progCardState(P, k, T_FREEZE));
+  const c4 = cards[3];
+  if (dt > 0) {
+    const sp = springT(dt, 1.6, 4.5);
+    c4.x += 22 * sp; c4.y += 10 * sp; c4.rot = 0.05 * sp;
+  }
+  c4.red = red; cards[2].red = 0;
+  for (const k of cards) drawCard(k, t);
+  const y = P.cards[0].y;
+  const L1 = holeW(cards[0], -1);
+  drawThread([[L1[0] - 80 + HOLE * 0, y], L1]);
+  for (let i = 0; i < 2; i++) drawThread([holeW(cards[i], 1), holeW(cards[i + 1], -1)]);
+  // tail after the last card
+  const R4 = holeW(c4, 1), d4 = [Math.cos(c4.rot), Math.sin(c4.rot)];
+  drawThread(sagPts(R4, [R4[0] + d4[0] * 84, R4[1] + d4[1] * 84 + (dt > 0 ? 10 * springT(dt, 1, 3) : 0)], dt > 0 ? 4 : 0, 10));
+  // the link that tears
+  const A = holeW(cards[2], 1), B = holeW(c4, -1);
+  const tc = mix(COL.thread, COL.red, red);
+  if (dt <= 0) {
+    const jit = red * 1.6 * Math.sin(t * 140), N = 24, pts = [];
+    for (let j = 0; j <= N; j++) { const u = j / N; pts.push([lerp(A[0], B[0], u), lerp(A[1], B[1], u) + jit * Math.sin(Math.PI * u) * (j % 2 ? 1 : -1)]); }
+    drawThread(pts, tc);
+  } else {
+    const Bk = [lerp(A[0], P.cards[3].x - P.cards[3].w / 2 + HOLE, 0.5), y];
+    const sp = springT(dt, 1.9, 5.5);
+    const fA = [lerp(Bk[0], A[0] + 34, sp), lerp(Bk[1], A[1] + 74, sp)];
+    const fB = [lerp(Bk[0], B[0] - 30, sp), lerp(Bk[1], B[1] + 82, sp)];
+    for (const [anchor, free, dir] of [[A, fA, 1], [B, fB, -1]]) {
+      const m = -8 * clamp(sp);
+      const pts = sagPts(anchor, free, m, 16);
+      drawThread(pts, tc);
+      // frayed fibers at the free end
+      const e = pts[pts.length - 1], p = pts[pts.length - 3], dd = norm(sub(e, p));
+      ctx.save(); ctx.strokeStyle = tc; ctx.lineWidth = 1.1; ctx.lineCap = "round"; ctx.globalAlpha *= 0.85;
+      for (const a of [-0.55, -0.1, 0.4]) {
+        const ang = Math.atan2(dd[1], dd[0]) + a * dir, l = 9 + 4 * Math.abs(a);
+        ctx.beginPath(); ctx.moveTo(e[0], e[1]); ctx.lineTo(e[0] + Math.cos(ang) * l, e[1] + Math.sin(ang) * l); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // a few sparks
+    const pa = 1 - seg(dt, 0, 0.5);
+    if (pa > 0) {
+      ctx.save(); ctx.strokeStyle = COL.red; ctx.lineCap = "round"; ctx.lineWidth = 2;
+      for (let i = 0; i < 9; i++) {
+        const ang = hash(i, 3, 9) * Math.PI * 2, v = 60 + 120 * hash(i, 5, 1), r0 = v * eo5(seg(dt, 0, 0.5));
+        const r1 = r0 + 10 * pa;
+        ctx.globalAlpha = alpha * pa * 0.9;
+        ctx.beginPath(); ctx.moveTo(Bk[0] + Math.cos(ang) * r0, Bk[1] + Math.sin(ang) * r0);
+        ctx.lineTo(Bk[0] + Math.cos(ang) * r1, Bk[1] + Math.sin(ang) * r1); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  // sanitizer report
+  const ta = seg(t, T_SNAP + 0.25, T_SNAP + 0.75);
+  if (ta > 0) {
+    const pre = "AddressSanitizer: ", msg = "heap-use-after-free", post = " in kv_dump";
+    const all = pre + msg + post, n = Math.floor(ta * all.length + 0.001);
+    ctx.font = `500 26px ${MONO}`; ctx.textBaseline = "middle";
+    const cw = ctx.measureText("M").width, tw = all.length * cw;
+    let x = clamp((A[0] + B[0]) / 2 - tw / 2 + 80, -880, 880 - tw);
+    const ty = y + 104;
+    const segs = [[pre, "#6b7383"], [msg, COL.red], [post, "#6b7383"]];
+    let used = 0;
+    for (const [s, c] of segs) {
+      const vis = s.slice(0, Math.max(0, n - used)); used += s.length;
+      ctx.fillStyle = c; ctx.fillText(vis, x, ty); x += s.length * cw;
+    }
+    if (ta < 1 || Math.floor(t * 2.4) % 2 === 0) {
+      const cx = clamp((A[0] + B[0]) / 2 - tw / 2 + 80, -880, 880 - tw) + n * cw;
+      ctx.fillStyle = COL.red; ctx.globalAlpha *= 0.8; ctx.fillRect(cx + 2, ty - 13, 12, 26);
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- camera, background, captions ----------
+const BREAK_X = (CRASH.cards[2].x + CRASH.cards[2].w / 2 + CRASH.cards[3].x - CRASH.cards[3].w / 2) / 2;
+function camera(t) {
+  let x = 0, y = 0, s;
+  if (t < T_MON) s = lerp(0.955, 1, eio(seg(t, 0, T_MON)));
+  else if (t < 9.2) s = lerp(1, 0.42, eio(seg(t, T_MON, 9.2)));
+  else s = lerp(0.42, 0.375, seg(t, 9.2, T_FREEZE));
+  const z = eio(seg(t, 11.45, 12.7));
+  if (z > 0) {
+    // zoom in log space so it feels even
+    const s0 = lerp(0.42, 0.375, 1);
+    s = Math.exp(lerp(Math.log(s0), Math.log(1), z));
+    const zz = (1 / s - 1 / s0) / (1 - 1 / s0); // keep the target point moving consistently
+    y = lerp(0, CRASH_ROW * ROWH, clamp(zz));
+  }
+  if (t > 12.7) { const p = eio(seg(t, 12.7, 13.4)); s *= 1 + 0.1 * p + 0.035 * eo(seg(t, 13.4, 15.2)); x = BREAK_X * 0.3 * p; y = CRASH_ROW * ROWH + 20 * p; }
+  // shake on the tear
+  const ds = t - T_SNAP;
+  if (ds > 0 && ds < 0.4) { const a = 7 * Math.exp(-11 * ds); x += a * Math.sin(ds * 97); y += a * Math.cos(ds * 83); }
+  return { x, y, s };
+}
+function drawGrid(cam, alpha) {
+  if (alpha <= 0) return;
+  const sp = 30, r = 1.25;
+  const x0 = cam.x - W / 2 / cam.s, x1 = cam.x + W / 2 / cam.s, y0 = cam.y - H / 2 / cam.s, y1 = cam.y + H / 2 / cam.s;
+  ctx.fillStyle = `rgba(160,176,212,${0.075 * alpha * clamp(0.35 + cam.s * 0.65)})`;
+  for (let gx = Math.floor(x0 / sp) * sp; gx <= x1; gx += sp)
+    for (let gy = Math.floor(y0 / sp) * sp; gy <= y1; gy += sp) ctx.fillRect(gx - r, gy - r, 2 * r, 2 * r);
+}
+const CAPS = [
+  { a: 0.95, b: 2.65, parts: [["Write the pieces.", COL.capHi, 0]] },
+  { a: 3.15, b: 6.55, parts: [["STITCH++", COL.capHi, 0], [" sews them together.", COL.cap, 0]] },
+  { a: 8.55, b: 11.15, parts: [["Again,", COL.capHi, 0], [" and again,", COL.cap, 0.55], [" and again.", COL.cap, 1.0]] },
+  { a: 13.3, b: 14.95, parts: [["Until something ", COL.cap, 0], ["tears.", COL.red, 0.32]] },
+];
+function drawCaptions(t) {
+  ctx.save();
+  ctx.font = `500 44px ${SANS}`; ctx.letterSpacing = "-0.6px"; ctx.textBaseline = "alphabetic";
+  for (const c of CAPS) {
+    if (t < c.a || t > c.b) continue;
+    const out = 1 - seg(t, c.b - 0.32, c.b);
+    const total = c.parts.reduce((n, p) => n + ctx.measureText(p[0]).width, 0);
+    let x = W / 2 - total / 2;
+    for (const [s, col, d] of c.parts) {
+      const a = eo(seg(t, c.a + d, c.a + d + 0.45)) * out;
+      ctx.globalAlpha = a; ctx.fillStyle = col;
+      ctx.fillText(s, x, H - 128 + 14 * (1 - a));
+      x += ctx.measureText(s).width;
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- scene 4: the mark ----------
+function drawLogo(t) {
+  const S = 156, gap = 46;
+  ctx.save();
+  ctx.font = `700 132px ${DISP}`; ctx.letterSpacing = "-3px";
+  const w1 = ctx.measureText("STITCH").width, w2 = ctx.measureText("++").width;
+  const total = S + gap + w1 + w2;
+  const gx = W / 2 - total / 2, cy = H / 2 - 28;
+  // square
+  const qa = seg(t, 16.25, 16.75);
+  if (qa > 0) {
+    const sc = 0.82 + 0.18 * back(qa, 2);
+    ctx.save(); ctx.translate(gx + S / 2, cy); ctx.scale(sc, sc);
+    ctx.globalAlpha = eo(qa);
+    rr(-S / 2, -S / 2, S, S, (6 / 32) * S); ctx.fillStyle = COL.logo; ctx.fill();
+    ctx.restore();
+  }
+  // the zigzag, stitched one dash at a time
+  const k = S / 32, P = [[7, 22], [13, 10], [19, 22], [25, 10]].map(([x, y]) => [gx + x * k, cy - S / 2 + y * k]);
+  const path = new Path(); for (let i = 1; i < P.length; i++) path.line(P[i - 1], P[i]);
+  const dash = 3 * k, n = Math.ceil(path.len / (2 * dash));
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5 * k; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (let i = 0; i < n; i++) {
+    const ti = 15.55 + i * 0.095, u = eo(seg(t, ti, ti + 0.07));
+    if (u <= 0) continue;
+    const a = i * 2 * dash, b = Math.min(path.len, a + dash);
+    polyPath(path.slice(a, lerp(a, b, u))); ctx.stroke();
+  }
+  // wordmark
+  const wa = seg(t, 16.5, 17.15);
+  if (wa > 0) {
+    const e = eo5(wa);
+    ctx.save();
+    const tx = gx + S + gap;
+    ctx.beginPath(); ctx.rect(tx - 10, cy - 120, (w1 + w2 + 30) * e, 240); ctx.clip();
+    ctx.textBaseline = "middle"; ctx.globalAlpha = e;
+    const off = 30 * (1 - e);
+    ctx.fillStyle = "#eef1f6"; ctx.fillText("STITCH", tx - off, cy + 6);
+    ctx.fillStyle = COL.accent; ctx.fillText("++", tx + w1 - off, cy + 6);
+    ctx.restore();
+  }
+  const pa = seg(t, 17.05, 17.6);
+  if (pa > 0) {
+    ctx.font = `400 30px ${MONO}`; ctx.letterSpacing = "0px"; ctx.textBaseline = "middle";
+    const s1 = "$ ", s2 = "pip install stitch-fuzz";
+    const tw = ctx.measureText(s1 + s2).width;
+    ctx.globalAlpha = eo(pa);
+    const x = W / 2 - tw / 2, y = cy + 168 + 10 * (1 - eo(pa));
+    ctx.fillStyle = "#4f5664"; ctx.fillText(s1, x, y);
+    ctx.fillStyle = "#9aa1ae"; ctx.fillText(s2, x + ctx.measureText(s1).width, y);
+  }
+  ctx.restore();
+}
+
+// ---------- grain ----------
+const GR = document.createElement("canvas"); GR.width = GR.height = 256;
+const grainFrames = [];
+for (let f = 0; f < 8; f++) {
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const g = c.getContext("2d"), im = g.createImageData(256, 256), R = rng(f + 11);
+  for (let i = 0; i < im.data.length; i += 4) { const v = R() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+  g.putImageData(im, 0, 0); grainFrames.push(ctx.createPattern(c, "repeat"));
+}
+
+// ---------- frame ----------
+function renderAt(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; ctx.letterSpacing = "0px";
+  ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
+  const cam = camera(t);
+  const world = 1 - eio(seg(t, 14.95, 15.4));
+  if (world > 0) {
+    ctx.save();
+    ctx.setTransform(cam.s, 0, 0, cam.s, W / 2 - cam.x * cam.s, H / 2 - cam.y * cam.s);
+    ctx.globalAlpha = world;
+    drawGrid(cam, eo(seg(t, 0, 0.9)));
+    const tm = Math.min(t, T_FREEZE);
+    const dim = (1 - 0.86 * eo(seg(t, T_FREEZE, T_FREEZE + 0.4))) * (1 - eio(seg(t, 11.9, 12.8)));
+    drawMain(t, 1 - eio(seg(t, 9.2, 9.6)));
+    if (t > T_MON) for (const P of PROGS) drawProg(P, tm, dim);
+    if (t > CRASH.ts) drawCrash(t, 1);
+    ctx.restore();
+  }
+  // vignette
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, H * 1.05);
+  vg.addColorStop(0, "rgba(6,7,10,0)"); vg.addColorStop(1, "rgba(6,7,10,0.72)");
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  const bm = seg(t, T_MON, 8.6) * (1 - seg(t, 11.6, 12.4)) * 0.9;
+  if (bm > 0) {
+    const bg = ctx.createLinearGradient(0, H - 340, 0, H);
+    bg.addColorStop(0, "rgba(12,14,18,0)"); bg.addColorStop(0.55, `rgba(12,14,18,${0.85 * bm})`); bg.addColorStop(1, `rgba(12,14,18,${0.95 * bm})`);
+    ctx.fillStyle = bg; ctx.fillRect(0, H - 340, W, 340);
+  }
+  drawCaptions(t);
+  if (t > 15.2) {
+    ctx.save();
+    const ga = eo(seg(t, 15.2, 15.9));
+    ctx.globalAlpha = ga; drawGrid({ x: 0, y: 0, s: 1 }, 0.55);
+    ctx.restore();
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.translate(-W / 2, -H / 2); drawLogo(t); ctx.restore();
+  }
+  // grain
+  ctx.save(); ctx.globalAlpha = 0.032; ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = grainFrames[Math.floor(t * 24) % 8];
+  ctx.translate(Math.floor(hash(Math.floor(t * 24), 1, 2) * 256), Math.floor(hash(Math.floor(t * 24), 3, 4) * 256));
+  ctx.fillRect(-256, -256, W + 512, H + 512);
+  ctx.restore();
+  // fade in from black
+  const fi = 1 - seg(t, 0, 0.5);
+  if (fi > 0) { ctx.fillStyle = `rgba(0,0,0,${fi})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- sound cues (read by the renderer) ----------
+function events() {
+  const ev = [];
+  T_IN.forEach((t, i) => ev.push({ t, type: "pop", g: 0.8, pan: MAIN[i].sx / 1400 }));
+  JT.L.forEach((t, i) => ev.push({ t, type: "punch", g: 1, pan: MAIN[i].sx / 1400 }));
+  JT.R.forEach((t, i) => ev.push({ t, type: "out", g: 0.6, pan: MAIN[i].sx / 1400 }));
+  ev.push({ t: T_TIGHT, type: "zip", g: 1 });
+  ev.push({ t: T_TIGHT + 0.32, type: "twang", g: 1 });
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 7; j++) ev.push({ t: T_FUZZ + i * 0.13 + j * 0.06, type: "tick", g: 0.22, pan: MAIN[i].rx / 1400 });
+  for (const P of [...PROGS, CRASH]) for (const k of P.cards) if (k.tL < T_FREEZE) ev.push({ t: k.tL, type: "tick", g: 0.5, pan: clamp(k.x / 2600, -1, 1) * 0.8 });
+  ev.push({ t: T_FREEZE, type: "stop", g: 1 });
+  ev.push({ t: T_SNAP, type: "snap", g: 1 });
+  for (let j = 0; j < 37; j++) ev.push({ t: T_SNAP + 0.25 + j * (0.5 / 37), type: "key", g: 0.25 });
+  const k = 156 / 32, n = Math.ceil((3 * Math.hypot(6, 12) * k) / (6 * k));
+  for (let i = 0; i < n; i++) ev.push({ t: 15.55 + i * 0.095, type: "punch", g: 0.8, pan: -0.25 + i * 0.05 });
+  ev.push({ t: 16.25, type: "chord", g: 1 });
+  return ev.sort((a, b) => a.t - b.t);
+}
+
+window.DUR = DUR;
+window.renderAt = renderAt;
+window.EVENTS = events();
+window.ready = document.fonts.load(`500 ${FS}px ${MONO}`).then(() => Promise.all([
+  document.fonts.load(`500 44px ${SANS}`), document.fonts.load(`700 132px ${DISP}`), document.fonts.load(`400 30px ${MONO}`),
+])).then(() => true);
+
+if (!location.hash.includes("render")) {
+  const q = new URLSearchParams(location.search);
+  const t0 = performance.now() - 1000 * (parseFloat(q.get("t")) || 0);
+  window.ready.then(() => {
+    const loop = () => { renderAt(((performance.now() - t0) / 1000) % DUR); requestAnimationFrame(loop); };
+    loop();
+  });
+}
+</script>
+</body>
+</html>
