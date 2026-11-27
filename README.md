@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/stitch-fuzz?label=pypi&logo=pypi&logoColor=white)](https://pypi.org/project/stitch-fuzz/)
 [![GitHub release](https://img.shields.io/github/v/release/hgarrereyn/STITCHplusplus?logo=github)](https://github.com/hgarrereyn/STITCHplusplus/releases/latest)
 [![CI](https://github.com/hgarrereyn/STITCHplusplus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hgarrereyn/STITCHplusplus/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-online-blue?logo=readthedocs&logoColor=white)](https://hgarrereyn.github.io/STITCHplusplus/)
+[![Docs](https://img.shields.io/badge/docs-online-blue?logo=readthedocs&logoColor=white)](https://stitch.c.mov/)
 [![Paper](https://img.shields.io/badge/paper-CCS%202026-b31b1b)](https://doi.org/10.1145/3830454.3846663)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/hgarrereyn/STITCHplusplus/blob/main/LICENSE)
 
@@ -12,11 +12,11 @@ endpoints, generates arguments, and finds crashes, exceptions, and failed checks
 
 > [!NOTE]
 > **Are you an agent?** Read this instead:
-> https://hgarrereyn.github.io/STITCHplusplus/agents/overview.raw.md
+> https://stitch.c.mov/agents/overview.raw.md
 
-**[Documentation](https://hgarrereyn.github.io/STITCHplusplus/)** ·
-[Tutorial](https://hgarrereyn.github.io/STITCHplusplus/guide/tutorial/library/) ·
-[CLI reference](https://hgarrereyn.github.io/STITCHplusplus/reference/cli/) ·
+**[Documentation](https://stitch.c.mov/)** ·
+[Tutorial](https://stitch.c.mov/guide/tutorial/library/) ·
+[CLI reference](https://stitch.c.mov/reference/cli/) ·
 [Example projects](projects/README.md) ·
 [Paper](https://doi.org/10.1145/3830454.3846663)
 
@@ -83,15 +83,15 @@ and what a harness has to change to upgrade: [CHANGELOG.md](CHANGELOG.md).
 
 ## Languages
 
-[C/C++](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/cpp/) ·
-[Python](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/python/) ·
-[JavaScript](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/javascript/) ·
-[Java](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/java/) ·
-[Go](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/go/) ·
-[Rust](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/rust/) ·
-[Ruby](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/ruby/) ·
-[Swift](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/swift/) ·
-[Objective-C](https://hgarrereyn.github.io/STITCHplusplus/reference/languages/objc/)
+[C/C++](https://stitch.c.mov/reference/languages/cpp/) ·
+[Python](https://stitch.c.mov/reference/languages/python/) ·
+[JavaScript](https://stitch.c.mov/reference/languages/javascript/) ·
+[Java](https://stitch.c.mov/reference/languages/java/) ·
+[Go](https://stitch.c.mov/reference/languages/go/) ·
+[Rust](https://stitch.c.mov/reference/languages/rust/) ·
+[Ruby](https://stitch.c.mov/reference/languages/ruby/) ·
+[Swift](https://stitch.c.mov/reference/languages/swift/) ·
+[Objective-C](https://stitch.c.mov/reference/languages/objc/)
 
 <details>
 <summary>How each language is instrumented</summary>
