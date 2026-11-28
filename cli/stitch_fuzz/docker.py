@@ -28,14 +28,35 @@ def _run(cmd, **kw):
     return subprocess.run(cmd, text=True, **kw)
 
 
-def check_docker():
-    r = _run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True)
+def runtime():
+    rt = os.environ.get("STITCH_RUNTIME", "docker").strip().lower()
+    if rt not in ("docker", "podman"):
+        raise DockerError(f"unknown container runtime '{rt}' (docker or podman)")
+    return rt
+
+
+def _cmd(*args):
+    return [runtime(), *args]
+
+
+def check_runtime():
+    rt = runtime()
+    # Podman's info output has no ServerVersion field; its formatted version check would fail.
+    cmd = _cmd("info", "--format", "{{.ServerVersion}}") if rt == "docker" else _cmd("info")
+    r = _run(cmd, capture_output=True)
     if r.returncode != 0:
-        raise DockerError("docker is not available: " + (r.stderr.strip() or r.stdout.strip())[-300:])
+        raise DockerError(f"{rt} is not available: " + (r.stderr.strip() or r.stdout.strip())[-300:])
+
+
+def check_buildx():
+    rt = runtime()
+    r = _run(_cmd("buildx", "version"), capture_output=True)
+    if r.returncode != 0:
+        raise DockerError(f"buildx is missing for {rt}: " + (r.stderr.strip() or r.stdout.strip())[-300:])
 
 
 def image_exists(tag) -> bool:
-    return _run(["docker", "image", "inspect", tag], capture_output=True).returncode == 0
+    return _run(_cmd("image", "inspect", tag), capture_output=True).returncode == 0
 
 
 LANGUAGES = ("cpp", "python", "javascript", "java", "go", "rust", "ruby", "swift", "objc")
@@ -105,10 +126,10 @@ def _try_pull(remote: str, local: str, quiet=False) -> bool:
     """Pull a prebuilt image and tag it locally. False if it is not published (or no network)."""
     if not quiet:
         print(f"[stitch] pulling {remote}", file=sys.stderr, flush=True)
-    r = _run(["docker", "pull", "-q", remote], capture_output=True)
+    r = _run(_cmd("pull", "-q", remote), capture_output=True)
     if r.returncode != 0:
         return False
-    return _run(["docker", "tag", remote, local], capture_output=True).returncode == 0
+    return _run(_cmd("tag", remote, local), capture_output=True).returncode == 0
 
 
 def build_log(name) -> Path:
@@ -117,11 +138,13 @@ def build_log(name) -> Path:
     return d / f"{name}.log"
 
 
-def _buildx(args, log: Path, what: str, quiet=False):
+def _buildx(build_args, log: Path, what: str, quiet=False):
     if not quiet:
         print(f"[stitch] building {what} (log: {log})", file=sys.stderr, flush=True)
+    # Podman's buildx alias has neither --progress nor --load; images land in its local store.
+    flags = ["--progress=plain", "--load"] if runtime() == "docker" else []
     with open(log, "w") as f:
-        r = _run(["docker", "buildx", "build", "--progress=plain", "--load", *args], stdout=f, stderr=subprocess.STDOUT)
+        r = _run(_cmd("buildx", "build", *flags, *build_args), stdout=f, stderr=subprocess.STDOUT)
     if r.returncode != 0:
         # STITCH_BASE has no default (the CLI always passes it): Docker's warning about that is noise
         tail = [l for l in log.read_text(errors="replace").splitlines()
@@ -239,7 +262,7 @@ def published_toolchain(lang) -> str:
     local = f"stitch/{lang}-toolchain:{toolchain_hash(lang)}"
     if not image_exists(local):
         _try_pull(ref, local, quiet=True)  # not published (yet): the reproducer builds it instead
-    r = _run(["docker", "image", "inspect", local, "--format", "{{json .RepoDigests}}"], capture_output=True)
+    r = _run(_cmd("image", "inspect", local, "--format", "{{json .RepoDigests}}"), capture_output=True)
     try:
         digests = json.loads(r.stdout) if r.returncode == 0 else []
     except json.JSONDecodeError:
@@ -273,7 +296,7 @@ def build_project_image(project, base_tag, src_dir: Path, ident: str, no_cache=F
 
 
 def run_args(project, image, *, name=None, detach=False, tty=False, extra_mounts=(), env=None, workdir="/project"):
-    args = ["docker", "run"]
+    args = _cmd("run")
     args += ["-d"] if detach else ["--rm"]
     if tty and sys.stdin.isatty():
         args += ["-it"]
@@ -282,7 +305,9 @@ def run_args(project, image, *, name=None, detach=False, tty=False, extra_mounts
     args += ["-v", f"{project.root}:/project", "-w", workdir, "--shm-size=1g", "--cap-add=SYS_PTRACE"]
     for src, dst in extra_mounts:
         args += ["-v", f"{src}:{dst}"]
-    if platform.system() == "Linux":
+    # Rootless Podman maps the host user to root in the container; forcing a numeric user
+    # switches to an unmapped subuid and loses write access to the mounted project.
+    if platform.system() == "Linux" and runtime() == "docker":
         args += ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
     for k, v in (env or {}).items():
         args += ["-e", f"{k}={v}"]
@@ -315,15 +340,15 @@ def run(project, image, cmd, *, capture=False, check=False, timeout=None, **kw):
 
 
 def container_state(name):
-    r = _run(["docker", "inspect", name, "--format", "{{json .State}}"], capture_output=True)
+    r = _run(_cmd("inspect", name, "--format", "{{json .State}}"), capture_output=True)
     if r.returncode != 0:
         return None
     return json.loads(r.stdout)
 
 
 def stop(name):
-    _run(["docker", "stop", "-t", "5", name], capture_output=True)
+    _run(_cmd("stop", "-t", "5", name), capture_output=True)
 
 
 def remove(name):
-    _run(["docker", "rm", "-f", name], capture_output=True)
+    _run(_cmd("rm", "-f", name), capture_output=True)

@@ -14,7 +14,8 @@ The usual order: `stitch write`, shrink the file to plain library code with `sti
 ## Frozen reproducers
 
 The folders `stitch repro` and `stitch report` write are **frozen**: every input is pinned, and
-they run with Docker alone. They do not need STITCH++ installed, and they do not change when the
+they run with Docker alone by default (or Podman with `STITCH_RUNTIME=podman`). They do not need
+STITCH++ installed, and they do not change when the
 project moves to a newer STITCH++ release (`stitch upgrade`) or the installed CLI changes. Keep
 them as they are: they are the record of the bug.
 
@@ -69,7 +70,7 @@ cd .stitch/repros/cjson-c1
 ```
 
 The folder (`.stitch/repros/<project>-<id>`) holds the pinned library source, the Dockerfile, the
-harness, the crashing program and its trace. It needs only Docker. `run.sh` pulls the STITCH++
+harness, the crashing program and its trace. It needs only Docker or Podman. `run.sh` pulls the STITCH++
 toolchain image the reproducer was made with, pinned by digest, so upgrading STITCH++ does not
 change it. If that image cannot be pulled, or `STITCH_REPRO_BUILD=1` is set, `run.sh` builds the
 toolchain from the copy in `stitch/` instead. `stitch repro` runs it once
@@ -219,7 +220,7 @@ A reproducer a maintainer can read and run without STITCH++, small enough to pas
   (pasted in unchanged), then the reproducer, built and run with plain commands (`clang`,
   `python3`, `node`, `ruby`, `go build`, `cargo build`, `swift build`, `javac`).
 - `repro.<ext>`: the reproducer file.
-- `run.sh`: `docker build` and `docker run`.
+- `run.sh`: container build and run (`./run.sh` with Docker, or `STITCH_RUNTIME=podman ./run.sh`).
 - `ISSUE.md`: the issue text: where it reproduces, the code, the output, and the Dockerfile in a
   collapsed section. Fill in what the bug is and why it matters.
 

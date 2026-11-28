@@ -26,7 +26,7 @@ CHUNK = 200  # programs per repro process
 
 def build_cov(p, rev=None, quiet=False):
     """Coverage image + reproducer binary. Returns (image, binary_rel, ident, commit)."""
-    docker.check_docker()
+    docker.check_runtime()
     base = docker.ensure_cov_base(p.language)
     ctx, ident, commit = Source(p).materialize(rev)
     quiet = quiet or docker.image_exists(f"stitch-{p.name}:{ident}-cov")  # only a cache check

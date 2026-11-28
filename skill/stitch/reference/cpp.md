@@ -1,7 +1,7 @@
 # C/C++ harnesses
 
 Stubs are C++ functions registered with `STITCH_ENDPOINT`. The function signature is the spec.
-The library is built in Docker with clang, AddressSanitizer and coverage instrumentation, and the
+The library is built in a container with clang, AddressSanitizer and coverage instrumentation, and the
 fuzzer runs the stubs in its own process.
 
 ## Project setup

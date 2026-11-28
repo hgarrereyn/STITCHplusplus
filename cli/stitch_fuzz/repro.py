@@ -26,37 +26,40 @@ from .source import Source
 RUN_SH = r"""#!/bin/sh
 # Reproduce: {title}
 # Made with stitch-fuzz {version}.
-# Requires docker (with buildx). Usage: ./run.sh            run the recorded harness program
-#                                       ./run.sh --standalone  build + run standalone/ (the bug without the fuzzer)
+# Requires Docker (with buildx) or Podman. Usage: ./run.sh            run the recorded harness program
+#                                              ./run.sh --standalone  build + run standalone/ (the bug without the fuzzer)
 set -e
 cd "$(dirname "$0")"
 ID={rid}
-# on Linux, run as the calling user so files written into this folder stay yours
-U=""; [ "$(uname)" = Linux ] && U="--user $(id -u):$(id -g) -e HOME=/tmp"
+R="${{STITCH_RUNTIME:-docker}}"   # docker or podman
+B="$R build"; BX="$R buildx build"; LOAD="--load"
+if [ "$R" = podman ]; then LOAD=""; fi
+# Docker needs the numeric user to keep mounted files owned by the caller; rootless Podman maps it already.
+U=""; [ "$(uname)" = Linux ] && [ "$R" = docker ] && U="--user $(id -u):$(id -g) -e HOME=/tmp"
 P="{platform}"   # stitch.toml [docker] platform
 # the STITCH++ toolchain: the published image this reproducer was made with (pinned), else built
 # from stitch/ (also when STITCH_REPRO_BUILD=1, e.g. after editing stitch/)
 TOOLCHAIN={toolchain}
-if [ -n "$TOOLCHAIN" ] && [ -z "$STITCH_REPRO_BUILD" ] && docker pull -q "$TOOLCHAIN" >/dev/null 2>&1; then
-  docker tag "$TOOLCHAIN" stitch-repro-toolchain:$ID
+if [ -n "$TOOLCHAIN" ] && [ -z "$STITCH_REPRO_BUILD" ] && $R pull -q "$TOOLCHAIN" >/dev/null 2>&1; then
+  $R tag "$TOOLCHAIN" stitch-repro-toolchain:$ID
 else
-  docker buildx build --load -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
+  $BX $LOAD -q -f stitch/Dockerfile --target toolchain -t stitch-repro-toolchain:$ID stitch >/dev/null
 fi
 # package versions as of when the library image was built (apt snapshot, pip, npm)
-docker build -q -t stitch-repro-base:$ID - >/dev/null <<EOF
+$B -q -t stitch-repro-base:$ID - >/dev/null <<EOF
 FROM stitch-repro-toolchain:$ID
 {pins}
 EOF
 if [ ! -d source ]; then
 {fetch}
 fi
-docker buildx build --load -q $P -f project/Dockerfile --build-context source={context} \
+$BX $LOAD -q $P -f project/Dockerfile --build-context source={context} \
   --build-arg STITCH_BASE=stitch-repro-base:$ID{buildargs} -t stitch-repro:$ID project >/dev/null
 if [ "$1" = "--standalone" ]; then
 {standalone}
   exit $?
 fi
-docker run --rm $U $P -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
+$R run --rm $U $P -v "$PWD/project:/project" -v "$PWD:/repro" -w /project stitch-repro:$ID \
   sh -c 'stitch-build --target repro --out /tmp/stitch-build >/dev/null &&
     (timeout -s KILL {limit} /tmp/stitch-build/repro --trace /repro/crash.stp; rc=$?;
      if [ $rc = 137 ]; then echo "[stitch] TIMEOUT: still running after {limit} s" >&2; fi; exit $rc)'
@@ -64,9 +67,9 @@ docker run --rm $U $P -v "$PWD/project:/project" -v "$PWD:/repro" -w /project st
 
 # `./run.sh --standalone`: C/C++ compiles a plain program against the library; other languages
 # build the file next to the harness (it may use the harness's module or crate).
-STANDALONE_CPP = ('  docker run --rm $U $P -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
+STANDALONE_CPP = ('  $R run --rm $U $P -v "$PWD/standalone:/standalone" -w /standalone stitch-repro:$ID \\\n'
                   '    sh -c "$(cat standalone/build.sh)"')
-STANDALONE_LANG = ('  docker run --rm $U $P -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
+STANDALONE_LANG = ('  $R run --rm $U $P -v "$PWD/project:/project" -v "$PWD/standalone:/project/standalone" -w /project \\\n'
                    '    stitch-repro:$ID sh standalone/build.sh')
 
 # report section title and code fence, per language
@@ -311,7 +314,7 @@ def render_readme(project, rid, rep, output, sj, harness_dir: Path, language="cp
          f"| {'Sanitizer' if language == 'cpp' else 'Kind'} | `{kind}` |",
          f"| Location | {', '.join(f'`{f}`' for f in rep['frames'][:3]) or '–'} |",
          f"| Library source | {src} |",
-         f"| Reproduce | `./run.sh` (needs only Docker; builds the library and the harness from scratch) |",
+         f"| Reproduce | `./run.sh` (needs only Docker or Podman; builds the library and the harness from scratch) |",
          f"| Crash id | `{rid}` |",
          f"| Made with | stitch-fuzz {version or '?'}"
          + (f"; toolchain image `{toolchain}`" if toolchain else "") + " |", ""]

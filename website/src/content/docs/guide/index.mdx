@@ -133,10 +133,10 @@ standalone reproducer.
 
 ## What you need
 
-- Docker with buildx
+- Docker with buildx, or rootless Podman (`STITCH_RUNTIME=podman`)
 - Python 3.9 or newer, for the `stitch` command
 
-The library, the harness and the fuzzer all build and run in Docker. You don't need the
+The library, the harness and the fuzzer all build and run in containers. You don't need the
 language's toolchain on your machine.
 
 ## Where to go next

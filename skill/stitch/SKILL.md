@@ -8,7 +8,7 @@ description: Fuzz the API of a C, C++, Objective-C, Python, JavaScript, Java, Go
 STITCH++ fuzzes a library through its API. You write **stubs**: small typed functions that each
 make one API call. The fuzzer chains stubs into **programs**, passes objects from one call to the
 next, generates the arguments, and reports crashes, undeclared exceptions and failed checks.
-Everything builds and runs in Docker.
+Everything builds and runs in containers.
 
 **Start by reading [reference/overview.md](reference/overview.md)**: the concepts, setup, and the
 workflow checklist to follow. Then read your language's file before writing stubs.
