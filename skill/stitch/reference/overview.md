@@ -4,7 +4,7 @@ STITCH++ fuzzes a library through its API, in C/C++, Objective-C, Python, JavaSc
 Rust, Ruby or Swift. You write **stubs**: small typed functions that each make one API call. The
 fuzzer chains stubs into **programs**, passes objects from one call to the next, generates the
 arguments, and reports crashes, undeclared exceptions and failed checks. Everything builds and runs
-in Docker.
+in containers.
 
 This file is the entry point. The other files of the guide are listed at the end; read your
 language's file before writing stubs.
@@ -49,7 +49,7 @@ consumer needs.
 
 ## Setup
 
-Requires Docker with buildx and Python 3.9 or newer.
+Requires Docker with buildx (or rootless Podman with `STITCH_RUNTIME=podman`) and Python 3.9 or newer.
 
 ```sh
 pip install stitch-fuzz
@@ -79,7 +79,8 @@ and prints the command to install the right one.
   under **Upgrading**), change the harness accordingly, run `stitch upgrade` (rewrites the pin),
   then `stitch build`, `stitch check` and `stitch probe`. Start fresh campaigns afterwards.
 
-Reproducers from `stitch repro` and `stitch report` are frozen: they run with Docker alone, on the
+Reproducers from `stitch repro` and `stitch report` are frozen: they run with Docker by default
+(or Podman with `STITCH_RUNTIME=podman`), on the
 images of the release that made them, whatever release is installed later
 ([reproducers.md](reproducers.md)). Every key of `stitch.toml`: [stitch-toml.md](stitch-toml.md).
 

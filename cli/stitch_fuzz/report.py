@@ -6,7 +6,7 @@ Three files a maintainer can read and run without STITCH++:
                 pinned commit, built by the project's own Dockerfile (pasted in unchanged), then the
                 reproducer, built and run with plain commands (clang++, python3, go build, cargo, ...)
   repro.<ext>   the standalone reproducer (`stitch write`, minimized to plain library code)
-  run.sh        docker build + docker run
+  run.sh        container build + run (Docker, or Podman with STITCH_RUNTIME=podman)
 
 plus ISSUE.md (the issue text: the code, the output, the Dockerfile) and output.txt (what it printed
 when it was verified).
@@ -167,11 +167,13 @@ def _toml(v):
 # the Dockerfile
 # =============================================================================================
 def _created(image):
-    r = docker._run(["docker", "image", "inspect", image, "--format", "{{.Created}}"], capture_output=True)
+    # Podman's plain {{.Created}} is not ISO-8601; the JSON form is, on both runtimes.
+    r = docker._run(docker._cmd("image", "inspect", image, "--format", "{{json .Created}}"), capture_output=True)
     try:
-        s = re.sub(r"\.\d+", "", r.stdout.strip()).replace("Z", "+00:00")
+        s = json.loads(r.stdout)
+        s = re.sub(r"\.\d+", "", s).replace("Z", "+00:00")
         return datetime.fromisoformat(s).astimezone(timezone.utc)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
@@ -221,8 +223,8 @@ def project_body(p) -> list:
 def dockerfile(p, title, base_ref, source, t: datetime, rec, fname) -> str:
     v = _version()
     L = [f"# {title}",
-         "#   docker build -t repro . && docker run --rm repro",
-         f"# Made with STITCH++ {v}. Frozen: every input below is pinned, and it needs only Docker.",
+         "#   ./run.sh   (Docker, or STITCH_RUNTIME=podman ./run.sh)",
+         f"# Made with STITCH++ {v}. Frozen: every input below is pinned, and it needs only Docker or Podman.",
          "",
          f"# {WHAT.get(p.language, p.language)} and build tools: the STITCH++ {p.language} toolchain image (no fuzzer),",
          f"# {REPO}/blob/v{v}/languages/{p.language}/Dockerfile",
@@ -257,11 +259,12 @@ def _version():
 # =============================================================================================
 RUN_SH = """#!/bin/sh
 # {title}
-# Builds the library and the reproducer, then runs it. Needs only Docker.
+# Builds the library and the reproducer, then runs it. Needs only Docker or Podman.
 set -e
 cd "$(dirname "$0")"
-docker build{platform} -t {tag} .
-docker run --rm{platform} {tag}
+R="${{STITCH_RUNTIME:-docker}}"
+$R build{platform} -t {tag} .
+$R run --rm{platform} {tag}
 """
 
 
@@ -359,7 +362,7 @@ def make_report(p, ref, outdir: Path = None, run=True, timeout=600) -> dict:
         local = docker.ensure_toolchain(p.language)
         base_ref = base_ref or local
         if base_ref != local:
-            docker._run(["docker", "tag", local, base_ref], capture_output=True)
+            docker._run(docker._cmd("tag", local, base_ref), capture_output=True)
     source = _source(p, image, d)
     t = pin_time(image, base_ref)
     kind = expected.get("kind") or "crash"
@@ -376,13 +379,13 @@ def make_report(p, ref, outdir: Path = None, run=True, timeout=600) -> dict:
     output = ""
     if run:
         print(f"[stitch] building and running {d}/Dockerfile from scratch...", file=sys.stderr, flush=True)
-        b = subprocess.run(["docker", "build", "-q", "-t", tag, str(d)] + (["--platform", plat] if plat else []),
+        b = subprocess.run(docker._cmd("build", "-q", "-t", tag, str(d)) + (["--platform", plat] if plat else []),
                            capture_output=True, text=True, errors="replace")
         if b.returncode != 0:
             res.update(ok=False, check={"status": "build_failed"}, output=b.stderr[-6000:])
         else:
             try:
-                r = subprocess.run(["docker", "run", "--rm", "--name", tag] + (["--platform", plat] if plat else []) + [tag],
+                r = subprocess.run(docker._cmd("run", "--rm", "--name", tag) + (["--platform", plat] if plat else []) + [tag],
                                    capture_output=True, text=True, errors="replace", timeout=timeout)
                 output, code, to = (r.stderr or "") + (r.stdout or ""), r.returncode, False
             except subprocess.TimeoutExpired as e:
@@ -420,9 +423,9 @@ def issue(p, title, d: Path, fname, rec, source, output, res, published) -> str:
          f"`{fname}`:", "", "```" + fence, code, "```", ""]
     if output:
         r += ["Output:", "", "```", _excerpt(output), "```", ""]
-    r += ["<details><summary>Build and run it with Docker</summary>", "",
+    r += ["<details><summary>Build and run it</summary>", "",
           f"Put {files} in one directory, then:", "",
-          "```sh", "docker build -t repro . && docker run --rm repro", "```", "",
+          "```sh", "./run.sh   # Docker, or STITCH_RUNTIME=podman ./run.sh", "```", "",
           "The Dockerfile builds the library the same way it was built when the bug was found "
           f"(same {'commit' if source.get('git') else 'source'}, package versions as of {res['pinned_to'][:10]}), "
           f"then runs `{rec['run']}`.", "",

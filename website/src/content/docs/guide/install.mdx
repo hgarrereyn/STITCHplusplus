@@ -17,8 +17,23 @@ stitch setup --lang python,go       # several at once
 stitch setup --lang all
 ```
 
-`stitch setup` checks that Docker works, then pulls the prebuilt image for your version of
-`stitch-fuzz`. If there is none, it builds the image locally.
+`stitch setup` checks that the selected container runtime works, then pulls the prebuilt image for
+your version of `stitch-fuzz`. If there is none, it builds the image locally.
+
+## Container runtime
+
+Docker is the default. Set `STITCH_RUNTIME=podman` to run with rootless Podman instead:
+
+```sh
+STITCH_RUNTIME=podman stitch setup --lang python
+```
+
+The selected runtime is used for pulls, image builds and containers, and `stitch setup` checks its
+`buildx` support. Podman keeps its own image store, so images pulled by Docker are not reused.
+Podman can also build images locally from the bundled Dockerfiles. Reproducers from
+`stitch repro` and `stitch report` use the same runtime: run their `run.sh` with
+`STITCH_RUNTIME=podman` when using Podman. Podman support targets rootless Podman; rootful use
+is not handled and can leave root-owned files.
 
 ## Versions
 
@@ -44,8 +59,9 @@ changed since the pinned release, and what a harness has to change), update the 
 lists every release; the [releases page](https://github.com/hgarrereyn/STITCHplusplus/releases)
 lists the images of each one and their digests.
 
-Reproducers from `stitch repro` and `stitch report` are frozen: they run with Docker alone, on
-the images of the release that made them. [`stitch.toml` reference](/reference/stitch-toml/).
+Reproducers from `stitch repro` and `stitch report` are frozen: by default they run with Docker
+alone, and `STITCH_RUNTIME=podman ./run.sh` runs them with Podman, on the images of the release
+that made them. [`stitch.toml` reference](/reference/stitch-toml/).
 
 ## Use it with a coding agent
 

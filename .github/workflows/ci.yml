@@ -173,13 +173,53 @@ jobs:
           done
           true
 
+  podman:
+    needs: [engine, languages]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      STITCH_RUNTIME: podman
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: podman
+        run: |
+          if ! command -v podman >/dev/null; then
+            sudo apt-get update && sudo apt-get install -y podman
+          fi
+          podman --version
+      - name: runtime unit tests
+        run: python3 tests/runtime.py
+      # The images for a changed hash are built by `languages` with Docker, not published until
+      # release. The cache keeps this job fast; Podman can also build them locally.
+      - name: python image hash
+        id: img
+        run: |
+          base=$(PYTHONPATH=cli python3 -c "from stitch_fuzz import docker; print(docker.base_hash('python'))")
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+      - name: restore the python image
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/stitch-images.tar.zst
+          key: stitch-python-${{ steps.img.outputs.base }}
+      - name: load the image into podman
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: set -o pipefail; zstd -dc ~/stitch-images.tar.zst | podman load
+      - name: CLI flow with podman
+        run: |
+          python3 tests/languages.py --secs 20 python \
+            || { tail -100 ~/.cache/stitch/logs/*.log 2>/dev/null; exit 1; }
+
   ci-ok:
     if: always()
-    needs: [package, engine, languages]
+    needs: [package, engine, languages, podman]
     runs-on: ubuntu-24.04
     steps:
       - name: every job passed
         run: |
           echo '${{ toJSON(needs) }}'
           [ "${{ needs.package.result }}" = success ] && [ "${{ needs.engine.result }}" = success ] \
-            && [ "${{ needs.languages.result }}" = success ]
+            && [ "${{ needs.languages.result }}" = success ] && [ "${{ needs.podman.result }}" = success ]

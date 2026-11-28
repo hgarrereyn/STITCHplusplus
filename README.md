@@ -75,7 +75,8 @@ pip install stitch-fuzz
 stitch setup --lang python
 ```
 
-Requires Docker. The library, the harness and the fuzzer run in containers.
+Requires Docker (or rootless Podman with `STITCH_RUNTIME=podman`). The library, the harness and the
+fuzzer run in containers.
 
 A project pins the STITCH++ release it is written for in its `stitch.toml`
 (`stitch_version = "0.2.0"`); install that version to work on it. What changed between releases,

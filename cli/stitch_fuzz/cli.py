@@ -1,4 +1,4 @@
-"""stitch: build, fuzz, triage and reproduce STITCH++ harnesses (everything runs in Docker)."""
+"""stitch: build, fuzz, triage and reproduce STITCH++ harnesses (everything runs in containers)."""
 import argparse
 import json
 import os
@@ -64,7 +64,7 @@ def build(project, **kw):
 
 def _build(project, rev=None, image_only=False, harness_only=False, no_cache=False, out_dir=None, target="all",
            quiet=False, rebuild_base=False):
-    docker.check_docker()
+    docker.check_runtime()
     st = project.load_state()
     base_tag = docker.base_tag(project.language, project.sanitizers)
     if (harness_only and st.get("image") and docker.image_exists(st["image"]) and rev is None
@@ -895,7 +895,7 @@ def cmd_shell(a):
         build(p, image_only=True)
         st = p.load_state()
     cmd = a.cmd[1:] if a.cmd and a.cmd[0] == "--" else a.cmd
-    os.execvp("docker", docker.run_args(p, st["image"], tty=True) + (cmd or ["bash"]))
+    os.execvp(docker.runtime(), docker.run_args(p, st["image"], tty=True) + (cmd or ["bash"]))
 
 
 SKILL = STITCH_HOME / "skill" / "stitch"
@@ -941,11 +941,10 @@ def cmd_skill(a):
 
 def cmd_setup(a):
     from . import __version__
-    docker.check_docker()
-    if docker._run(["docker", "buildx", "version"], capture_output=True).returncode != 0:
-        die("docker buildx is missing (install the buildx plugin)")
+    docker.check_runtime()
+    docker.check_buildx()
     if not JSON:
-        print(f"[stitch] stitch-fuzz {__version__}, docker ok")
+        print(f"[stitch] stitch-fuzz {__version__}, {docker.runtime()} ok")
     from .project import normalize_language
     langs = [normalize_language(l) for x in (a.lang or ["cpp"]) for l in x.split(",")]
     if "all" in langs:
@@ -1014,7 +1013,7 @@ def cmd_repro(a):
     p = find_project(a.project)
     f, b = resolve_crash(p, a.crash, campaign=a.campaign)
     d = make_repro(p, f, b, Path(a.output) if a.output else None, run=not a.no_run)
-    out({"ok": True, "dir": str(d)}, f"reproducer: {d}\n  run it anywhere with docker: {d}/run.sh")
+    out({"ok": True, "dir": str(d)}, f"reproducer: {d}\n  run it anywhere with Docker or Podman: {d}/run.sh")
 
 
 def cmd_report(a):
